@@ -25,5 +25,7 @@
     "S04": {"model": "gpt-5.6-sol", "effort": "high"}
   },
   "allowedPaths": {},
-  "ticketChecks": {}
+  "ticketChecks": {
+    "F01": [["pnpm", "typecheck"], ["pnpm", "test"], ["pnpm", "build"], ["pnpm", "smoke"]]
+  }
 }

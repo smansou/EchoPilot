@@ -29,6 +29,8 @@ Pause prevents new tickets while current ones finish. Stop cancels workers; inte
 
 The deterministic scheduler selects dependency-ready tickets, reserves overlapping paths and blocks, and runs up to two tickets concurrently. Every attempt gets a separate Git worktree and a fresh Codex context. Workers produce structured acceptance evidence. Changes are checked for ownership, committed in the isolated branch, rebased onto the current integration head, tested, and reviewed by a fresh read-only reviewer. The verification/review/integration lane is serialized. Approved changes are cherry-picked and pushed to the checked-out implementation branch in smansou/EchoPilot. Main/master and unrelated remotes are refused.
 
+Sandboxed workers must not launch Electron or other macOS GUI applications. GUI smoke tests run only in the coordinator check lane, where they can register with the active macOS window server without inheriting the worker sandbox.
+
 The ledger broadcasts every status change over server-sent events. Agent activity updates heartbeat text; agents cannot self-mark a ticket complete. The dashboard shows all 42 tickets, dependencies, per-ticket model assignments, current phases, and recent activity. F01 correctly starts pending because the existing bootstrap does not complete its full scope.
 
 The parent checkout must be clean before starting and integrating. Do not edit or switch that checkout during a run. Work on a separate worktree if needed. Failed candidates remain under `.runner/worktrees` for diagnosis. Nothing automatically deletes them.
