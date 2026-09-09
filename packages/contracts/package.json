@@ -3,5 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts"
+  "exports": "./src/index.ts",
+  "scripts": {
+    "generate": "node scripts/generate-schema.mjs",
+    "check:generated": "node scripts/generate-schema.mjs --check"
+  }
 }

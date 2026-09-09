@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, protocol, session, Menu } from 'electron';
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
 import { join, resolve, extname } from 'node:path';
-import { createCoordinator, BOOTSTRAP_EVENT, parseJournal, serializeJournal } from '../../../../packages/core/src/index';
+import { createCoordinator, parseJournal, serializeJournal } from '../../../../packages/core/src/index';
 import { parseCommand } from '../../../../packages/contracts/src/index';
 
 protocol.registerSchemesAsPrivileged([{scheme:'echo',privileges:{standard:true,secure:true,supportFetchAPI:true}}]);
@@ -13,6 +13,7 @@ const coordinator = createCoordinator();
 let widget: BrowserWindow | null = null;
 let dashboard: BrowserWindow | null = null;
 const rendererRoot = resolve(__dirname, '../renderer');
+const fixtureJournalPath = resolve(__dirname, '../../fixtures/bootstrap/session.jsonl');
 function publish() {
   const state = coordinator.getState();
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send('echo:state', state);
@@ -47,7 +48,7 @@ async function bootstrapJournal() {
   try { events = parseJournal(await readFile(path,'utf8')); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    events = [BOOTSTRAP_EVENT];
+    events = parseJournal(await readFile(fixtureJournalPath, 'utf8'));
     await writeFile(`${path}.tmp`, serializeJournal(events),{mode:0o600});
     await rename(`${path}.tmp`,path);
   }
