@@ -40,3 +40,7 @@ The unencrypted journal is exclusively for synthetic fixtures. Real user data mu
 No release package is signed or notarized yet. Performance targets in the plan are targets, not measurements of this prototype.
 
 The Electron boundary follows the official [security guidance](https://www.electronjs.org/docs/latest/tutorial/security) and [preload guidance](https://www.electronjs.org/docs/latest/tutorial/tutorial-preload).
+
+## Autonomous development and progress dashboard
+
+Run `pnpm runner:build` then `pnpm runner`, and open http://127.0.0.1:4318. Start the bounded worker loop from the dashboard. See [runner instructions](docs/RUNNER.md) for controls, model choices, limits, and recovery. This tooling is separate from the desktop product.

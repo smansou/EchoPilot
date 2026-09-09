@@ -15,7 +15,10 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test packages/core/src/*.test.ts",
     "check": "pnpm typecheck && pnpm test && pnpm build",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "runner": "node --import tsx packages/runner/src/cli.ts",
+    "runner:build": "node scripts/build-progress.mjs",
+    "runner:test": "node --import tsx --test packages/runner/src/*.test.ts"
   },
   "dependencies": {
     "react": "19.2.8",

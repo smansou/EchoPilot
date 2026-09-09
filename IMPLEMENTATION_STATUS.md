@@ -28,3 +28,7 @@ Verified connected project: smansou/EchoPilot, repository ID 1357571568. Existin
 ## Checks
 
 Verified: pinned lockfile installation; TypeScript check; three focused core tests; production Vite/esbuild build; unattended hidden Electron smoke (rendered fixture text, IPC validation, mute, renderer isolation, dashboard lifecycle, and stable event identity over two launches). No hardware access or paid calls were required. No real ASR, TTS, harness, screen capture, gaze, encrypted memory, or native helper has been implemented yet.
+
+## Deterministic runner added
+
+Development tooling now includes a local live dashboard and fresh-context Codex worker loop. See docs/RUNNER.md. Model routing and limits are in runner.config.json. No product tickets were automatically marked complete, and no paid worker jobs were started while building the runner.

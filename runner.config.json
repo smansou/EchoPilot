@@ -1,0 +1,28 @@
+{
+  "port": 4318,
+  "maxWorkers": 2,
+  "maxAttempts": 2,
+  "maxTicketsPerRun": 6,
+  "workerTimeoutMs": 1800000,
+  "checkTimeoutMs": 300000,
+  "maxObservedTokensPerRun": 1000000,
+  "publish": true,
+  "expectedRemote": "https://github.com/smansou/EchoPilot.git",
+  "codexCommand": "codex",
+  "checks": [["pnpm", "typecheck"], ["pnpm", "test"], ["pnpm", "build"]],
+  "models": {
+    "simple": {"model": "gpt-5.6-luna", "effort": "medium"},
+    "standard": {"model": "gpt-5.6-terra", "effort": "medium"},
+    "complex": {"model": "gpt-5.6-terra", "effort": "high"},
+    "review": {"model": "gpt-5.6-sol", "effort": "high"}
+  },
+  "ticketOverrides": {
+    "F01": {"model": "gpt-5.6-terra", "effort": "high"},
+    "S01": {"model": "gpt-5.6-sol", "effort": "high"},
+    "S02": {"model": "gpt-5.6-sol", "effort": "high"},
+    "S03": {"model": "gpt-5.6-sol", "effort": "high"},
+    "S04": {"model": "gpt-5.6-sol", "effort": "high"}
+  },
+  "allowedPaths": {},
+  "ticketChecks": {}
+}
