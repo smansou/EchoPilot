@@ -1,0 +1,1216 @@
+{
+  "version": 1,
+  "plan": "IMPLEMENTATION_PLAN.md",
+  "estimateUnit": "focused engineering day",
+  "tickets": [
+    {
+      "id": "F01",
+      "epic": "E-SHELL",
+      "block": "BLOCK-SHELL",
+      "deps": [],
+      "kind": "Initial shared tracer bullet",
+      "path": "Synthetic event → coordinator → widget → replay after restart",
+      "files": [
+        "apps/desktop/",
+        "packages/contracts/",
+        "packages/core/",
+        "fixtures/bootstrap/"
+      ],
+      "scope": "Create the pnpm/Electron/React application and the version-1 contracts in Section 5.3. Freeze mock APIs for NativeHost, Memory, HarnessAdapter, VoiceSession, Attention, and Reasoner. Render one synthetic session event in the widget and record it in a non-sensitive fixture journal. Add baseline mute/speech-lease handling so later pillars cannot bypass the shared policy.",
+      "accept": [
+        "pnpm dev opens a widget and optional control window; closing the control window leaves the widget running.",
+        "One fixture event crosses validated IPC, renders, and replays with the same ID after restart.",
+        "Renderer has no Node access; invalid IPC payloads are rejected; contract generation is reproducible."
+      ],
+      "judgment": "Use synthetic data only until S01 and M01 provide protected storage. Choose and lock the current stable Electron patch; no floating runtime dependency.",
+      "days": 3,
+      "blocks": [
+        "F02",
+        "S01",
+        "H01",
+        "H02",
+        "H03",
+        "M01",
+        "Q01"
+      ]
+    },
+    {
+      "id": "F02",
+      "epic": "E-SHELL",
+      "block": "BLOCK-SHELL",
+      "deps": [
+        "F01"
+      ],
+      "kind": "Initial shared tracer bullet",
+      "path": "Global shortcut → widget state → native permission status",
+      "files": [
+        "apps/desktop/src/main/",
+        "apps/desktop/src/renderer/widget/",
+        "native/macos/Sources/PlatformHost/"
+      ],
+      "scope": "Implement the widget, tray, hotkey defaults from Section 4.3, foreground-safe controls, and a signed native helper hello/status exchange. Add build scripts and a fake native host so TypeScript developers can work without Xcode. Show microphone, capture, output, target-session, and provider state using actual coordinator events.",
+      "accept": [
+        "Widget does not steal focus and survives Mission Control closure, workspace switching, and full-screen use on the test matrix.",
+        "All hotkeys either register or show a conflict; mute and stop controls remain reachable.",
+        "Native helper disconnect produces a recoverable state; malformed or unauthenticated helper messages are rejected."
+      ],
+      "judgment": "Use Electron window controls first. Add only the AppKit behavior the signed-app test proves missing; do not build a second native UI.",
+      "days": 4,
+      "blocks": [
+        "F03",
+        "V01",
+        "Q02"
+      ]
+    },
+    {
+      "id": "F03",
+      "epic": "E-SHELL",
+      "block": "BLOCK-SHELL",
+      "deps": [
+        "F02",
+        "M04",
+        "R02",
+        "S02"
+      ],
+      "kind": "Expansion",
+      "path": "User setting → effective project policy → visible runtime change",
+      "files": [
+        "apps/desktop/src/renderer/control/",
+        "packages/core/src/settings/"
+      ],
+      "scope": "Build all Mission Control pages and configuration families in Section 4.3. Implement default/profile/project/session precedence, search, JSON import/export, per-section reset, conflict explanations, accessibility, themes, and reduced motion. Consume existing services rather than modifying their implementations.",
+      "accept": [
+        "Every setting has a displayed effective value and source; project overrides survive restart.",
+        "Changing verbosity, persona, capture scope, or attention applies at the next safe boundary and is reflected in the widget.",
+        "Keyboard and VoiceOver navigation reaches all primary controls; import rejects unknown privileged settings instead of silently granting them."
+      ],
+      "judgment": "Use schema-driven settings with curated layouts. Permission import proposes changes but cannot mint active grants.",
+      "days": 5,
+      "blocks": [
+        "V05",
+        "Q03"
+      ]
+    },
+    {
+      "id": "S01",
+      "epic": "E-SECURITY",
+      "block": "BLOCK-SECURITY",
+      "deps": [
+        "F01"
+      ],
+      "kind": "Initial security tracer bullet",
+      "path": "Enable one capability/key → authorized operation → revoke → operation denied",
+      "files": [
+        "packages/security/",
+        "apps/desktop/src/preload/",
+        "native/macos/Sources/Secrets/"
+      ],
+      "scope": "Implement grant tuples, Keychain storage, dedicated key-entry IPC, audit receipts, per-provider egress categories, and versioned revocation from Section 5.9. Exercise the full path with a fake capture operation and a mock provider. Add native helper capabilities registered through the private parent channel.",
+      "accept": [
+        "A granted operation succeeds; the same queued request fails after revocation, including after restart.",
+        "No raw key is present in renderer state after submission, logs, argv, exported settings, or mock model prompts.",
+        "Unknown capability/resource/destination combinations are denied and produce a clear permission proposal."
+      ],
+      "judgment": "Default local-only and Project Partner scopes. No cloud request occurs merely because a key was entered.",
+      "days": 4,
+      "blocks": [
+        "S02",
+        "S03",
+        "V01",
+        "V04",
+        "A01",
+        "H01",
+        "H02",
+        "H03",
+        "M01",
+        "G01"
+      ]
+    },
+    {
+      "id": "S02",
+      "epic": "E-SECURITY",
+      "block": "BLOCK-SECURITY",
+      "deps": [
+        "S01",
+        "H01",
+        "R01"
+      ],
+      "kind": "Hardening",
+      "path": "Spoken action proposal → scoped authorization → receipt → audit UI",
+      "files": [
+        "packages/security/src/broker/",
+        "packages/core/src/outbox/",
+        "apps/desktop/src/renderer/control/permissions/"
+      ],
+      "scope": "Implement action lifecycle, argument hashes, one-time/session/durable grants, pending confirmation IDs, path containment, executable identity, and the Observe/Project/Desktop/Host profiles. Reuse the managed harness as the real execution target. Expose revoke-all and permission history.",
+      "accept": [
+        "A valid scoped harness action executes once; stale grant versions, changed arguments, and expired confirmations do not execute.",
+        "A disconnect after send becomes unknown until reconciled; no automatic resend causes a duplicate action.",
+        "Voice 'yes' outside the bound confirmation state cannot grant permission; audit links proposal, authorization, dispatch, and receipt."
+      ],
+      "judgment": "An external side effect cannot be undone by revocation. Preserve this distinction in the UI and receipt state.",
+      "days": 5,
+      "blocks": [
+        "F03",
+        "S04",
+        "C02"
+      ]
+    },
+    {
+      "id": "S03",
+      "epic": "E-SECURITY",
+      "block": "BLOCK-SECURITY",
+      "deps": [
+        "S01",
+        "M04"
+      ],
+      "kind": "Expansion",
+      "path": "Private session / forget / export → storage and retrieval reflect the choice",
+      "files": [
+        "packages/security/src/privacy/",
+        "packages/memory/src/deletion/",
+        "apps/desktop/src/renderer/control/privacy/"
+      ],
+      "scope": "Implement private sessions, project-key destruction, lineage-aware forgetting, tombstones, encrypted passphrase export/import, retention controls, and diagnostic redaction. Follow the deletion semantics in Section 5.8; support one complete project backup/restore.",
+      "accept": [
+        "A forgotten decision disappears from facts, summaries, FTS, embeddings, cached answers, and replayable speech text.",
+        "Reimporting a forgotten source does not resurrect selected records; unrelated project imports remain unaffected.",
+        "Encrypted export restores into a new profile with evidence intact; wrong passphrase fails without modifying the destination."
+      ],
+      "judgment": "Do not promise physical SSD erasure or deletion from user-owned backups. Preserve only content-free audit tombstones.",
+      "days": 5,
+      "blocks": [
+        "C04",
+        "Q03"
+      ]
+    },
+    {
+      "id": "S04",
+      "epic": "E-SECURITY",
+      "block": "BLOCK-SECURITY",
+      "deps": [
+        "S02",
+        "C02"
+      ],
+      "kind": "Expansion",
+      "path": "Scoped command request → isolated or explicit host executor → observed outcome",
+      "files": [
+        "packages/security/src/execution/",
+        "packages/desktop-tools/src/commands/",
+        "native/macos/Sources/Execution/"
+      ],
+      "scope": "Add the generic command tool using a managed Lima Linux VM with an explicit project mount and controlled network profile, plus an explicitly authorized native macOS host executor. Execute argv arrays without shell interpolation; shell scripts are a separate granted capability. Surface mount, network, and host authority in the proposal.",
+      "accept": [
+        "A VM command changes an allowed test workspace and cannot read a canary outside its mount or reach a denied network endpoint.",
+        "A macOS-specific command can run with a Host Autonomy grant and is labeled as host execution.",
+        "Timeout/cancel stops the managed process group; uncertain external children are reported rather than claimed stopped."
+      ],
+      "judgment": "Lima installation is an optional signed/download-verified execution component, not part of idle voice startup. Harness-native sandboxes remain the default for coding-agent commands.",
+      "days": 6,
+      "blocks": [
+        "Q04"
+      ]
+    },
+    {
+      "id": "V01",
+      "epic": "E-VOICE",
+      "block": "BLOCK-VOICE",
+      "deps": [
+        "F02",
+        "S01"
+      ],
+      "kind": "Initial voice tracer bullet",
+      "path": "Speak → native audio → local ASR → widget transcript → mute",
+      "files": [
+        "packages/voice/",
+        "native/macos/Sources/Audio/",
+        "native/macos/Sources/ASR/",
+        "fixtures/audio/"
+      ],
+      "scope": "Implement the native microphone graph, bounded PCM channel, Silero VAD, WhisperKit small.en, timestamps, partial/final transcripts, device enumeration, and explicit active-session permissions. Use the fake host contract for TS unit work and a signed native build for the acceptance path.",
+      "accept": [
+        "A 15-second utterance yields committed local text with timestamps and no network access.",
+        "Mute closes microphone capture and clears pending input; audio buffers stay bounded during a stalled consumer.",
+        "Mic denial, device removal, lock, and helper crash produce visible states without hanging the widget."
+      ],
+      "judgment": "English only for the first model pack. Keep ASR windows ≤15 seconds and commit stable prefixes; do not route partial text.",
+      "days": 5,
+      "blocks": [
+        "V02",
+        "A01"
+      ]
+    },
+    {
+      "id": "V02",
+      "epic": "E-VOICE",
+      "block": "BLOCK-VOICE",
+      "deps": [
+        "V01"
+      ],
+      "kind": "Initial voice tracer bullet",
+      "path": "Approved speech plan → local synthesis → playback → replay/cancel while listening",
+      "files": [
+        "packages/voice/src/playback/",
+        "workers/pocket-tts/",
+        "native/macos/Sources/Audio/",
+        "models/"
+      ],
+      "scope": "Bundle Pocket TTS english_2026-04 and the four cleared voice presets. Stream validated speech segments to native playback, implement heard cursors, replay, generation epochs, bounded buffering, and independent simultaneous microphone capture. Use synthetic plans through the shared speech-lease API.",
+      "accept": [
+        "Offline signed app speaks, keeps transcribing the user during playback, and replays the last completed sentence.",
+        "Cancel prevents all late frames from an old epoch from becoming audible.",
+        "Worker needs no system Python or downloads; audio/voice licenses and source hashes are in the model manifest."
+      ],
+      "judgment": "Use official CPU inference first. Distinguish TTS synthesis latency from end-of-turn answer latency.",
+      "days": 5,
+      "blocks": [
+        "V03",
+        "N01"
+      ]
+    },
+    {
+      "id": "V03",
+      "epic": "E-VOICE",
+      "block": "BLOCK-VOICE",
+      "deps": [
+        "V02"
+      ],
+      "kind": "Initial duplex completion",
+      "path": "Narration + overlapping user speech → backchannel or interruption → correct continuation",
+      "files": [
+        "packages/voice/src/duplex/",
+        "native/macos/Sources/Audio/",
+        "fixtures/duplex/"
+      ],
+      "scope": "Implement the independent input/output states and barge-in algorithm in Section 5.5, including AEC, ducking, explicit stop, 350 ms backchannel decision, resumption cursor, and device-switch recovery. Build the 200-exchange speaker/headphone evaluation subset.",
+      "accept": [
+        "Explicit stop and ordinary interruption meet Section 4.4 p95 targets on the reference machine.",
+        "Backchannel precision meets ≥95% on held-out exchanges; uncertain speech pauses output.",
+        "Agent execution continues after 'stop speaking' and receives interruption only after a separate routed agent-control request."
+      ],
+      "judgment": "Use one AEC implementation. If Bluetooth routing fails, provide a visible degraded device mode rather than disabling interruption globally.",
+      "days": 6,
+      "blocks": [
+        "V04",
+        "V05",
+        "R01",
+        "R02",
+        "Q02"
+      ]
+    },
+    {
+      "id": "V04",
+      "epic": "E-VOICE",
+      "block": "BLOCK-PREMIUM-VOICE",
+      "deps": [
+        "V03",
+        "R01",
+        "S01",
+        "M02"
+      ],
+      "kind": "Expansion",
+      "path": "BYOK voice → memory/tool question → interrupt → bounded provider restart",
+      "files": [
+        "packages/providers/src/openai-realtime/",
+        "packages/voice/src/backends/",
+        "fixtures/providers/"
+      ],
+      "scope": "Implement OpenAI gpt-realtime over WebSocket with Marin default, Cedar option, manual response leases, actual-playback truncation, scoped memory tools, usage accounting, local fallback, and the provider-history budget in Section 5.8. Keep exact readback on the local renderer.",
+      "accept": [
+        "Real opt-in API test answers a grounded session question and survives barge-in without retaining unheard content as heard.",
+        "Forced token/time rollover resumes from a compact handoff; provider context never exceeds the configured budget in instrumented tests.",
+        "Network loss, key revocation, or cost cap cancels old generations; no buffered private audio is uploaded on reconnect."
+      ],
+      "judgment": "Pin the tested model identifier and protocol shape in the provider manifest. A paid integration test uses a dedicated low-cap test key; normal CI uses recorded fixtures.",
+      "days": 6,
+      "blocks": [
+        "Q03"
+      ]
+    },
+    {
+      "id": "V05",
+      "epic": "E-VOICE",
+      "block": "BLOCK-VOICE",
+      "deps": [
+        "V03",
+        "F03"
+      ],
+      "kind": "Expansion",
+      "path": "Hands-free standby/control → active conversation → inactivity unload",
+      "files": [
+        "packages/voice/src/activation/",
+        "apps/desktop/src/renderer/control/voice/",
+        "native/macos/Sources/Audio/"
+      ],
+      "scope": "Finish continuous-session behavior, inactivity transitions, configurable stop/mute semantics, pronunciation settings, persona previews, and optional wake standby. Implement wake standby with an explicitly licensed model trained for 'Echo Pilot', using openWakeWord only as a framework reference until asset rights and false-trigger tests pass.",
+      "accept": [
+        "A user enables conversation once and completes a 20-minute interaction without touching the UI.",
+        "Default idle closes the mic and unloads models; optional standby shows a distinct persistent indicator and passes its energy test.",
+        "Wake detection never authorizes an action; false triggers under TV/background speech are measured and reported."
+      ],
+      "judgment": "Continuous conversation is the guaranteed hands-free path. If the wake model fails the preset false-trigger gate of one/hour on the test corpus, ship standby disabled and marked experimental; all voice controls remain functional.",
+      "days": 5,
+      "blocks": [
+        "Q04"
+      ]
+    },
+    {
+      "id": "A01",
+      "epic": "E-DICTATION",
+      "block": "BLOCK-CAPTURE",
+      "deps": [
+        "V01",
+        "S01"
+      ],
+      "kind": "Initial A tracer bullet",
+      "path": "Dictate into a focused editor → scoped context preview → literal insertion → undo",
+      "files": [
+        "packages/capture/",
+        "native/macos/Sources/Capture/",
+        "native/macos/Sources/Accessibility/",
+        "fixtures/capture/"
+      ],
+      "scope": "Capture the original target, one permitted screenshot, selected text, bounded AX subtree, and OCR spans; show the bundle in a development preview. Insert raw committed ASR text without submission, with focus revalidation and undo. Implement clipboard restoration only when its change count proves the user has not changed it.",
+      "accept": [
+        "Text reaches VS Code, TextEdit, and one browser text field without Enter or focus theft.",
+        "Focus changes preserve a draft instead of writing into the new target.",
+        "Excluded/secure fields are absent from the context bundle; denied capture produces a transcript-only mode."
+      ],
+      "judgment": "Native AX is preferred; clipboard paste is a transactional fallback. Do not read the user's clipboard merely to collect extra context.",
+      "days": 5,
+      "blocks": [
+        "A02"
+      ]
+    },
+    {
+      "id": "A02",
+      "epic": "E-DICTATION",
+      "block": "BLOCK-CAPTURE",
+      "deps": [
+        "A01",
+        "M02"
+      ],
+      "kind": "Initial contextual A completion",
+      "path": "Speech + screenshot + project memory → evidence-backed correction → insertion",
+      "files": [
+        "packages/capture/src/correction/",
+        "packages/capture/src/context/",
+        "fixtures/dictation/"
+      ],
+      "scope": "Use the Reasoner and bounded EvidenceBundle to implement Technical Cleanup, protected tokens, correction spans, and the Jason/JSON example with real image input. Add Verbatim and Rewrite modes, confidence calibration inputs, and transparent raw/corrected history.",
+      "accept": [
+        "Paired fixtures demonstrate improvements from both screenshot context and prior project glossary, including cases where Jason is a person and must remain unchanged.",
+        "Every substituted technical token has evidence or a clear acoustic normalization reason.",
+        "End-to-end warm latency and harmful-edit gates are measured; an invalid model response falls back to raw text safely."
+      ],
+      "judgment": "Do not add intent or silently change numbers, negation, paths, or flags. Model confidence alone cannot justify a high-impact edit.",
+      "days": 5,
+      "blocks": [
+        "A03",
+        "C01"
+      ]
+    },
+    {
+      "id": "A03",
+      "epic": "E-DICTATION",
+      "block": "BLOCK-CAPTURE",
+      "deps": [
+        "A02",
+        "M04"
+      ],
+      "kind": "Expansion",
+      "path": "User corrects a term → glossary update → better later dictation",
+      "files": [
+        "packages/capture/src/glossary/",
+        "apps/desktop/src/renderer/control/dictation/",
+        "fixtures/dictation/"
+      ],
+      "scope": "Implement positive/negative terminology examples, project/global glossary controls, app-specific modes, selected-code vocabulary, pronunciation aliases, and long-utterance chunk correction. Use memory's edit API without changing its schema ownership.",
+      "accept": [
+        "A corrected proper name persists across restart and improves the next matching utterance without corrupting unrelated uses.",
+        "Global promotion is explicit; a project-only identifier never appears in another project without a grant.",
+        "Long dictation stays within context/audio budgets and concatenates committed chunks without duplicated overlap."
+      ],
+      "judgment": "The correction UI is optional after each utterance but always available from history. Learning from a rejected correction must not auto-promote a global preference.",
+      "days": 4,
+      "blocks": [
+        "A04"
+      ]
+    },
+    {
+      "id": "A04",
+      "epic": "E-DICTATION",
+      "block": "BLOCK-CAPTURE",
+      "deps": [
+        "A03",
+        "Q01"
+      ],
+      "kind": "Hardening",
+      "path": "Real desktop dictation across apps → safe insertion under failures",
+      "files": [
+        "packages/capture/",
+        "native/macos/Sources/Accessibility/",
+        "fixtures/dictation/",
+        "packages/eval/src/dictation/"
+      ],
+      "scope": "Complete the 1,000-utterance technical corpus and signed-app compatibility matrix: terminals, browsers, IDEs, secure fields, multiple displays, IME state, app switching, and revoked permissions. Fix only failures belonging to capture/correction/insertion.",
+      "accept": [
+        "≥25% technical-term error reduction and ≤1% harmful semantic edits on held-out data.",
+        "All insertion tests avoid unexpected submission; clipboard changes by the user are preserved.",
+        "Capture and insertion timing, missing-context behavior, and undo limitations are documented with reproducible measurements."
+      ],
+      "judgment": "Do not broaden application permissions to make a failed test pass. Report unsupported insertion surfaces as preview-only.",
+      "days": 5,
+      "blocks": [
+        "C03",
+        "Q03"
+      ]
+    },
+    {
+      "id": "H01",
+      "epic": "E-HARNESSES",
+      "block": "BLOCK-HARNESS-CODEX",
+      "deps": [
+        "F01",
+        "S01"
+      ],
+      "kind": "Initial B harness tracer bullet",
+      "path": "Start managed Codex → prompt → tool/result events → UI → interrupt/resume",
+      "files": [
+        "packages/harness-codex/",
+        "fixtures/harness/codex/",
+        "apps/desktop/src/renderer/control/sessions/"
+      ],
+      "scope": "Implement the Section 5.3 adapter using generated schemas from the installed tested Codex app-server version. Use stdio, initialize/initialized handshake, thread/turn lifecycle, notifications, approvals, and interruption. Normalize events without assuming hidden reasoning access.",
+      "accept": [
+        "A real managed session performs a read-only fixture task, streams results, and can be interrupted and resumed.",
+        "Approval requests remain pending until an authorized response; companion failure never auto-approves.",
+        "Adapter reports version/capabilities and rejects incompatible mutation calls while preserving diagnostic observation."
+      ],
+      "judgment": "Do not assume arbitrary existing Codex desktop sessions are controllable. Limit guaranteed writes to managed sessions and documented attachment capabilities.",
+      "days": 5,
+      "blocks": [
+        "S02",
+        "H04",
+        "N01",
+        "R01"
+      ]
+    },
+    {
+      "id": "H02",
+      "epic": "E-HARNESSES",
+      "block": "BLOCK-HARNESS-CLAUDE",
+      "deps": [
+        "F01",
+        "S01"
+      ],
+      "kind": "Initial Claude tracer bullet",
+      "path": "Managed Claude / observation hook → normalized event → prompt or approval response",
+      "files": [
+        "packages/harness-claude/",
+        "fixtures/harness/claude/",
+        "scripts/hooks/"
+      ],
+      "scope": "Implement managed Claude Code through the documented programmatic streaming interface, plus explicit installation/removal of enqueue-only observation hooks. Map lifecycle events, transcript references, results, and approvals to shared contracts. Make hook configuration changes reversible and preserve existing entries.",
+      "accept": [
+        "Managed session accepts a second prompt and emits normalized results; hook-only session is visibly observation-only unless a supported input path exists.",
+        "Hook enqueue/return meets 50 ms p95 and survives a stopped companion.",
+        "Installation and removal leave unrelated hooks/settings unchanged; retries deduplicate source events."
+      ],
+      "judgment": "Do not use a hook as an undocumented general input API. Native harness permissions remain in force.",
+      "days": 5,
+      "blocks": [
+        "H04"
+      ]
+    },
+    {
+      "id": "H03",
+      "epic": "E-HARNESSES",
+      "block": "BLOCK-HARNESS-GENERIC",
+      "deps": [
+        "F01",
+        "S01"
+      ],
+      "kind": "Initial generic/import tracer bullet",
+      "path": "Existing JSONL or text log → bounded parser → normalized timeline preview",
+      "files": [
+        "packages/harness-generic/",
+        "fixtures/harness/generic/"
+      ],
+      "scope": "Add read-only JSONL and plain-text log adapters, source identity/offset tracking, ANSI normalization, rotation detection, and a capability descriptor. Add an opt-in managed PTY wrapper for tools without structured output, with no automatic semantic approval detection.",
+      "accept": [
+        "A 10 GB generated log streams through a ≤64 MiB parser working set and can resume from a committed offset.",
+        "Partial UTF-8, truncated JSON, rotation, and repeated terminal redraws do not corrupt adjacent events.",
+        "Unstructured content is labeled low-confidence/imported and never treated as an authorization request or executable instruction."
+      ],
+      "judgment": "PTY sending is available only to a user-selected managed child. Existing arbitrary terminals remain observation-only.",
+      "days": 4,
+      "blocks": [
+        "H04",
+        "M03"
+      ]
+    },
+    {
+      "id": "H04",
+      "epic": "E-HARNESSES",
+      "block": "BLOCK-HARNESS-CODEX",
+      "deps": [
+        "H01",
+        "H02",
+        "H03",
+        "R01"
+      ],
+      "kind": "Hardening",
+      "path": "Several live adapters → selected-session routing → reconnect and delivery reconciliation",
+      "files": [
+        "packages/harness-codex/src/recovery/",
+        "packages/core/src/session-registry/",
+        "fixtures/harness/recovery/"
+      ],
+      "scope": "Implement the shared session registry and conformance runner without editing other adapters' owned files. Test outbox replay, version changes, session rename/end, concurrent turns, cwd/worktree changes, and connection loss around send/ack boundaries. File adapter-specific fixes within their owning blocks.",
+      "accept": [
+        "Two Codex sessions and one Claude session retain distinct project/turn identities and destinations.",
+        "All adapters pass the same lifecycle and capability tests; unsupported operations return typed errors.",
+        "No duplicate send after reconnect; unknown outcome is visible and can be reconciled from observed session state."
+      ],
+      "judgment": "Shared conformance tests may expose failures but do not authorize silent protocol assumptions or synthetic TUI keystrokes.",
+      "days": 5,
+      "blocks": [
+        "N03",
+        "R03"
+      ]
+    },
+    {
+      "id": "M01",
+      "epic": "E-MEMORY",
+      "block": "BLOCK-MEMORY",
+      "deps": [
+        "F01",
+        "S01"
+      ],
+      "kind": "Initial memory tracer bullet",
+      "path": "Normalized event → encrypted store → restart → source-backed timeline query",
+      "files": [
+        "packages/memory/src/store/",
+        "packages/memory/src/reducers/",
+        "fixtures/memory/basic/"
+      ],
+      "scope": "Implement encrypted profile/project databases, essential tables/indexes in Section 5.8, idempotent ingestion, deterministic task/tool reducers, source capsules, and a read API. Start with synthetic normalized events and an actual SQLite encryption roundtrip; do not require a model to prove persistence.",
+      "accept": [
+        "Events, task status, and a user decision survive restart with source links and correct project isolation.",
+        "DB/WAL/FTS files do not expose known plaintext canaries; wrong key cannot open the database.",
+        "Duplicate ingestion is idempotent; crash before transaction commit does not advance the durable cursor."
+      ],
+      "judgment": "Use the internal encrypted SQLite wrapper; if the selected fork cannot meet the encryption gate, implement the specified SQLCipher Node-API fallback.",
+      "days": 5,
+      "blocks": [
+        "M02",
+        "N01"
+      ]
+    },
+    {
+      "id": "M02",
+      "epic": "E-MEMORY",
+      "block": "BLOCK-MEMORY",
+      "deps": [
+        "M01"
+      ],
+      "kind": "Initial stateful memory completion",
+      "path": "Live event batch → local extraction → bounded context → grounded answer",
+      "files": [
+        "packages/memory/src/consolidation/",
+        "packages/memory/src/context/",
+        "native/macos/Sources/Reasoner/",
+        "fixtures/memory/live/"
+      ],
+      "scope": "Bundle Qwen3.5-4B through the Reasoner contract and implement live segment extraction, structured facts/decisions, session/project cards, exact tokenizer accounting, image-token accounting, output reservation, and deterministic fallback. Answer a dated project question from the resulting EvidenceBundle.",
+      "accept": [
+        "A multi-turn fixture produces a supported answer after restart without rereading the full raw log.",
+        "Every request obeys B=min(8192, floor(0.25*C)), including tools/images/output allowance; deliberately failed compaction cannot violate it.",
+        "Failed JSON, model crash, and duplicate jobs preserve deterministic state and mark semantic coverage partial."
+      ],
+      "judgment": "This is the one owner of shared context budgeting. Other features consume its API rather than inventing their own compaction loop.",
+      "days": 6,
+      "blocks": [
+        "V04",
+        "A02",
+        "M03",
+        "M04",
+        "N02",
+        "R01"
+      ]
+    },
+    {
+      "id": "M03",
+      "epic": "E-MEMORY",
+      "block": "BLOCK-MEMORY",
+      "deps": [
+        "M02",
+        "H03"
+      ],
+      "kind": "Expansion",
+      "path": "Unseen historical log → resumable bootstrap → same useful memory as live ingestion",
+      "files": [
+        "packages/memory/src/import/",
+        "packages/memory/src/jobs/",
+        "fixtures/memory/import/"
+      ],
+      "scope": "Implement cold-start consolidation over the generic adapter, byte-offset checkpoints, tail-first incomplete preview, source generations, deduplication when live tailing starts, and coverage reporting. Preserve chronological decisions and reversals even when import order differs from occurrence time.",
+      "accept": [
+        "Equivalent live and imported event sequences yield equivalent current decisions/tasks and supported historical answers.",
+        "A killed 10 GB import resumes without loading the file into RAM or duplicating observations.",
+        "Preview and final results show exact processed coverage; imported instructions cannot call tools or modify grants."
+      ],
+      "judgment": "Prefer correctness and resumability over whole-file import speed. Background work yields to active audio and user inference.",
+      "days": 5,
+      "blocks": [
+        "M05",
+        "Q02"
+      ]
+    },
+    {
+      "id": "M04",
+      "epic": "E-MEMORY",
+      "block": "BLOCK-MEMORY",
+      "deps": [
+        "M02"
+      ],
+      "kind": "Expansion",
+      "path": "Inspect/correct a memory → updated temporal state → different evidence-backed answer",
+      "files": [
+        "packages/memory/src/records/",
+        "apps/desktop/src/renderer/control/memory/",
+        "fixtures/memory/temporal/"
+      ],
+      "scope": "Build the memory inspector and edit/pin APIs, temporal validity, disputed/superseded states, global preference promotion, provenance navigation, raw-source availability labels, and task/decision views. Expose deletion hooks for S03 without implementing privacy export.",
+      "accept": [
+        "Reversing a decision preserves its historical answer while updating the current answer.",
+        "A conflicting agent claim cannot overwrite a user-confirmed fact or observed tool receipt.",
+        "Every displayed summary can reveal its sources, extraction version, and partial-coverage status."
+      ],
+      "judgment": "Model inferences are labeled. User edits become explicit events rather than destructive in-place rewrites of history.",
+      "days": 4,
+      "blocks": [
+        "F03",
+        "S03",
+        "A03",
+        "M05"
+      ]
+    },
+    {
+      "id": "M05",
+      "epic": "E-MEMORY",
+      "block": "BLOCK-MEMORY",
+      "deps": [
+        "M03",
+        "M04",
+        "Q01"
+      ],
+      "kind": "Hardening/expansion",
+      "path": "Large multi-day project → hybrid retrieval → bounded, correct temporal answer",
+      "files": [
+        "packages/memory/src/retrieval/",
+        "packages/memory/src/retention/",
+        "packages/eval/src/memory/"
+      ],
+      "scope": "Add local MiniLM embeddings, bounded candidate scoring, FTS/entity/time fusion, daily cards, quotas, evidence-capsule retention, and the 100-scenario memory evaluation. Exercise 100,000 records and eight-hour repeated consolidation without growing model context.",
+      "accept": [
+        "Retrieval and temporal QA gates in Section 4 pass, including explicit historical queries and cross-project denial cases.",
+        "Expired raw sources remain clearly unavailable; retained decisions keep small supporting capsules.",
+        "Quota pressure and summary-worker failure remain bounded and produce visible gaps rather than fabricated completeness."
+      ],
+      "judgment": "Do not add a vector daemon or unlimited in-memory index. If recall fails, ship lexical/structured retrieval as the reliable path and track the failed semantic claim.",
+      "days": 6,
+      "blocks": [
+        "C04",
+        "Q03"
+      ]
+    },
+    {
+      "id": "N01",
+      "epic": "E-NARRATION",
+      "block": "BLOCK-NARRATION",
+      "deps": [
+        "H01",
+        "V02",
+        "M01"
+      ],
+      "kind": "Initial B narration tracer bullet",
+      "path": "Agent test result → durable event → concise spoken outcome → replay",
+      "files": [
+        "packages/narration/",
+        "fixtures/narration/basic/"
+      ],
+      "scope": "Implement deterministic tool/status extraction, one completion summary, one blocking-event announcement, URL/path/code spoken formatting, evidence IDs, and submission through the shared speech-lease contract. Persist heard receipts using the memory API.",
+      "accept": [
+        "A real managed read-only/test fixture produces one correct spoken outcome rather than one utterance per log line.",
+        "Agent text claiming tests passed cannot override a nonzero observed exit code.",
+        "Muted or unleased output remains silent; replay identifies the original evidence and session."
+      ],
+      "judgment": "Initial narration uses factual templates. Semantic interpretation and broad verbosity arrive in N02; no independent TTS engine is allowed.",
+      "days": 3,
+      "blocks": [
+        "N02",
+        "R02"
+      ]
+    },
+    {
+      "id": "N02",
+      "epic": "E-NARRATION",
+      "block": "BLOCK-NARRATION",
+      "deps": [
+        "N01",
+        "M02"
+      ],
+      "kind": "Expansion",
+      "path": "Messy diff/log stream → typed claims → configured spoken chapters",
+      "files": [
+        "packages/narration/src/compiler/",
+        "packages/narration/src/formatting/",
+        "fixtures/narration/large/"
+      ],
+      "scope": "Implement Section 5.7's semantic batching, repeated-log reduction, result/decision/change/problem extraction, factual validation, and all four verbosity budgets. Use bounded Reasoner calls and source references; expose raw-detail expansion without reading it aloud by default.",
+      "accept": [
+        "Concise through Thorough produce materially different, supported coverage of the same 200-run corpus.",
+        "Critical-event recall ≥95% and supported factual claims ≥98%; repeated progress redraws do not create speech storms.",
+        "Explicit exact-reading mode preserves requested text in bounded segments while ordinary mode omits raw paths/URLs/code."
+      ],
+      "judgment": "Thorough means near-complete useful meaning, not an unbounded raw-output queue.",
+      "days": 5,
+      "blocks": [
+        "N03",
+        "Q02"
+      ]
+    },
+    {
+      "id": "N03",
+      "epic": "E-NARRATION",
+      "block": "BLOCK-NARRATION",
+      "deps": [
+        "N02",
+        "R02",
+        "H04"
+      ],
+      "kind": "Hardening",
+      "path": "Overlapping sessions and interrupted summaries → relevant resumed digest",
+      "files": [
+        "packages/narration/src/queue/",
+        "fixtures/narration/concurrent/"
+      ],
+      "scope": "Implement multi-session coalescing, heard-state deduplication, stale-summary invalidation, chapter resume, explicit requested detail, and priority changes during an active narration. Consume the shared attention service and adapter registry.",
+      "accept": [
+        "A superseded failure/completion is not narrated after the newer outcome has been heard.",
+        "Interrupting mid-chapter preserves only the relevant unheard remainder and does not repeat an old approval.",
+        "Burst traffic from three sessions obeys speech budgets and never starves the foreground user's response."
+      ],
+      "judgment": "The selected session is named when context could be ambiguous. A backlog becomes a new digest rather than hours of stale queued speech.",
+      "days": 4,
+      "blocks": [
+        "Q03"
+      ]
+    },
+    {
+      "id": "R01",
+      "epic": "E-DIALOGUE",
+      "block": "BLOCK-ROUTING",
+      "deps": [
+        "V03",
+        "M02",
+        "H01"
+      ],
+      "kind": "Initial conversational B tracer bullet",
+      "path": "Spoken follow-up → memory answer / named-agent instruction → delivery receipt",
+      "files": [
+        "packages/routing/",
+        "packages/core/src/dialogue/",
+        "fixtures/routing/"
+      ],
+      "scope": "Implement the Addressee Routing Problem solution in Section 5.6, including explicit prefixes, active modes, companion-default questions, selected-session identity, clarification, pending-answer binding, and persisted outbox delivery. Use a real managed Codex session for the two-way path.",
+      "accept": [
+        "User can ask what happened, get a grounded spoken answer, then say 'Tell Codex to add a regression test' and receive an observed delivery acknowledgment.",
+        "Ambiguous destination or multiple matching sessions causes a concise clarification with no dispatch.",
+        "Held-out routing precision ≥99% for auto-dispatch; partial ASR and ambient 'yes' cannot trigger actions."
+      ],
+      "judgment": "Companion questions remain local unless explicitly routed. Confidence thresholds must be calibrated, not taken from model self-report.",
+      "days": 6,
+      "blocks": [
+        "S02",
+        "V04",
+        "H04",
+        "R03",
+        "C01"
+      ]
+    },
+    {
+      "id": "R02",
+      "epic": "E-DIALOGUE",
+      "block": "BLOCK-ATTENTION",
+      "deps": [
+        "N01",
+        "V03"
+      ],
+      "kind": "Initial shared attention completion",
+      "path": "Events from any pillar → one policy → speech/suppression/resumption receipt",
+      "files": [
+        "packages/attention/",
+        "fixtures/attention/",
+        "apps/desktop/src/renderer/control/attention/"
+      ],
+      "scope": "Replace the baseline lease stub with the complete attention rules in Section 5.7, presets, event priority overrides, quiet/presentation mode, cooldowns, reminder limits, and user-speech protection. Test with simulated sources for every pillar.",
+      "accept": [
+        "No pillar can speak proactively without a valid lease; revoked/expired leases silence late audio.",
+        "Blocking events preempt routine assistant speech but never override explicit output silence or talk over the user's ongoing utterance.",
+        "Same event stream yields deterministic decisions under a fake clock; settings explain why an update was spoken or suppressed."
+      ],
+      "judgment": "Verbosity and attention are independent settings. Do not poll private OS Focus or meeting state through undocumented APIs.",
+      "days": 4,
+      "blocks": [
+        "F03",
+        "N03",
+        "R03",
+        "C01"
+      ]
+    },
+    {
+      "id": "R03",
+      "epic": "E-DIALOGUE",
+      "block": "BLOCK-ROUTING",
+      "deps": [
+        "R01",
+        "R02",
+        "H04"
+      ],
+      "kind": "Hardening",
+      "path": "Conversational ambiguity, session switches, and permissions → correct bounded dialogue",
+      "files": [
+        "packages/routing/src/state/",
+        "packages/core/src/dialogue/",
+        "fixtures/routing/adversarial/"
+      ],
+      "scope": "Complete explicit Agent Direct mode, mode expiry, session switching, quoted dictation controls, ambiguous 'do that', spoken approval phrasing, and agent-versus-speech stop behavior. Add 300 routing utterances with noisy ASR, interruptions, and overlapping pending events.",
+      "accept": [
+        "All mode changes are visible/audible and stale pending-answer bindings expire.",
+        "No corpus case routes a companion explanation or quoted instruction into an unintended agent session.",
+        "Stop all reports which managed turns acknowledged interruption and which external work may still be running."
+      ],
+      "judgment": "Product clarification is required for uncertain intent. Avoid global blanket confirmations for already explicit, scoped instructions.",
+      "days": 4,
+      "blocks": [
+        "Q03"
+      ]
+    },
+    {
+      "id": "C01",
+      "epic": "E-DESKTOP",
+      "block": "BLOCK-DESKTOP",
+      "deps": [
+        "A02",
+        "R01",
+        "R02"
+      ],
+      "kind": "Initial C tracer bullet",
+      "path": "Desktop 'what is this?' → scoped screen/context → grounded spoken explanation",
+      "files": [
+        "packages/desktop-tools/src/context/",
+        "apps/desktop/src/renderer/widget/",
+        "fixtures/desktop/questions/"
+      ],
+      "scope": "Extend the working widget conversation beyond harness windows. Resolve permitted foreground apps, obtain AX/screenshot context, associate an explicit project, and answer read-only questions using the same Reasoner, memory, and voice interfaces. Include a visible capture/evidence indicator.",
+      "accept": [
+        "A user asks about a browser error and an IDE control without opening Mission Control.",
+        "Excluded apps are not captured; unrelated project memory is not retrieved by window-title similarity.",
+        "Missing AX/pixels yields a clear limited-context answer rather than invented control state."
+      ],
+      "judgment": "Desktop context is a capability expansion, not a second conversation implementation.",
+      "days": 4,
+      "blocks": [
+        "C02",
+        "G01"
+      ]
+    },
+    {
+      "id": "C02",
+      "epic": "E-DESKTOP",
+      "block": "BLOCK-DESKTOP",
+      "deps": [
+        "C01",
+        "S02"
+      ],
+      "kind": "Initial desktop action tracer bullet",
+      "path": "Voice action → proposal → grant → AX execution → verified result",
+      "files": [
+        "packages/desktop-tools/src/actions/",
+        "native/macos/Sources/Accessibility/",
+        "fixtures/desktop/actions/"
+      ],
+      "scope": "Implement read/navigate/click/type/select/scroll through AX for TextEdit and a fixture application, using target fingerprints, authorization hashes, preflight, and post-action verification. Support one reversible text edit and one explicitly confirmed consequential fixture action.",
+      "accept": [
+        "A voice request changes the intended field and produces before/after evidence and an action receipt.",
+        "Changed focus, target identity, disabled state, or expired grant stops execution.",
+        "User can cancel a multi-step action between steps; the app reports completed versus unexecuted steps."
+      ],
+      "judgment": "Do not claim every third-party UI is AX-accessible. Unsupported targets stay proposals until C03 provides a verified fallback.",
+      "days": 5,
+      "blocks": [
+        "S04",
+        "C03",
+        "G02"
+      ]
+    },
+    {
+      "id": "C03",
+      "epic": "E-DESKTOP",
+      "block": "BLOCK-DESKTOP",
+      "deps": [
+        "C02",
+        "A04"
+      ],
+      "kind": "Expansion",
+      "path": "Structured connector or visual target → scoped desktop action → verification",
+      "files": [
+        "packages/desktop-tools/src/integrations/",
+        "packages/desktop-tools/src/visual/",
+        "native/macos/Sources/Capture/"
+      ],
+      "scope": "Add an allowlisted browser extension/native-messaging integration for DOM-backed controls, a VS Code extension for editor state/insertion, and a coordinate fallback using a fresh screenshot target. Prefer connector → AX → visual in that order. Bound batches to ten steps/60 seconds.",
+      "accept": [
+        "At least one browser workflow and one editor workflow work through structured interfaces with less focus interference than synthetic typing.",
+        "Coordinate execution rejects a moved/changed target and cannot rely on a stale screenshot.",
+        "Extension messages are origin/session authenticated and cannot request broader capabilities than granted."
+      ],
+      "judgment": "Use extension APIs for supported applications; do not scrape arbitrary browser profiles or import cookies.",
+      "days": 6,
+      "blocks": [
+        "C04"
+      ]
+    },
+    {
+      "id": "C04",
+      "epic": "E-DESKTOP",
+      "block": "BLOCK-DESKTOP",
+      "deps": [
+        "C03",
+        "M05",
+        "S03"
+      ],
+      "kind": "Expansion/hardening",
+      "path": "Day of scoped desktop activity → compact project context → useful later recall",
+      "files": [
+        "packages/desktop-tools/src/history/",
+        "packages/capture/src/sampling/",
+        "fixtures/desktop/history/"
+      ],
+      "scope": "Add opt-in event-triggered desktop history, meaningful state-change detection, app exclusions, explicit project mapping, memory ingestion, and capture throttling. Store semantic records with source capsules rather than screen video. Integrate private sessions and forgetting.",
+      "accept": [
+        "A day-long replay supports later questions about selected work without retaining raw screen frames by default.",
+        "No-change desktop periods produce no repeated model calls; capture respects the frequency/energy budgets.",
+        "Revocation and private mode stop capture and purge pending unsaved snapshots before future export."
+      ],
+      "judgment": "This feature is off by default outside explicit work sessions. More history never justifies unbounded capture or context.",
+      "days": 5,
+      "blocks": [
+        "Q04"
+      ]
+    },
+    {
+      "id": "G01",
+      "epic": "E-GAZE",
+      "block": "BLOCK-GAZE",
+      "deps": [
+        "C01",
+        "S01"
+      ],
+      "kind": "Initial D tracer bullet",
+      "path": "Webcam calibration → gaze distribution → resolve a spoken read-only reference",
+      "files": [
+        "packages/gaze/",
+        "native/macos/Sources/Gaze/",
+        "fixtures/gaze/"
+      ],
+      "scope": "Implement camera capture, MediaPipe landmarks, nine-point calibration, held-out validation, ridge-regression gaze mapping, covariance, fixation buffering, and AX candidate scoring as specified in Section 5.11. Resolve 'why is this disabled?' in a fixture app and show candidate evidence.",
+      "accept": [
+        "Gaze samples include timestamps, display transforms, uncertainty, and calibration generation; no camera frames persist.",
+        "Held-out target resolution improves over the same context-only baseline and abstains when calibration fails.",
+        "Camera denial or invalid tracking returns to voice/named targets without breaking the active conversation."
+      ],
+      "judgment": "Gaze is coarse evidence. No dwell click, emotion inference, or claimed universal pixel accuracy.",
+      "days": 6,
+      "blocks": [
+        "G02",
+        "G03"
+      ]
+    },
+    {
+      "id": "G02",
+      "epic": "E-GAZE",
+      "block": "BLOCK-GAZE",
+      "deps": [
+        "G01",
+        "C02"
+      ],
+      "kind": "Expansion",
+      "path": "Gaze + deictic command → target clarification/confirmation → verified desktop action",
+      "files": [
+        "packages/gaze/src/resolution/",
+        "packages/desktop-tools/src/gaze-actions/",
+        "fixtures/gaze/actions/"
+      ],
+      "scope": "Implement spoken-word timing alignment, multiple candidates, calibrated target confidence, target-bound confirmations, drift invalidation, display changes, and consequential-action checks. Combine semantics, AX state, recent selection, and gaze instead of letting gaze dominate.",
+      "accept": [
+        "Ambiguous targets prompt a named/numbered clarification; read-only answers use the configured confidence threshold.",
+        "Every consequential gaze-derived action requires a fresh explicit target-and-effect confirmation.",
+        "Moving or replacing a target after confirmation prevents execution; no gaze-only event can create an action."
+      ],
+      "judgment": "The gaze confirmation rule applies even with Host Autonomy. It does not add redundant confirmation to unrelated non-gaze actions.",
+      "days": 5,
+      "blocks": [
+        "G03"
+      ]
+    },
+    {
+      "id": "G03",
+      "epic": "E-GAZE",
+      "block": "BLOCK-GAZE-HARDWARE",
+      "deps": [
+        "G01",
+        "G02"
+      ],
+      "kind": "Expansion/hardening",
+      "path": "Dedicated device → calibrated desktop gaze → same resolver and action rules",
+      "files": [
+        "native/macos/Sources/GazeTobii/",
+        "packages/gaze/src/devices/",
+        "packages/eval/src/gaze/"
+      ],
+      "scope": "Implement the optional Tobii Pro Fusion C SDK adapter and exact OS/device qualification. Run the 20-person gaze evaluation defined in Section 5.11 across webcam and available dedicated-device conditions. Add drift recovery, per-display calibration, missing-device handling, and exportable non-identifying quality reports.",
+      "accept": [
+        "Device samples map to the shared gaze schema and use the same confirmation path as webcam input.",
+        "Supported device/SDK/OS combinations are listed from actual tests; disconnect invalidates gaze immediately.",
+        "Results separate successful target precision, abstention, calibration failures, and participant variation."
+      ],
+      "judgment": "Do not extrapolate support to consumer Tobii devices. If redistribution rights are unavailable, use explicit user installation of the official SDK.",
+      "days": 6,
+      "blocks": [
+        "Q04"
+      ]
+    },
+    {
+      "id": "Q01",
+      "epic": "E-QUALITY",
+      "block": "BLOCK-EVAL",
+      "deps": [
+        "F01"
+      ],
+      "kind": "Initial verification tracer bullet",
+      "path": "Recorded scenario → deterministic app replay → scored outcome report",
+      "files": [
+        "packages/eval/",
+        "fixtures/",
+        "scripts/check-contracts.ts"
+      ],
+      "scope": "Build a fixture replay driver with fake time, fake NativeHost, fake providers, redacted harness events, and generated contract validation. Implement scoring hooks for dictation edits, factual claims, routing, attention, memory evidence, and action receipts. Start with one complete synthetic dictation-to-result scenario.",
+      "accept": [
+        "The same seed/fixture produces the same event and policy trace; failures link to exact source events.",
+        "A malicious screenshot/log fixture cannot call a tool or alter a grant.",
+        "Reports separate deterministic correctness, model quality, and human ratings; no hidden paid calls occur in normal CI."
+      ],
+      "judgment": "Use consented or synthetic content. Do not treat a model grading its own ungrounded answer as sufficient validation.",
+      "days": 4,
+      "blocks": [
+        "A04",
+        "M05"
+      ]
+    },
+    {
+      "id": "Q02",
+      "epic": "E-QUALITY",
+      "block": "BLOCK-PERFORMANCE",
+      "deps": [
+        "V03",
+        "M03",
+        "N02",
+        "F02"
+      ],
+      "kind": "Hardening",
+      "path": "Eight-hour realistic replay → resource/backpressure failures → recovery",
+      "files": [
+        "packages/eval/src/performance/",
+        "packages/core/src/scheduler/",
+        "scripts/bench-macos/"
+      ],
+      "scope": "Implement physical-footprint/CPU/energy instrumentation, warm/cold latency traces, scheduler priorities, memory-pressure handling, model unloading, and process-family accounting. Exercise 1,000 events/s bursts, huge logs, model crashes, sleep/wake, and network partitions under a normal editor workload.",
+      "accept": [
+        "All hard resource budgets and eight-hour context invariants are measured on M4/24 GB and compatibility-tested on M2/16 GB.",
+        "No audio callback waits on JS/database work; queues and disk spools remain bounded.",
+        "Regression report identifies dropped/gapped data, cold-start time, swap behavior, and any failed hardware qualification."
+      ],
+      "judgment": "If Electron misses the idle cap after optimization, apply the native tray/widget containment path from Section 6 while retaining TS domain logic.",
+      "days": 6,
+      "blocks": [
+        "Q03"
+      ]
+    },
+    {
+      "id": "Q03",
+      "epic": "E-QUALITY",
+      "block": "BLOCK-RELEASE",
+      "deps": [
+        "A04",
+        "N03",
+        "R03",
+        "V04",
+        "F03",
+        "S03",
+        "Q02",
+        "M05"
+      ],
+      "kind": "Initial production release slice",
+      "path": "Fresh Mac install → offline A+B session → signed update → rollback",
+      "files": [
+        "scripts/release/",
+        "models/manifest.json",
+        "apps/desktop/forge.config.ts",
+        "docs/runbooks/"
+      ],
+      "scope": "Create signed/notarized full and online installers, model-pack verification, dependency/model/voice notices, opt-in diagnostics, provider cost UI, staged updates, compatibility backups, and rollback. Run the full A+B acceptance journey on a clean machine without developer tools.",
+      "accept": [
+        "Offline installer completes dictation, local conversation, memory restart, and narration without API keys or runtime downloads.",
+        "Tampered model/app updates are rejected; interrupted install leaves the old working version recoverable.",
+        "All A+B quality gates pass; support docs explain permissions, local/premium differences, data location, recovery, and measured limits."
+      ],
+      "judgment": "Ship only tested binaries/assets. Do not claim a smaller online installer works offline before its automatic asset download completes.",
+      "days": 6,
+      "blocks": [
+        "Q04"
+      ]
+    },
+    {
+      "id": "Q04",
+      "epic": "E-QUALITY",
+      "block": "BLOCK-RELEASE",
+      "deps": [
+        "Q03",
+        "V05",
+        "C04",
+        "G03",
+        "S04"
+      ],
+      "kind": "Destination release hardening",
+      "path": "Full A–D day-long use → scoped actions → memory recall → revocation and recovery",
+      "files": [
+        "packages/eval/src/release/",
+        "docs/runbooks/",
+        "scripts/release/"
+      ],
+      "scope": "Run end-to-end desktop/gaze qualification, accessibility review, permission-injection tests, host/VM execution checks, data deletion verification, and staged-release monitoring. Publish the exact supported application/device matrix and a short limitation guide tied to observed evidence.",
+      "accept": [
+        "All four pillars pass their release gates using one voice layer and one context budgeter.",
+        "No unauthorized action or cross-project disclosure occurs in the adversarial suite; gaze confirmations cannot be bypassed.",
+        "Release is recoverable after update failure, worker crash, low disk, revoked TCC, and device removal; crash-free beta target is measured."
+      ],
+      "judgment": "Optional experimental wake standby and unqualified dedicated-device combinations remain labeled; they do not hide failures in core desktop or gaze behavior.",
+      "days": 6,
+      "blocks": []
+    }
+  ]
+}
