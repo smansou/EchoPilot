@@ -2,6 +2,7 @@
   "port": 4318,
   "maxWorkers": 2,
   "maxAttempts": 2,
+  "repairPaths": ["package.json", "pnpm-lock.yaml"],
   "maxTicketsPerRun": 6,
   "workerTimeoutMs": 1800000,
   "checkTimeoutMs": 300000,

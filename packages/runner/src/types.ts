@@ -10,6 +10,7 @@ export interface ModelDecision extends ModelChoice { reason: string }
 export interface RunnerConfig {
   maxWorkers: number;
   maxAttempts: number;
+  repairPaths: string[];
   models: { simple: ModelChoice; standard: ModelChoice; complex: ModelChoice; review: ModelChoice };
   ticketOverrides: Record<string, ModelChoice>;
 }
