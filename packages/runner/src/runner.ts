@@ -34,6 +34,10 @@ export class Runner {
   this.branch=branch.stdout.trim();await this.store.load();
   // Recover legacy quota failures from evidence without deleting attempts or worktrees.
   for(const record of Object.values(this.store.getSnapshot().tickets)){
+   if(record.status==='needs_attention'&&record.failureKind==='execution'&&!record.commit&&/Execution timed out|^Cancelled$/i.test(record.reason??'')){
+    await this.store.update(record.id,{infrastructureFailures:(record.infrastructureFailures??0)+1,failureKind:'stalled',reason:'Previous worker made no durable progress before timeout or cancellation; retry allowance restored.'});
+    continue;
+   }
    if(record.status!=='needs_attention'||record.failureKind||record.commit)continue;
    let count=0;
    for(let attempt=1;attempt<=record.attempts;attempt++){
@@ -180,7 +184,7 @@ export class Runner {
    const current=this.store.getSnapshot().tickets[ticket.id]!;
    if(current.status!=='done'&&current.status!=='needs_attention')await this.store.transition(ticket.id,'needs_attention',{reason:integrated?`Integrated locally; publication/recovery needed. ${reason}`:reason});
    const kind=this.providerBlock?classifyFailure(this.providerBlock):error instanceof ModelFailure?error.kind:'execution';
-   if(['quota','auth','model'].includes(kind))await this.store.update(ticket.id,{failureKind:kind,infrastructureFailures:(current.infrastructureFailures??0)+1,reason:this.providerBlock||reason});
+   if(isInfrastructure(kind))await this.store.update(ticket.id,{failureKind:kind,infrastructureFailures:(current.infrastructureFailures??0)+1,reason:this.providerBlock||reason});
    else await this.store.update(ticket.id,{failureKind:kind});
    const sharedFailure=/uncommitted changes|branch differs|origin does not match|integration branch advanced|candidate changed after|worker changed HEAD/i.test(reason);
    const action=recoveryAction({kind,canRepair:error instanceof Repairable||(error instanceof ModelFailure&&!['quota','auth','model'].includes(kind)),attempts:record.attempts-(record.infrastructureFailures??0),maxAttempts:this.config.maxAttempts,cancelled:signal.aborted,integrated,sharedFailure});

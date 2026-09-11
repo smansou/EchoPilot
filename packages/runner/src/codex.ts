@@ -40,13 +40,22 @@ export async function runCodex(options: CodexOptions): Promise<CodexResult> {
   const usage: Usage = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 };
   const args = ['exec', '--ignore-user-config', '-c', 'approval_policy="never"', '-s', options.role === 'worker' ? 'workspace-write' : 'read-only', '-C', options.cwd, '-m', options.model, '-c', `model_reasoning_effort=${JSON.stringify(options.effort)}`, '--ephemeral', '--json', '--output-schema', schemaPath, '-o', outputPath, '-'];
   let failureMessage = '';
-  // Structured events are not a liveness signal: reasoning and tool calls can be quiet.
-  // Report quiet periods without killing work; runProcess owns the hard deadline.
+  // A model may reason quietly, but an entirely silent worker cannot occupy a slot
+  // indefinitely. Reset this deadline on every structured event and retain the
+  // worktree when it fires so a fresh-context attempt can recover it.
   const idleMs = options.idleTimeoutMs ?? 180000;
-  let idle = setTimeout(() => options.onQuiet?.(), idleMs);
-  const touch = () => {clearTimeout(idle);idle=setTimeout(()=>options.onQuiet?.(),idleMs);};
+  const idleController = new AbortController();
+  const processSignal = options.signal ? AbortSignal.any([options.signal, idleController.signal]) : idleController.signal;
+  let stalled = false;
+  const expireIdle = () => {
+    stalled = true;
+    options.onQuiet?.();
+    idleController.abort();
+  };
+  let idle = setTimeout(expireIdle, idleMs);
+  const touch = () => {clearTimeout(idle);idle=setTimeout(expireIdle,idleMs);};
   const result = await runProcess({ command: options.command ?? 'codex', args, cwd: options.cwd, input: options.prompt,
-    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }), ...(options.signal ? {signal:options.signal} : {}),
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }), signal:processSignal,
     ...(options.onSpawn ? { onSpawn: options.onSpawn } : {}),
     onStdoutLine(line) {
       try {
@@ -65,6 +74,10 @@ export async function runCodex(options: CodexOptions): Promise<CodexResult> {
     },
   });
   clearTimeout(idle);
+  if (stalled) {
+    const message = `Worker silent for ${Math.ceil(idleMs / 1000)}s; stopped and work retained.`;
+    return {process:result,result:null,usage,error:message,failureKind:'stalled'};
+  }
   if (result.code !== 0 || result.timedOut || result.aborted || failureMessage) {
     const message = failureMessage || (result.aborted ? 'Cancelled' : result.timedOut ? 'Execution timed out; work retained.' : result.stderr.slice(-1500) || 'Codex exited without a result');
     return {process:result,result:null,usage,error:message,failureKind:classifyFailure(message)};

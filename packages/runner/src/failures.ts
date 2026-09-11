@@ -6,7 +6,7 @@ export function classifyFailure(message: string): FailureKind {
  if (/connection|network|websocket|stream disconnected|fetch failed|502|503/i.test(message)) return 'transport';
  return 'execution';
 }
-export function isInfrastructure(kind?: string): boolean { return ['quota','auth','model','transport'].includes(kind ?? ''); }
+export function isInfrastructure(kind?: string): boolean { return ['quota','auth','model','transport','stalled'].includes(kind ?? ''); }
 export class ModelFailure extends Error {
  constructor(message:string, readonly kind:FailureKind) {super(message);}
 }

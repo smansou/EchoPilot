@@ -32,3 +32,7 @@ Verified: pinned lockfile installation; TypeScript check; three focused core tes
 ## Deterministic runner added
 
 Development tooling now includes a local live dashboard and fresh-context Codex worker loop. See docs/RUNNER.md. Model routing and limits are in runner.config.json. No product tickets were automatically marked complete, and no paid worker jobs were started while building the runner.
+
+## Runner recovery update (2026-09-11)
+
+Silent Codex workers and reviewers are again terminated after the configured inactivity deadline instead of occupying a slot until the 30-minute hard timeout. These stalls retain their worktrees, are counted as infrastructure failures, and preserve the ticket's implementation retry allowance. Startup migrates the immediately preceding timeout/cancellation records so F02, S01, and Q01 can be retried after a clean runner restart.

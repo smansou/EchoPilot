@@ -59,14 +59,14 @@ test('quota errors preserve provider diagnosis and trigger the circuit callback'
   assert.equal(result.failureKind,'quota');assert.match(result.error!,/usage limit/);assert.deepEqual(failures,['quota']);assert.equal(result.result,null);
  }finally{await rm(directory,{recursive:true,force:true});}
 });
-test('quiet reasoning warns without terminating a worker that later completes',async()=>{
+test('silent worker is stopped and classified as infrastructure stall',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'echopilot-quiet-'));
  try{
   const command=join(directory,'fake-codex');
   await writeFile(command,`#!${process.execPath}\nconst fs=require('fs');setTimeout(()=>{fs.writeFileSync(process.argv[process.argv.indexOf('-o')+1],JSON.stringify({verdict:'approve',summary:'finished after quiet reasoning',issues:[]}));},180);`,{mode:0o700});
   let quiet=false;
   const result=await runCodex({command,cwd:directory,outputDirectory:directory,prompt:'fixture',model:'fake',effort:'low',role:'reviewer',idleTimeoutMs:50,timeoutMs:5000,onQuiet:()=>{quiet=true;}});
-  assert.equal(quiet,true);assert.equal(result.process.aborted,false);assert.equal(result.process.timedOut,false);assert.equal(result.error,undefined);assert.ok(result.result);
+  assert.equal(quiet,true);assert.equal(result.process.aborted,true);assert.equal(result.process.timedOut,false);assert.equal(result.failureKind,'stalled');assert.match(result.error!,/silent for 1s/);assert.equal(result.result,null);
  }finally{await rm(directory,{recursive:true,force:true});}
 });
 
@@ -76,6 +76,7 @@ test('recovery isolates ticket failures and bounds retries without stopping inde
  assert.equal(recoveryAction(base),'retry');
  assert.equal(recoveryAction({...base,attempts:2}),'park');
  assert.equal(recoveryAction({...base,kind:'transport'}),'retry');
+ assert.equal(recoveryAction({...base,kind:'stalled'}),'retry');
  assert.equal(recoveryAction({...base,canRepair:false}),'park');
  assert.equal(recoveryAction({...base,kind:'quota'}),'pause');
  assert.equal(recoveryAction({...base,sharedFailure:true}),'pause');
