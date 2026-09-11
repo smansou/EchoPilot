@@ -8,7 +8,8 @@ The project is implemented from `BACKLOG.json` by `scripts/loop.mjs`. Do not giv
 2. Install dependencies with `pnpm install --frozen-lockfile`.
 3. Configure the Codex CLI to use the desired provider and verify that `codex exec -m deepseek-flash "Reply with ready"` succeeds. The loop intentionally reads normal CLI configuration so a non-OpenAI provider can be used.
 4. Run `pnpm loop:self-test`, `pnpm check`, and `pnpm smoke`.
-5. Inspect the schedule with `LOOP_MODEL=deepseek-flash pnpm loop:dry`.
+5. Run `pnpm loop:init`; it should report `42 tickets: 1 done, 41 remaining` and identify F01's integrated commit.
+6. Inspect model routing with `LOOP_MODEL=deepseek-flash pnpm loop:dry`.
 
 ## Run
 

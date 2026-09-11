@@ -48,6 +48,7 @@ function overlaps(a,b){return a===b||a.startsWith(b+'/')||b.startsWith(a+'/');}
 function conflict(a,b){return a.block===b.block||ticketPaths(a).some(x=>ticketPaths(b).some(y=>overlaps(cleanPath(x),cleanPath(y))));}
 function ticketPaths(ticket){return [...ticket.files,...(extraPaths[ticket.id]??[])];}
 function digest(text){return createHash('sha256').update(text).digest('hex');}
+function integratedTicket(line){const match=line.match(/^([0-9a-f]+)\tfeat\(([A-Z]\d+)\):/);return match?{commit:match[1],id:match[2]}:undefined;}
 function routeFor(record,role){
  const model=process.env[`LOOP_${role.toUpperCase()}_MODEL`]??DEFAULT_MODEL;
  const normal=role==='review'?'max':'high';
@@ -92,6 +93,11 @@ async function processRun(command,args,{cwd=root,input='',timeout=CHECK_MS,onLin
 }
 async function git(cwd,...args){const r=await processRun('git',args,{cwd,timeout:60_000});if(r.code!==0)throw new Error(`git ${args[0]} failed: ${r.err.slice(-1500)}`);return args.includes('-z')?r.out:r.out.trim();}
 async function cleanRoot(){if(await git(root,'status','--porcelain'))throw new Error('Integration checkout is dirty');return git(root,'branch','--show-current');}
+async function integratedTicketCommits(branch){
+ const commits=new Map();const log=await git(root,'log','--format=%H%x09%s',branch,'--');
+ for(const line of log.split('\n')){const found=integratedTicket(line);if(found&&!commits.has(found.id))commits.set(found.id,found.commit);}
+ return commits;
+}
 async function changedFiles(cwd,base){const tracked=await git(cwd,'diff','--name-only','-z',base,'--');const untracked=await git(cwd,'ls-files','--others','--exclude-standard','-z');return [...new Set((tracked+'\0'+untracked).split('\0').filter(Boolean))];}
 async function validateChanges(cwd,base,paths){for(const file of await changedFiles(cwd,base)){if(!allowed(file,paths))throw new Error(`Outside ticket ownership: ${file}`);const full=resolve(cwd,file);if(!inside(full,cwd))throw new Error(`Path escapes candidate: ${file}`);try{if((await lstat(full)).isSymbolicLink())throw new Error(`Symlink not accepted: ${file}`);}catch(error){if(error?.code!=='ENOENT')throw error;}}}
 
@@ -177,7 +183,8 @@ function serve(){return createServer((req,res)=>{if(req.url==='/state'){res.setH
 async function initialize(tickets){
  await mkdir(worktreeRoot,{recursive:true});await mkdir(runRoot,{recursive:true});const branch=await cleanRoot();
  try{state=JSON.parse(await readFile(statePath,'utf8'));}catch{state={version:1,running:false,publish:true,integrationBranch:branch,updatedAt:new Date().toISOString(),tickets:{}};}
- state.integrationBranch=branch;for(const ticket of tickets){let record=state.tickets[ticket.id];if(!record){record=state.tickets[ticket.id]={id:ticket.id,path:ticket.path,status:'ready',phase:'test',detail:'waiting for dependencies',runs:0,substantiveFailures:0,transientFailures:0,updatedAt:new Date().toISOString()};}
+ const integrated=await integratedTicketCommits(branch);state.integrationBranch=branch;for(const ticket of tickets){let record=state.tickets[ticket.id];if(!record){record=state.tickets[ticket.id]={id:ticket.id,path:ticket.path,status:'ready',phase:'test',detail:'waiting for dependencies',runs:0,substantiveFailures:0,transientFailures:0,updatedAt:new Date().toISOString()};}
+  const integratedCommit=integrated.get(ticket.id);if(integratedCommit){record.status='done';record.phase='done';record.commit=integratedCommit;record.detail='recognized from integration history';continue;}
   if(['implementing','review'].includes(record.status)){record.status='ready';record.detail='recovered after runner restart';}
   if(record.approvedHead){const merged=await processRun('git',['merge-base','--is-ancestor',record.approvedHead,state.integrationBranch],{cwd:root,timeout:60_000});if(merged.code===0){record.status='done';record.phase='done';record.commit=record.approvedHead;record.detail='reconciled accepted integration';}}
  }await save();
@@ -195,6 +202,6 @@ async function loop(tickets){
  }
  state.running=false;await save();
 }
-async function selfTest(){const a={id:'A',deps:[],block:'A',files:['packages/a/']},b={id:'B',deps:[],block:'B',files:['packages/b/']},c={id:'C',deps:[],block:'C',files:['packages/a/x/']};state={tickets:{A:{status:'ready'},B:{status:'ready'},C:{status:'ready'}}};if(conflict(a,b)||!conflict(a,c)||!testFile('x/a.test.ts')||allowed('../x',['x/'])||readyBatch([a,b,c],new Map()).map(x=>x.id).join(',')!=='A,B')throw new Error('self-test failed');console.log('loop self-test passed');}
-async function main(){if(process.argv.includes('--self-test'))return selfTest();const tickets=JSON.parse(await readFile(join(root,'BACKLOG.json'),'utf8')).tickets;if(process.argv.includes('--dry-run')){console.table(tickets.map(t=>({id:t.id,deps:t.deps.join(','),...routeFor({substantiveFailures:0},'worker')})));return;}const available=await processRun(AGENT_BIN,['--version'],{timeout:15_000});if(available.code!==0)throw new Error(`Agent CLI is unavailable: ${AGENT_BIN}`);await initialize(tickets);const server=serve();console.log(`EchoPilot lean loop: http://127.0.0.1:${PORT}`);process.on('SIGINT',()=>{stopping=true;server.close();});process.on('SIGTERM',()=>{stopping=true;server.close();});await loop(tickets);server.close();}
+async function selfTest(){const a={id:'A',deps:[],block:'A',files:['packages/a/']},b={id:'B',deps:[],block:'B',files:['packages/b/']},c={id:'C',deps:[],block:'C',files:['packages/a/x/']};state={tickets:{A:{status:'ready'},B:{status:'ready'},C:{status:'ready'}}};const recognized=integratedTicket('a5b57cdace8026f4a31a7f7b5f51fbc23acb0731\tfeat(F01): complete shared contracts');if(conflict(a,b)||!conflict(a,c)||!testFile('x/a.test.ts')||allowed('../x',['x/'])||readyBatch([a,b,c],new Map()).map(x=>x.id).join(',')!=='A,B'||recognized?.id!=='F01'||recognized.commit!=='a5b57cdace8026f4a31a7f7b5f51fbc23acb0731'||integratedTicket('abc\ttest(F01): red baseline'))throw new Error('self-test failed');console.log('loop self-test passed');}
+async function main(){if(process.argv.includes('--self-test'))return selfTest();const tickets=JSON.parse(await readFile(join(root,'BACKLOG.json'),'utf8')).tickets;if(process.argv.includes('--dry-run')){console.table(tickets.map(t=>({id:t.id,deps:t.deps.join(','),...routeFor({substantiveFailures:0},'worker')})));return;}const available=await processRun(AGENT_BIN,['--version'],{timeout:15_000});if(available.code!==0)throw new Error(`Agent CLI is unavailable: ${AGENT_BIN}`);await initialize(tickets);if(process.argv.includes('--initialize-only')){const done=Object.values(state.tickets).filter(record=>record.status==='done');console.log(`Initialized ${tickets.length} tickets: ${done.length} done, ${tickets.length-done.length} remaining`);for(const record of done)console.log(`${record.id} ${record.commit}`);return;}const server=serve();console.log(`EchoPilot lean loop: http://127.0.0.1:${PORT}`);process.on('SIGINT',()=>{stopping=true;server.close();});process.on('SIGTERM',()=>{stopping=true;server.close();});await loop(tickets);server.close();}
 main().catch(error=>{console.error(error);process.exitCode=1;});
