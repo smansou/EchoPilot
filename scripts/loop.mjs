@@ -50,8 +50,8 @@ function ticketPaths(ticket){return [...ticket.files,...(extraPaths[ticket.id]??
 function digest(text){return createHash('sha256').update(text).digest('hex');}
 function routeFor(record,role){
  const model=process.env[`LOOP_${role.toUpperCase()}_MODEL`]??DEFAULT_MODEL;
- const normal=role==='review'?'high':'medium';
- const effort=(record.substantiveFailures??0)>0?'high':normal;
+ const normal=role==='review'?'max':'high';
+ const effort=(record.substantiveFailures??0)>0?'max':normal;
  return {model,effort:process.env[`LOOP_${role.toUpperCase()}_EFFORT`]??effort};
 }
 
