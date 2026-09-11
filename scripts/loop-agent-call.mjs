@@ -38,6 +38,10 @@ function summarize(line) {
   } catch {
     return line;
   }
+  // codex emits a started and a completed event for each item; only the completion
+  // carries the useful detail, so printing both would double every line.
+  if (event.type === 'item.started') return undefined;
+  if (event.type === 'thread.started' || event.type === 'turn.started') return undefined;
   const item = event.item ?? {};
   const kind = item.type ?? event.type ?? 'event';
   const detail = item.text ?? item.command ?? item.message ?? item.summary ?? item.reason ?? '';
@@ -52,10 +56,12 @@ function print(text) {
     const line = buffer.slice(0, index);
     buffer = buffer.slice(index + 1);
     if (!line.trim()) continue;
-    process.stdout.write(`  ${summarize(line)}\n`);
+    const summarized = summarize(line);
+    if (summarized) process.stdout.write(`  ${summarized}\n`);
   }
   if (buffer.length > 8000) {
-    process.stdout.write(`  ${summarize(buffer)}\n`);
+    const summarized = summarize(buffer);
+    if (summarized) process.stdout.write(`  ${summarized}\n`);
     buffer = '';
   }
 }

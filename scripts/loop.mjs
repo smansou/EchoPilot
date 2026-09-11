@@ -133,10 +133,17 @@ let statusPending=false,lastStatusAt=0;
 
 function quote(value){return `'${String(value).replace(/'/g,"'\\''")}'`;}
 async function cmux(args,{timeout=30_000}={}){return processRun(CMUX_BIN,args,{timeout});}
-async function grid(command,args){
+async function runGrid(command,args){
  const run=await processRun('node',[CMUX_GRID,command,'--workspace',CMUX_WORKSPACE,'--supervisor-surface',CMUX_SUPERVISOR,...args],{timeout:300_000});
  if(run.code!==0)throw new Error(`cmux-grid ${command} failed: ${(run.err||run.out).trim().slice(-800)}`);
  return JSON.parse(run.out.trim().split('\n').filter(Boolean).pop()??'{}');
+}
+// Layout changes are read-modify-write on one pane tree, so they run one at a time.
+let gridQueue=Promise.resolve();
+function grid(command,args){
+ const job=gridQueue.then(()=>runGrid(command,args));
+ gridQueue=job.catch(()=>undefined);
+ return job;
 }
 async function labelSurface(surface,label){
  if(!surface||!label)return;
@@ -163,6 +170,7 @@ async function stopAgents(){
  for(const surface of [...agentSurfaces.values()]){
   try{await cmux(['send-key','--workspace',CMUX_WORKSPACE,'--surface',surface,'ctrl+c'],{timeout:15_000});}catch{}
  }
+ await new Promise(resolveWait=>setTimeout(resolveWait,2000));
  for(const ticketId of [...agentSurfaces.keys()])await releaseTicketSurface(ticketId);
 }
 async function readExitCode(path){
@@ -192,6 +200,7 @@ async function waitForSurface(surface,{exitPath,logPath,ticketId,role}){
  const started=Date.now();const idleLimit=Math.max(IDLE_MS,Number.parseInt(process.env.LOOP_IDLE_MS??'',10)||480_000);
  let last=Date.now(),size=-1,polls=0;
  while(true){
+  if(stopping)return {code:-1,timedOut:false,out:'',err:'loop is stopping',aborted:true};
   const code=await readExitCode(exitPath);
   if(code!==undefined)return {code,timedOut:false,out:'',err:''};
   if(Date.now()-last>idleLimit){await cancelSurface(surface);return {code:-1,timedOut:true,out:'',err:`${role} produced no output for ${Math.round(idleLimit/1000)}s`};}
@@ -285,7 +294,7 @@ async function runTicket(ticket){
  const tree=await worktree(ticket);const dir=join(runRoot,`${ticket.id}-${record.runs+1}`);record.runs+=1;
  try{const install=await processRun('pnpm',['install','--frozen-lockfile','--ignore-scripts'],{cwd:tree.path,timeout:CHECK_MS});if(install.code!==0)throw new Error(`Dependency install failed: ${install.err.slice(-1000)}`);const existing=(await changedFiles(tree.path,tree.base)).length>0;if(!existing&&record.phase==='test')await testPhase(ticket,record,tree,dir);else if(existing&&!record.testHashes){record.phase='implement';record.testFiles=(await changedFiles(tree.path,tree.base)).filter(testFile);record.testHashes=await hashTests(tree.path,record.testFiles);}
  await implementPhase(ticket,record,tree,dir);await integrate(ticket,record,tree,dir);
- }catch(error){await recordFailure(ticket,record,error);}
+ }catch(error){if(!stopping)await recordFailure(ticket,record,error);else console.log(`loop stopping: ${ticket.id} left for restart recovery`);}
  finally{await releaseTicketSurface(ticket.id);}
 }
 

@@ -247,16 +247,25 @@ function buildGrid(ws, agents) {
   const columns = columnsFor(agents.length, current.container);
   const root = paneOfSurface(current, agents[0]);
   if (!root) throw new Error(`agent surface ${agents[0]} is not on screen`);
+  const placeholders = new Set();
   const columnsOfPanes = [root];
-  for (let index = 1; index < columns; index += 1) columnsOfPanes.push(split(ws, 'right', columnsOfPanes[index - 1]));
+  for (let index = 1; index < columns; index += 1) {
+    const created = split(ws, 'right', columnsOfPanes[index - 1]);
+    columnsOfPanes.push(created);
+    for (const surface of created.surfaces) placeholders.add(surface);
+  }
   const cells = [];
   for (let index = 0; index < columns; index += 1) {
     const entries = Math.ceil((agents.length - index) / columns);
     const column = [columnsOfPanes[index]];
-    for (let row = 1; row < entries; row += 1) column.push(split(ws, 'down', column[row - 1]));
+    for (let row = 1; row < entries; row += 1) {
+      const created = split(ws, 'down', column[row - 1]);
+      column.push(created);
+      for (const surface of created.surfaces) placeholders.add(surface);
+    }
     cells.push(column);
   }
-  return cells;
+  return { cells, placeholders };
 }
 
 function sync({ ws, supervisorSurface, agents }) {
@@ -274,6 +283,7 @@ function sync({ ws, supervisorSurface, agents }) {
   }
   // Gather every agent surface into one pane. Panes that lose their last surface
   // collapse, leaving exactly [supervisor pane | agent pane] to rebuild from.
+  const preexisting = new Set(known.panes.flatMap(pane => pane.surfaces));
   const current = view(ws);
   const root = paneOfSurface(current, agents[0]);
   if (!root) throw new Error(`agent surface ${agents[0]} is not on screen`);
@@ -282,18 +292,21 @@ function sync({ ws, supervisorSurface, agents }) {
     if (!pane) throw new Error(`agent surface ${surface} is not on screen`);
     if (pane.id !== root.id) moveSurface(ws, surface, root.id);
   }
+  // Only close leftover surfaces we saw before this rebuild started: a concurrent
+  // spawn may have created a terminal that is not part of this agent list yet.
   for (const surface of surfacesOutside(ws, supervisorSurface)) {
-    if (!agents.includes(surface)) closeSurface(ws, surface);
+    if (!agents.includes(surface) && preexisting.has(surface)) closeSurface(ws, surface);
   }
 
-  const cells = buildGrid(ws, agents);
+  const { cells, placeholders } = buildGrid(ws, agents);
   const columns = cells.length;
   const rows = Math.max(...cells.map(column => column.length));
   for (let index = 0; index < agents.length; index += 1) {
     moveSurface(ws, agents[index], cells[index % columns][Math.floor(index / columns)].id);
   }
-  for (const surface of surfacesOutside(ws, supervisorSurface)) {
-    if (!agents.includes(surface)) closeSurface(ws, surface);
+  const stillOnScreen = new Set(view(ws).panes.flatMap(pane => pane.surfaces));
+  for (const surface of placeholders) {
+    if (!agents.includes(surface) && stillOnScreen.has(surface)) closeSurface(ws, surface);
   }
 
   equalize(ws);
