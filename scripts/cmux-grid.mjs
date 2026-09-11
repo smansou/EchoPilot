@@ -260,6 +260,14 @@ function buildGrid(ws, agents) {
 }
 
 function sync({ ws, supervisorSurface, agents }) {
+  // A surface can disappear between layout changes (the operator closes a terminal,
+  // a ticket stops). Drop those instead of failing the whole grid rebuild.
+  const known = view(ws);
+  const live = agents.filter(surface => paneOfSurface(known, surface));
+  if (live.length !== agents.length) {
+    console.error(`cmux-grid: dropped ${agents.length - live.length} agent surface(s) that are no longer on screen`);
+  }
+  agents = live;
   if (!agents.length) {
     writeState({ workspace: ws, supervisorSurface, agents: [], updatedAt: new Date().toISOString() });
     return { agents: [], columns: 0, rows: 0 };
