@@ -68,7 +68,12 @@ export class Runner {
   if(auth.code!==0)throw new Error('Codex is not authenticated. Run codex login in your terminal first.');
   this.providerBlock='';
   for(const record of Object.values(this.store.getSnapshot().tickets)){
-   if(record.status==='needs_attention'&&(isInfrastructure(record.failureKind)||(record.failureKind==='stalled'&&(record.attempts-(record.infrastructureFailures??0))<this.config.maxAttempts))&&!record.commit&&!this.active.has(record.id))await this.store.transition(record.id,'pending',{reason:'Provider retry authorized by Resume; previous evidence retained.'});
+   const used=record.attempts-(record.infrastructureFailures??0);
+   const reason=record.reason??'';
+   const providerFailure=['quota','auth','model'].includes(record.failureKind??'');
+   const retryableFailure=!providerFailure&&!needsHuman(new Error(reason));
+   if(record.status==='needs_attention'&&retryableFailure&&used<this.config.maxAttempts&&!record.commit&&!this.active.has(record.id))
+    await this.store.transition(record.id,'pending',{reason:'Repair retry authorized by Resume; previous evidence retained.'});
   }
   await this.store.setPaused(false);void this.pump();
  }
