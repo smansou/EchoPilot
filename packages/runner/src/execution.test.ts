@@ -48,3 +48,23 @@ test('isolated worktree commit integrates only allowed changes into clean branch
     assert.equal(await git('status', '--porcelain'), '');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('quota errors preserve provider diagnosis and trigger the circuit callback', async () => {
+ const directory=await mkdtemp(join(tmpdir(),'echopilot-quota-'));
+ try{
+  const command=join(directory,'fake-codex');
+  await writeFile(command,`#!${process.execPath}\nconsole.log(JSON.stringify({type:'turn.failed',error:{message:"You've hit your usage limit. Try again later."}}));process.exitCode=1;`,{mode:0o700});
+  const failures:string[]=[];
+  const result=await runCodex({command,cwd:directory,outputDirectory:directory,prompt:'fixture',model:'fake',effort:'low',role:'worker',onFailure:(_message,kind)=>failures.push(kind)});
+  assert.equal(result.failureKind,'quota');assert.match(result.error!,/usage limit/);assert.deepEqual(failures,['quota']);assert.equal(result.result,null);
+ }finally{await rm(directory,{recursive:true,force:true});}
+});
+test('silent worker is cancelled before its overall execution deadline',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'echopilot-stall-'));
+ try{
+  const command=join(directory,'fake-codex');
+  await writeFile(command,`#!${process.execPath}\nsetInterval(()=>{},1000);`,{mode:0o700});
+  const result=await runCodex({command,cwd:directory,outputDirectory:directory,prompt:'fixture',model:'fake',effort:'low',role:'worker',idleTimeoutMs:100,timeoutMs:5000});
+  assert.equal(result.failureKind,'stalled');assert.equal(result.process.aborted,true);assert.equal(result.process.timedOut,false);
+ }finally{await rm(directory,{recursive:true,force:true});}
+});

@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { RunnerStore } from './store.js';
 import { chooseModel } from './policy.js';
@@ -9,6 +9,7 @@ import { assertCleanRepository,createTicketWorktree,validateChangedPaths,commitW
 import type { Config } from './config.js';
 import type { Ticket } from './types.js';
 
+import { ModelFailure, classifyFailure, isInfrastructure } from './failures.js';
 class Repairable extends Error {}
 class HumanInterventionRequired extends Error {}
 
@@ -21,6 +22,7 @@ export class Runner {
  readonly active=new Map<string,AbortController>();
  started=0;observedTokens=0;branch='';
  private pumping=false;
+ private providerBlock='';
  private integration:Promise<unknown>=Promise.resolve();
  private jobs=new Set<Promise<void>>();
  private listeners=new Set<()=>void>();
@@ -29,12 +31,24 @@ export class Runner {
  async initialize(){
   const branch=await runProcess({command:'git',args:['branch','--show-current'],cwd:this.root});
   if(branch.code!==0||!branch.stdout.trim())throw new Error('Runner needs a checked-out Git branch');
-  this.branch=branch.stdout.trim();await this.store.load();this.store.subscribe(()=>this.emit());
+  this.branch=branch.stdout.trim();await this.store.load();
+  // Recover legacy quota failures from evidence without deleting attempts or worktrees.
+  for(const record of Object.values(this.store.getSnapshot().tickets)){
+   if(record.status!=='needs_attention'||record.failureKind||record.commit)continue;
+   let count=0;
+   for(let attempt=1;attempt<=record.attempts;attempt++){
+    try{const log=await readFile(join(this.root,'.runner','runs',`${record.id}-${attempt}`,'worker.log'),'utf8');
+     if(classifyFailure(log)==='quota')count++;
+    }catch{}
+   }
+   if(count)await this.store.update(record.id,{infrastructureFailures:count,failureKind:'quota',reason:'Previous launch hit the account usage limit. Retry allowance restored; resume after quota is available.'});
+  }
+  this.store.subscribe(()=>this.emit());
  }
  subscribe(listener:()=>void){this.listeners.add(listener);return()=>{this.listeners.delete(listener);};}
  private emit(){for(const listener of this.listeners)listener();}
- private ownedTickets(){return this.tickets.map(t=>({...t,files:[...t.files,...(this.config.allowedPaths[t.id]??[])]}));}
- ready(){const state=this.store.getSnapshot();const tickets=this.ownedTickets();const occupied=tickets.filter(t=>this.active.has(t.id));return tickets.filter(t=>state.tickets[t.id]?.status==='pending'&&state.tickets[t.id]!.attempts<this.config.maxAttempts&&t.deps.every(id=>state.tickets[id]?.status==='done')&&!occupied.some(other=>ticketsConflict(t,other))).map(t=>t.id);}
+ private ownedTickets(){return this.tickets.map(t=>({...t,files:[...t.files,...((this.store.getSnapshot().tickets[t.id]?.attempts??0)>0?this.config.repairPaths:[]),...(this.config.allowedPaths[t.id]??[])]}));}
+ ready(){const state=this.store.getSnapshot();const tickets=this.ownedTickets();const occupied=tickets.filter(t=>this.active.has(t.id));return tickets.filter(t=>state.tickets[t.id]?.status==='pending'&&(state.tickets[t.id]!.attempts-(state.tickets[t.id]!.infrastructureFailures??0))<this.config.maxAttempts&&t.deps.every(id=>state.tickets[id]?.status==='done')&&!occupied.some(other=>ticketsConflict(t,other))).map(t=>t.id);}
  payload(token:string){return {snapshot:this.store.getSnapshot(),tickets:this.tickets,routes:Object.fromEntries(this.tickets.map(t=>[t.id,chooseModel(t,this.config)])),ready:this.ready(),active:this.active.size,started:this.started,limit:this.config.maxTicketsPerRun,branch:this.branch,maxWorkers:this.config.maxWorkers,observedTokens:this.observedTokens,tokenLimit:this.config.maxObservedTokensPerRun,publish:this.config.publish,token,mode:'live'};}
  async resume(){
   if(this.stopping)throw new Error('Workers are stopping; wait for them to finish');
@@ -43,6 +57,10 @@ export class Runner {
   if(['main','master'].includes(this.branch))throw new Error('Check out an implementation branch before starting the loop');
   const auth=await runProcess({command:this.config.codexCommand,args:['login','status'],cwd:this.root,timeoutMs:15000});
   if(auth.code!==0)throw new Error('Codex is not authenticated. Run codex login in your terminal first.');
+  this.providerBlock='';
+  for(const record of Object.values(this.store.getSnapshot().tickets)){
+   if(record.status==='needs_attention'&&isInfrastructure(record.failureKind)&&!record.commit&&!this.active.has(record.id))await this.store.transition(record.id,'pending',{reason:'Provider retry authorized by Resume; previous evidence retained.'});
+  }
   await this.store.setPaused(false);void this.pump();
  }
  async pause(){await this.store.setPaused(true);}
@@ -52,15 +70,15 @@ export class Runner {
   if(!record||record.status!=='needs_attention')throw new Error('Only tickets needing attention can be requeued');
   if(this.active.has(id))throw new Error('Wait for the active process to stop');
   if(record.commit)throw new Error('This attempt has an integrated commit. Resolve publication/recovery before requeueing; see the runbook.');
-  if(record.attempts>=this.config.maxAttempts)throw new Error('Attempt limit reached. Inspect the retained worktree and deliberately adjust maxAttempts before retrying.');
+  if((record.attempts-(record.infrastructureFailures??0))>=this.config.maxAttempts)throw new Error('Attempt limit reached. Inspect the retained worktree and deliberately adjust maxAttempts before retrying.');
   await this.store.transition(id,'pending',{reason:'Requeued by user; previous worktree retained.'});void this.pump();
  }
  private async pump(){
   if(this.pumping)return;this.pumping=true;
   try{
-   while(!this.store.getSnapshot().paused&&this.active.size<this.config.maxWorkers){
+   while(!this.providerBlock&&!this.store.getSnapshot().paused&&this.active.size<this.config.maxWorkers){
     if(this.started>=this.config.maxTicketsPerRun||this.observedTokens>=this.config.maxObservedTokensPerRun){await this.pause();break;}
-    const ticket=selectReadyTickets(this.ownedTickets(),this.store.getSnapshot(),this.config)[0];if(!ticket)break;
+    const ticket=selectReadyTickets(this.ownedTickets(),this.store.getSnapshot(),this.config)[0];if(!ticket){if(this.active.size===0)await this.pause();break;}
     const controller=new AbortController();this.active.set(ticket.id,controller);this.started++;
     const route=chooseModel(ticket,this.config);
     await this.store.transition(ticket.id,'running',{model:route.model,effort:route.effort,reason:`Starting fresh worker: ${route.reason}`});
@@ -78,13 +96,18 @@ export class Runner {
  }
  private async callModel(ticket:Ticket,cwd:string,directory:string,prompt:string,role:'worker'|'reviewer',signal:AbortSignal){
   const route=chooseModel(ticket,this.config,role==='worker'?'implementation':'review');
-  let lastHeartbeat=0;
-  const result=await runCodex({cwd,prompt,model:route.model,effort:route.effort,role,outputDirectory:directory,command:this.config.codexCommand,timeoutMs:this.config.workerTimeoutMs,signal,onEvent:event=>{
+  let lastHeartbeat=0;let accounted:Usage={inputTokens:0,cachedInputTokens:0,outputTokens:0};
+  const account=(usage:Usage)=>{const delta={inputTokens:Math.max(0,usage.inputTokens-accounted.inputTokens),cachedInputTokens:Math.max(0,usage.cachedInputTokens-accounted.cachedInputTokens),outputTokens:Math.max(0,usage.outputTokens-accounted.outputTokens)};accounted={...usage};return this.addUsage(ticket.id,delta);};
+  const result=await runCodex({cwd,prompt,model:route.model,effort:route.effort,role,outputDirectory:directory,command:this.config.codexCommand,timeoutMs:this.config.workerTimeoutMs,idleTimeoutMs:this.config.idleTimeoutMs,signal,
+   onFailure:(message,kind)=>{if(isInfrastructure(kind)){this.providerBlock=message;void this.pause();for(const [id,controller]of this.active)if(id!==ticket.id)controller.abort();}},
+   onEvent:event=>{
+   if(event.usage){void account(event.usage);if(this.observedTokens>=this.config.maxObservedTokensPerRun){void this.pause();for(const controller of this.active.values())controller.abort();}}
+
    if(Date.now()-lastHeartbeat>2000){lastHeartbeat=Date.now();void this.store.update(ticket.id,{reason:`${role==='worker'?'Worker':'Reviewer'} · ${route.model} · ${event.type}`}).catch(()=>undefined);}
   }});
-  await this.addUsage(ticket.id,result.usage);
+  await account(result.usage);
   await writeFile(join(directory,`${role}.log`),result.process.stderr+'\n'+result.process.stdout,{mode:0o600});
-   if(result.error||!result.result)throw new Repairable(result.error??'Missing model result');
+   if(result.error||!result.result)throw new ModelFailure(result.error??'Missing model result',result.failureKind??'execution');
   return result.result;
  }
  private async checks(ticket:Ticket,cwd:string,directory:string,signal:AbortSignal){
@@ -154,10 +177,13 @@ export class Runner {
    const reason=(error instanceof Error?error.message:String(error)).slice(0,2000);
    const current=this.store.getSnapshot().tickets[ticket.id]!;
    if(current.status!=='done'&&current.status!=='needs_attention')await this.store.transition(ticket.id,'needs_attention',{reason:integrated?`Integrated locally; publication/recovery needed. ${reason}`:reason});
-   const human=error instanceof HumanInterventionRequired||needsHuman(error);
-   const repairable=!human&&!signal.aborted&&!integrated;
-   if(repairable&&record.attempts<this.config.maxAttempts&&!this.store.getSnapshot().paused){await this.store.transition(ticket.id,'pending',{reason:`Automatic fresh-context repair queued within attempt limit. ${reason}`});}
-   else if(human&&!signal.aborted){await this.pause();}
+   const kind=this.providerBlock?classifyFailure(this.providerBlock):error instanceof ModelFailure?error.kind:'execution';
+   if(isInfrastructure(kind))await this.store.update(ticket.id,{failureKind:kind,infrastructureFailures:(current.infrastructureFailures??0)+1,reason:this.providerBlock||reason});
+   else await this.store.update(ticket.id,{failureKind:kind});
+   const human=error instanceof HumanInterventionRequired||needsHuman(error)||isInfrastructure(kind)||error instanceof ModelFailure;
+   const repairable=error instanceof Repairable&&!human&&!signal.aborted&&!integrated;
+   if(repairable&&(record.attempts-(record.infrastructureFailures??0))<this.config.maxAttempts&&!this.store.getSnapshot().paused){await this.store.transition(ticket.id,'pending',{reason:`Automatic fresh-context repair queued within attempt limit. ${reason}`});}
+   else if(!signal.aborted){await this.pause();}
   }
  }
 }

@@ -19,7 +19,7 @@ export interface RunnerEvent {
   from?: TicketStatus; to?: TicketStatus; message: string;
 }
 export interface TicketRecord {
-  id: string; status: TicketStatus; attempts: number; updatedAt: string;
+  id: string; status: TicketStatus; attempts: number; infrastructureFailures?:number; failureKind?:string; updatedAt: string;
   model?: string; effort?: string; reason?: string; branch?: string;
   worktree?: string; commit?: string;
   usage?: { input: number; cached: number; output: number };

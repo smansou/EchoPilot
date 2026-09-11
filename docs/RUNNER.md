@@ -66,3 +66,9 @@ Use **Requeue within attempt limit** only after resolving the reason. If a commi
 `repairPaths` is a deliberately small coordinator-owned repair allowance, not general worker ownership. Configure `ticketChecks[TICKET_ID]` as argv arrays for additional focused tests. Do not add interactive hardware/signing steps to unattended checks.
 
 No live paid worker invocation was used to validate this tooling. Verification covered typechecking, dashboard build, seven focused tests including fake Codex output and real temporary Git worktree integration, and local HTTP controls. End-to-end model quality and hardware-dependent product acceptance remain future run evidence.
+
+## Failure recovery update (2026-09-11)
+
+Quota/authentication/model-availability/network errors now preserve the provider's actual message, pause scheduling immediately, and cancel sibling workers instead of paying for repeated implementation attempts. Resume explicitly retries affected tickets after the provider problem is resolved. Infrastructure failures are tracked separately from implementation attempts; worktree attempt numbers remain monotonic, so recovery never overwrites earlier work. On startup, legacy quota failures are recognized from retained logs and their implementation retry allowance is restored. Completed F01 work is preserved.
+
+A worker producing no structured activity for three minutes is stopped and flagged for attention; its worktree stays available. The existing overall timeout still bounds noisy workers. `idleTimeoutMs` can be changed in runner.config.json. Observed usage is accounted during streamed turn completion events, and reaching the configured ceiling stops active calls and new scheduling. Provider usage is still delayed, so this is not a hard billing cap. Exhausted or unrepairable work pauses visibly rather than leaving an idle loop labeled running. Shared manifest repair paths now participate in file reservations.

@@ -48,7 +48,7 @@ export function selectReadyTickets(tickets: Ticket[], snapshot: Snapshot, config
   for (const ticket of tickets) {
     if (occupied.length + selected.length >= config.maxWorkers) break;
     const record = snapshot.tickets[ticket.id];
-    if (!record || record.status !== 'pending' || record.attempts >= config.maxAttempts) continue;
+    if (!record || record.status !== 'pending' || (record.attempts - (record.infrastructureFailures ?? 0)) >= config.maxAttempts) continue;
     if (!ticket.deps.every(id => snapshot.tickets[id]?.status === 'done')) continue;
     if ([...occupied, ...selected].some(other => ticketsConflict(ticket, other))) continue;
     selected.push(ticket);
