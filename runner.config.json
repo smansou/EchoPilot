@@ -1,7 +1,7 @@
 {
   "port": 4318,
   "maxWorkers": 2,
-  "maxAttempts": 2,
+  "maxAttempts": 3,
   "repairPaths": ["package.json", "pnpm-lock.yaml"],
   "maxTicketsPerRun": 6,
   "workerTimeoutMs": 1800000,
@@ -14,12 +14,12 @@
   "models": {
     "simple": {"model": "gpt-5.6-luna", "effort": "medium"},
     "standard": {"model": "gpt-5.6-terra", "effort": "medium"},
-    "complex": {"model": "gpt-5.6-terra", "effort": "high"},
-    "review": {"model": "gpt-5.6-sol", "effort": "high"}
+    "complex": {"model": "gpt-5.6-terra", "effort": "medium"},
+    "review": {"model": "gpt-5.6-luna", "effort": "medium"}
   },
   "ticketOverrides": {
     "F01": {"model": "gpt-5.6-terra", "effort": "high"},
-    "S01": {"model": "gpt-5.6-sol", "effort": "high"},
+    "S01": {"model": "gpt-5.6-terra", "effort": "medium"},
     "S02": {"model": "gpt-5.6-sol", "effort": "high"},
     "S03": {"model": "gpt-5.6-sol", "effort": "high"},
     "S04": {"model": "gpt-5.6-sol", "effort": "high"}
