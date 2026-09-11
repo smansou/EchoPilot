@@ -41,6 +41,6 @@ No release package is signed or notarized yet. Performance targets in the plan a
 
 The Electron boundary follows the official [security guidance](https://www.electronjs.org/docs/latest/tutorial/security) and [preload guidance](https://www.electronjs.org/docs/latest/tutorial/tutorial-preload).
 
-## Autonomous development and progress dashboard
+## Autonomous development loop
 
-Run `pnpm runner:build` then `pnpm runner`, and open http://127.0.0.1:4318. Start the bounded worker loop from the dashboard. See [runner instructions](docs/RUNNER.md) for controls, model choices, limits, and recovery. This tooling is separate from the desktop product.
+After configuring the Codex CLI to use your chosen model provider, run `LOOP_MODEL=deepseek-flash LOOP_MAX_AGENTS=10 pnpm loop` and open http://127.0.0.1:4318. The dependency-aware script schedules isolated fresh-context workers, retains candidates, freezes test evidence, runs deterministic checks, requests blind review, serializes integration, and records atomic progress. `LOOP_MAX_AGENTS=0` (the default) means no policy cap; dependency and path conflicts still prevent unsafe overlap. See [docs/AUTONOMOUS_LOOP.md](docs/AUTONOMOUS_LOOP.md) before the first run.

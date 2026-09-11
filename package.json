@@ -17,9 +17,9 @@
     "contracts:check": "pnpm --filter @echopilot/contracts check:generated",
     "check": "pnpm contracts:check && pnpm typecheck && pnpm test && pnpm build",
     "smoke": "node scripts/smoke.mjs",
-    "runner": "node --import tsx packages/runner/src/cli.ts",
-    "runner:build": "node scripts/build-progress.mjs",
-    "runner:test": "node --import tsx --test packages/runner/src/*.test.ts"
+    "loop": "node scripts/loop.mjs",
+    "loop:dry": "node scripts/loop.mjs --dry-run",
+    "loop:self-test": "node scripts/loop.mjs --self-test"
   },
   "dependencies": {
     "react": "19.2.8",

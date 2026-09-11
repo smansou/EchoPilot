@@ -29,10 +29,6 @@ Verified connected project: smansou/EchoPilot, repository ID 1357571568. Existin
 
 Verified: pinned lockfile installation; TypeScript check; three focused core tests; production Vite/esbuild build; unattended hidden Electron smoke (rendered fixture text, IPC validation, mute, renderer isolation, dashboard lifecycle, and stable event identity over two launches). No hardware access or paid calls were required. No real ASR, TTS, harness, screen capture, gaze, encrypted memory, or native helper has been implemented yet.
 
-## Deterministic runner added
+## Lean autonomous loop (2026-09-11)
 
-Development tooling now includes a local live dashboard and fresh-context Codex worker loop. See docs/RUNNER.md. Model routing and limits are in runner.config.json. No product tickets were automatically marked complete, and no paid worker jobs were started while building the runner.
-
-## Runner recovery update (2026-09-11)
-
-Silent Codex workers and reviewers are again terminated after the configured inactivity deadline instead of occupying a slot until the 30-minute hard timeout. These stalls retain their worktrees, are counted as infrastructure failures, and preserve the ticket's implementation retry allowance. Startup migrates the immediately preceding timeout/cancellation records so F02, S01, and Q01 can be retried after a clean runner restart.
+The previous multi-module runner and active dashboard were removed. `scripts/loop.mjs` is now the single orchestration implementation. It starts dependency-ready, non-overlapping tickets in fresh model contexts, retains code candidates, freezes red-test evidence during production implementation, runs deterministic checks, requests a blind read-only review, and serializes integration. Model selection is runtime configuration rather than ticket metadata; the default is `deepseek-flash`. Concurrency has no policy cap unless `LOOP_MAX_AGENTS` is set. Transient and substantive failures have finite limits, stale active work recovers on restart, and uncertain accepted integrations are reconciled from their commit receipt.
