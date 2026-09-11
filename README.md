@@ -4,7 +4,7 @@ A TypeScript-first desktop companion for AI coding agents. The implementation st
 
 ## Run the first slice
 
-Requires Node.js 24+ and pnpm 11.19.0 on macOS. No API key, microphone permission, or Xcode is needed for this slice.
+Requires Node.js 24+ and pnpm 11.19.0 on macOS. If `pnpm` is not present in your Terminal, enable it with `corepack enable` followed by `corepack prepare pnpm@11.19.0 --activate`. No API key, microphone permission, or Xcode is needed for this slice.
 
 ```sh
 pnpm install

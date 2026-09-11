@@ -5,11 +5,19 @@ The project is implemented from `BACKLOG.json` by `scripts/loop.mjs`. Do not giv
 ## Before the first run
 
 1. Review and commit the current orchestration cleanup. The integration checkout must be clean because accepted ticket branches are fast-forwarded into it.
-2. Install dependencies with `pnpm install --frozen-lockfile`.
-3. Configure the Codex CLI to use the desired provider and verify that `codex exec -m deepseek-flash "Reply with ready"` succeeds. The loop intentionally reads normal CLI configuration so a non-OpenAI provider can be used.
-4. Run `pnpm loop:self-test`, `pnpm check`, and `pnpm smoke`.
-5. Run `pnpm loop:init`; it should report `42 tickets: 1 done, 41 remaining` and identify F01's integrated commit.
-6. Inspect model routing with `LOOP_MODEL=deepseek-flash pnpm loop:dry`.
+2. Confirm the tools in your own Terminal, not only inside the desktop app:
+
+   ```sh
+   command -v node npm
+   command -v pnpm codex
+   ```
+
+3. If `pnpm` is missing and Node was installed through nvm, run `corepack enable` and `corepack prepare pnpm@11.19.0 --activate`.
+4. If `codex` is missing, install the CLI with `npm install -g @openai/codex`. With nvm's standard shell setup, no additional PATH line is needed; open a new Terminal afterward.
+5. Configure the Codex CLI to use the desired provider and verify that `codex exec -m deepseek-flash "Reply with ready"` succeeds. The loop reads normal CLI configuration so a non-OpenAI provider can be used.
+6. Install dependencies with `pnpm install --frozen-lockfile` and run `pnpm loop:self-test`, `pnpm check`, and `pnpm smoke`.
+7. Run `pnpm loop:init`; it should report `42 tickets: 1 done, 41 remaining` and identify F01's integrated commit.
+8. Inspect model routing with `LOOP_MODEL=deepseek-flash pnpm loop:dry`.
 
 ## Run
 
