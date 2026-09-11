@@ -145,8 +145,8 @@ async function labelSurface(surface,label){
 async function ticketSurface(ticket,cwd,invocation,label){
  const existing=agentSurfaces.get(ticket.id);
  if(existing){
-  const sent=await cmux(['send','--workspace',CMUX_WORKSPACE,'--surface',existing,invocation],{timeout:20_000});
-  if(sent.code===0){await cmux(['send-key','--workspace',CMUX_WORKSPACE,'--surface',existing,'enter'],{timeout:20_000});await labelSurface(existing,label);return existing;}
+  const sent=await grid('send',['--surface',existing,'--command',invocation]);
+  if(sent.surface){await labelSurface(existing,label);return existing;}
   agentSurfaces.delete(ticket.id);
  }
  const spawned=await grid('spawn',['--name',ticket.id,'--cwd',cwd,'--command',invocation,'--title',label]);

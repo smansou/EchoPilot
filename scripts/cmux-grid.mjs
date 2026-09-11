@@ -101,13 +101,38 @@ function split(ws, direction, fromPane) {
   return created;
 }
 
+function sleepSync(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+// This cmux build silently drops `new-surface --command`, so wait for the login shell
+// to print its prompt and type the command into the live shell instead.
+function waitForPrompt(ws, surface, timeout = 8000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const screen = cmux(['read-screen', '--workspace', ws, '--surface', surface, '--lines', '3'], { allowFail: true });
+    if (screen.ok) {
+      const lines = screen.out.split('\n').map(line => line.trimEnd()).filter(Boolean);
+      if (lines.length && /[%$#❯>]\s*$/.test(lines.at(-1))) return true;
+    }
+    sleepSync(200);
+  }
+  return false;
+}
+
+function sendCommand(ws, surface, command) {
+  waitForPrompt(ws, surface);
+  cmux(['send', '--workspace', ws, '--surface', surface, command]);
+  cmux(['send-key', '--workspace', ws, '--surface', surface, 'enter']);
+}
+
 function newSurface(ws, paneId, { cwd, command, title } = {}) {
   const args = ['--id-format', 'both', 'new-surface', '--workspace', ws, '--type', 'terminal', '--pane', paneId, '--focus', 'false'];
   if (cwd) args.push('--working-directory', cwd);
-  if (command) args.push('--command', command);
   const out = cmux(args).out;
   const surface = out.match(UUID)?.[0];
   if (!surface) throw new Error(`could not read the new surface id from: ${out}`);
+  if (command) sendCommand(ws, surface, command);
   renameSurface(ws, surface, title);
   return surface;
 }
@@ -323,7 +348,14 @@ function commandShow() {
   }
 }
 
-const commands = { ensure: commandEnsure, spawn: commandSpawn, sync: commandSync, release: commandRelease, show: commandShow };
+function commandSend() {
+  const ws = requireArg('workspace');
+  const surface = requireArg('surface');
+  sendCommand(ws, surface, requireArg('command'));
+  console.log(JSON.stringify({ workspace: ws, surface }));
+}
+
+const commands = { ensure: commandEnsure, spawn: commandSpawn, sync: commandSync, release: commandRelease, send: commandSend, show: commandShow };
 const name = process.argv[2];
 if (!commands[name]) {
   console.error(`usage: cmux-grid.mjs <${Object.keys(commands).join('|')}> [options]`);
