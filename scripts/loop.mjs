@@ -2,7 +2,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { cp, mkdir, readFile, rename, stat, writeFile, appendFile, lstat } from 'node:fs/promises';
+import { cp, mkdir, readFile, rename, rm, stat, writeFile, appendFile, lstat } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 
 const root=process.cwd();
@@ -70,7 +70,7 @@ async function recordFailure(ticket,record,error,phase){
 }
 
 function save(event){
- const job=saveQueue.then(async()=>{state.updatedAt=new Date().toISOString();const tmp=join(loopDir,`state.${randomUUID()}.tmp`);await writeFile(tmp,JSON.stringify(state,null,2)+'\n',{mode:0o600});await rename(tmp,statePath);if(event)await appendFile(eventPath,JSON.stringify(event)+'\n',{mode:0o600});});
+ const job=saveQueue.then(async()=>{state.updatedAt=new Date().toISOString();const tmp=join(loopDir,`state.${randomUUID()}.tmp`);await writeFile(tmp,JSON.stringify(state,null,2)+'\n',{mode:0o600});await rename(tmp,statePath);if(event)await appendFile(eventPath,JSON.stringify(event)+'\n',{mode:0o600});queueStatus();});
  saveQueue=job.catch(()=>undefined);return job;
 }
 async function update(id,patch,message){
@@ -116,14 +116,132 @@ async function worktree(ticket){
  record.seeded=seeded;return {path,branch,base};
 }
 
+// ---------------------------------------------------------------- agent terminals
+// Each active ticket owns one cmux surface: this supervisor session sits in the left
+// third of the workspace and the two thirds to the right hold one grid cell per
+// flying agent. LOOP_TERMINALS=direct keeps the subprocess-only behaviour for runs
+// that have no cmux around them.
+const CMUX_BIN=process.env.CMUX_BIN??'cmux';
+const CMUX_GRID=join(root,'scripts','cmux-grid.mjs');
+const CMUX_RUNNER=join(root,'scripts','loop-agent-call.mjs');
+const TERMINALS=(process.env.LOOP_TERMINALS??'auto').toLowerCase();
+const CMUX_WORKSPACE=process.env.CMUX_WORKSPACE_ID??'';
+const CMUX_SUPERVISOR=process.env.CMUX_SUPERVISOR_SURFACE??process.env.CMUX_SURFACE_ID??'';
+const useCmux=TERMINALS==='cmux'||(TERMINALS==='auto'&&Boolean(CMUX_WORKSPACE&&CMUX_SUPERVISOR));
+const agentSurfaces=new Map();
+let statusPending=false,lastStatusAt=0;
+
+function quote(value){return `'${String(value).replace(/'/g,"'\\''")}'`;}
+async function cmux(args,{timeout=30_000}={}){return processRun(CMUX_BIN,args,{timeout});}
+async function grid(command,args){
+ const run=await processRun('node',[CMUX_GRID,command,'--workspace',CMUX_WORKSPACE,'--supervisor-surface',CMUX_SUPERVISOR,...args],{timeout:300_000});
+ if(run.code!==0)throw new Error(`cmux-grid ${command} failed: ${(run.err||run.out).trim().slice(-800)}`);
+ return JSON.parse(run.out.trim().split('\n').filter(Boolean).pop()??'{}');
+}
+async function labelSurface(surface,label){
+ if(!surface||!label)return;
+ await cmux(['rename-tab','--workspace',CMUX_WORKSPACE,'--surface',surface,label],{timeout:20_000});
+}
+async function ticketSurface(ticket,cwd,invocation,label){
+ const existing=agentSurfaces.get(ticket.id);
+ if(existing){
+  const sent=await cmux(['send','--workspace',CMUX_WORKSPACE,'--surface',existing,invocation],{timeout:20_000});
+  if(sent.code===0){await cmux(['send-key','--workspace',CMUX_WORKSPACE,'--surface',existing,'enter'],{timeout:20_000});await labelSurface(existing,label);return existing;}
+  agentSurfaces.delete(ticket.id);
+ }
+ const spawned=await grid('spawn',['--name',ticket.id,'--cwd',cwd,'--command',invocation,'--title',label]);
+ agentSurfaces.set(ticket.id,spawned.surface);
+ return spawned.surface;
+}
+async function releaseTicketSurface(ticketId){
+ const surface=agentSurfaces.get(ticketId);if(!surface)return;
+ agentSurfaces.delete(ticketId);
+ try{await grid('release',['--surface',surface]);}catch(error){console.error(`cmux: could not release ${ticketId}: ${error.message}`);}
+}
+async function stopAgents(){
+ if(!useCmux)return;
+ for(const surface of [...agentSurfaces.values()]){
+  try{await cmux(['send-key','--workspace',CMUX_WORKSPACE,'--surface',surface,'ctrl+c'],{timeout:15_000});}catch{}
+ }
+ for(const ticketId of [...agentSurfaces.keys()])await releaseTicketSurface(ticketId);
+}
+async function readExitCode(path){
+ try{const value=Number.parseInt((await readFile(path,'utf8')).trim(),10);return Number.isNaN(value)?undefined:value;}catch{return undefined;}
+}
+async function surfaceAlive(surface){
+ const run=await cmux(['--json','--id-format','both','surface-health','--workspace',CMUX_WORKSPACE],{timeout:20_000});
+ if(run.code!==0)return true;
+ try{const ids=(JSON.parse(run.out).surfaces??[]).map(item=>item.id??item.surface_id).filter(Boolean);return !ids.length||ids.includes(surface);}catch{return true;}
+}
+async function cancelSurface(surface){
+ await cmux(['send-key','--workspace',CMUX_WORKSPACE,'--surface',surface,'ctrl+c'],{timeout:20_000});
+ await new Promise(resolveWait=>setTimeout(resolveWait,3000));
+ await cmux(['close-surface','--workspace',CMUX_WORKSPACE,'--surface',surface],{timeout:20_000});
+}
+async function tailDetail(logPath,role){
+ try{
+  const lines=(await readFile(logPath,'utf8')).trimEnd().split('\n').slice(-40).reverse();
+  for(const line of lines){try{const event=JSON.parse(line);const kind=event.item?.type??event.type;if(kind)return `${role} · ${kind}`;}catch{}}
+ }catch{}
+ return undefined;
+}
+// cmux does not hand us the agent's stdout, so the surface runner writes an exit
+// sentinel when it finishes and liveness is inferred from log growth plus a check
+// that the terminal still exists.
+async function waitForSurface(surface,{exitPath,logPath,ticketId,role}){
+ const started=Date.now();const idleLimit=Math.max(IDLE_MS,Number.parseInt(process.env.LOOP_IDLE_MS??'',10)||480_000);
+ let last=Date.now(),size=-1,polls=0;
+ while(true){
+  const code=await readExitCode(exitPath);
+  if(code!==undefined)return {code,timedOut:false,out:'',err:''};
+  if(Date.now()-last>idleLimit){await cancelSurface(surface);return {code:-1,timedOut:true,out:'',err:`${role} produced no output for ${Math.round(idleLimit/1000)}s`};}
+  if(Date.now()-started>CALL_MS){await cancelSurface(surface);return {code:-1,timedOut:true,out:'',err:`${role} exceeded ${Math.round(CALL_MS/60000)} minutes`};}
+  polls+=1;
+  if(polls%12===0&&!(await surfaceAlive(surface)))return {code:-1,timedOut:false,out:'',err:`${role} terminal was closed before it finished`};
+  if(polls%6===0){const detail=await tailDetail(logPath,role);if(detail)void update(ticketId,{detail});}
+  let current=-1;try{current=(await stat(logPath)).size;}catch{}
+  if(current!==size){size=current;last=Date.now();}
+  await new Promise(resolveWait=>setTimeout(resolveWait,1000));
+ }
+}
+function queueStatus(){
+ if(!useCmux||statusPending||Date.now()-lastStatusAt<4000)return;
+ statusPending=true;
+ setTimeout(()=>{statusPending=false;lastStatusAt=Date.now();void publishStatus();},250).unref();
+}
+async function publishStatus(){
+ if(!useCmux||!state?.tickets)return;
+ const records=Object.values(state.tickets);const total=records.length;
+ const done=records.filter(record=>record.status==='done').length;
+ const active=records.filter(record=>record.status==='implementing'||record.status==='review').length;
+ const blocked=records.filter(record=>record.status==='blocked').length;
+ const label=`${done}/${total} done · ${active} active${blocked?` · ${blocked} blocked`:''}`;
+ try{await cmux(['set-status','loop',label,'--workspace',CMUX_WORKSPACE,'--color',blocked?'#ff453a':'#30d158'],{timeout:20_000});}catch{}
+ try{await cmux(['set-progress',String(total?done/total:0),'--label',`${done}/${total} tickets`,'--workspace',CMUX_WORKSPACE],{timeout:20_000});}catch{}
+}
+
 async function agentCall(ticket,record,role,cwd,prompt,dir){
  const route=routeFor(record,role);await update(ticket.id,{model:route.model,effort:route.effort,detail:`${role} · starting`});
- await mkdir(dir,{recursive:true});const schemaPath=join(dir,`${role}-schema.json`),resultPath=join(dir,`${role}-result.json`),logPath=join(dir,`${role}.log`);
- await writeFile(schemaPath,JSON.stringify(schema[role]),{mode:0o600});await writeFile(resultPath,'',{mode:0o600});
+ await mkdir(dir,{recursive:true});
+ const schemaPath=join(dir,`${role}-schema.json`),resultPath=join(dir,`${role}-result.json`),logPath=join(dir,`${role}.log`),promptPath=join(dir,`${role}-prompt.txt`),exitPath=join(dir,`${role}.exit`),jobPath=join(dir,`${role}-job.json`);
+ await writeFile(schemaPath,JSON.stringify(schema[role]),{mode:0o600});
+ await writeFile(promptPath,prompt,{mode:0o600});
+ await writeFile(resultPath,'',{mode:0o600});
+ await rm(exitPath,{force:true});
  const args=['exec','-c','approval_policy="never"','-s',role==='review'?'read-only':'workspace-write','-C',cwd,'-m',route.model,'-c',`model_reasoning_effort=${JSON.stringify(route.effort)}`,'--ephemeral','--json','--output-schema',schemaPath,'-o',resultPath,'-'];
- const run=await processRun(AGENT_BIN,args,{cwd,input:prompt,timeout:CALL_MS,onLine:line=>{try{const e=JSON.parse(line);if(e.type)void update(ticket.id,{detail:`${role} · ${e.type}`});}catch{}}});
- await writeFile(logPath,run.err+'\n'+run.out,{mode:0o600});
- if(run.code!==0||run.timedOut)throw new Error(run.timedOut?`${role} stalled or timed out`:run.err.slice(-1500)||`${role} failed`);
+ let run;
+ if(useCmux){
+  await writeFile(jobPath,JSON.stringify({agentBin:AGENT_BIN,args,cwd,promptFile:promptPath,logFile:logPath,exitFile:exitPath,model:route.model,label:`${ticket.id} · ${role}`}),{mode:0o600});
+  const surface=await ticketSurface(ticket,cwd,`node ${quote(CMUX_RUNNER)} ${quote(jobPath)}`,`${ticket.id} · ${role}`);
+  run=await waitForSurface(surface,{exitPath,logPath,ticketId:ticket.id,role});
+ }else{
+  run=await processRun(AGENT_BIN,args,{cwd,input:prompt,timeout:CALL_MS,onLine:line=>{try{const event=JSON.parse(line);if(event.type)void update(ticket.id,{detail:`${role} · ${event.type}`});}catch{}}});
+  await writeFile(logPath,run.err+'\n'+run.out,{mode:0o600});
+ }
+ if(run.code!==0||run.timedOut){
+  if(useCmux)await appendFile(logPath,`\n${run.err??''}\n`);
+  throw new Error(run.timedOut?run.err||`${role} stalled or timed out`:((run.err??'').slice(-1500)||`${role} failed`));
+ }
  const value=JSON.parse(await readFile(resultPath,'utf8'));return {value,route,logPath};
 }
 
@@ -166,8 +284,9 @@ async function runTicket(ticket){
  const record=state.tickets[ticket.id];record.status='implementing';record.detail='preparing candidate';record.updatedAt=new Date().toISOString();await save({at:new Date().toISOString(),ticketId:ticket.id,message:'implementation started'});
  const tree=await worktree(ticket);const dir=join(runRoot,`${ticket.id}-${record.runs+1}`);record.runs+=1;
  try{const install=await processRun('pnpm',['install','--frozen-lockfile','--ignore-scripts'],{cwd:tree.path,timeout:CHECK_MS});if(install.code!==0)throw new Error(`Dependency install failed: ${install.err.slice(-1000)}`);const existing=(await changedFiles(tree.path,tree.base)).length>0;if(!existing&&record.phase==='test')await testPhase(ticket,record,tree,dir);else if(existing&&!record.testHashes){record.phase='implement';record.testFiles=(await changedFiles(tree.path,tree.base)).filter(testFile);record.testHashes=await hashTests(tree.path,record.testFiles);}
-  await implementPhase(ticket,record,tree,dir);await integrate(ticket,record,tree,dir);
+ await implementPhase(ticket,record,tree,dir);await integrate(ticket,record,tree,dir);
  }catch(error){await recordFailure(ticket,record,error);}
+ finally{await releaseTicketSurface(ticket.id);}
 }
 
 function readyBatch(tickets,active){
@@ -190,7 +309,7 @@ async function initialize(tickets){
  }await save();
 }
 async function loop(tickets){
- state.running=true;await save();const active=new Map();
+ state.running=true;await save();queueStatus();console.log(useCmux?`Agent terminals: cmux workspace ${CMUX_WORKSPACE} (supervisor ${CMUX_SUPERVISOR})`:'Agent terminals: subprocesses (cmux disabled)');const active=new Map();
  while(!stopping){
   const candidates=readyBatch(tickets,active);
   for(const ticket of candidates){const job=runTicket(ticket).finally(()=>active.delete(ticket.id));active.set(ticket.id,job);}
@@ -200,7 +319,7 @@ async function loop(tickets){
   if(retryTimes.length){await new Promise(resolveWait=>setTimeout(resolveWait,Math.min(60_000,Math.max(250,Math.min(...retryTimes)-Date.now()))));continue;}
   const blocked=tickets.filter(t=>state.tickets[t.id].status!=='done');for(const t of blocked)state.tickets[t.id].detail='blocked by unresolved dependencies or repeated repair';break;
  }
- state.running=false;await save();
+ state.running=false;await save();await stopAgents();
 }
 async function selfTest(){const a={id:'A',deps:[],block:'A',files:['packages/a/']},b={id:'B',deps:[],block:'B',files:['packages/b/']},c={id:'C',deps:[],block:'C',files:['packages/a/x/']};state={tickets:{A:{status:'ready'},B:{status:'ready'},C:{status:'ready'}}};const recognized=integratedTicket('a5b57cdace8026f4a31a7f7b5f51fbc23acb0731\tfeat(F01): complete shared contracts');if(conflict(a,b)||!conflict(a,c)||!testFile('x/a.test.ts')||allowed('../x',['x/'])||readyBatch([a,b,c],new Map()).map(x=>x.id).join(',')!=='A,B'||recognized?.id!=='F01'||recognized.commit!=='a5b57cdace8026f4a31a7f7b5f51fbc23acb0731'||integratedTicket('abc\ttest(F01): red baseline'))throw new Error('self-test failed');console.log('loop self-test passed');}
 async function main(){if(process.argv.includes('--self-test'))return selfTest();const tickets=JSON.parse(await readFile(join(root,'BACKLOG.json'),'utf8')).tickets;if(process.argv.includes('--dry-run')){console.table(tickets.map(t=>({id:t.id,deps:t.deps.join(','),...routeFor({substantiveFailures:0},'worker')})));return;}const available=await processRun(AGENT_BIN,['--version'],{timeout:15_000});if(available.code!==0)throw new Error(`Agent CLI is unavailable: ${AGENT_BIN}`);await initialize(tickets);if(process.argv.includes('--initialize-only')){const done=Object.values(state.tickets).filter(record=>record.status==='done');console.log(`Initialized ${tickets.length} tickets: ${done.length} done, ${tickets.length-done.length} remaining`);for(const record of done)console.log(`${record.id} ${record.commit}`);return;}const server=serve();console.log(`EchoPilot lean loop: http://127.0.0.1:${PORT}`);process.on('SIGINT',()=>{stopping=true;server.close();});process.on('SIGTERM',()=>{stopping=true;server.close();});await loop(tickets);server.close();}
