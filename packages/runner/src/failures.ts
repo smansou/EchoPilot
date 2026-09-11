@@ -10,3 +10,11 @@ export function isInfrastructure(kind?: string): boolean { return ['quota','auth
 export class ModelFailure extends Error {
  constructor(message:string, readonly kind:FailureKind) {super(message);}
 }
+
+/** Account/repository failures stop the run; isolated work failures do not. */
+export function recoveryAction(input:{kind:string;canRepair:boolean;attempts:number;maxAttempts:number;cancelled:boolean;integrated:boolean;sharedFailure:boolean}):'pause'|'retry'|'park' {
+ if(input.integrated||input.sharedFailure||['quota','auth'].includes(input.kind))return 'pause';
+ if(input.cancelled)return 'park';
+ if(input.canRepair&&input.attempts<input.maxAttempts)return 'retry';
+ return 'park';
+}

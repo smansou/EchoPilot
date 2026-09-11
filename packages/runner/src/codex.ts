@@ -10,6 +10,7 @@ export interface CodexOptions {
   cwd: string; prompt: string; model: string; effort: string; role: 'worker' | 'reviewer'; outputDirectory: string;
   command?: string; timeoutMs?: number; idleTimeoutMs?: number; signal?: AbortSignal;
   onSpawn?: (pid: number) => void;
+  onQuiet?: () => void;
   onFailure?: (message:string, kind:FailureKind) => void;
   onEvent?: (event: { type: string; usage?: Usage }) => void;
 }
@@ -38,14 +39,14 @@ export async function runCodex(options: CodexOptions): Promise<CodexResult> {
   await writeFile(outputPath, '', { mode: 0o600 });
   const usage: Usage = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 };
   const args = ['exec', '--ignore-user-config', '-c', 'approval_policy="never"', '-s', options.role === 'worker' ? 'workspace-write' : 'read-only', '-C', options.cwd, '-m', options.model, '-c', `model_reasoning_effort=${JSON.stringify(options.effort)}`, '--ephemeral', '--json', '--output-schema', schemaPath, '-o', outputPath, '-'];
-  let failureMessage = ''; let stalled = false;
-  const watchdog = new AbortController();
+  let failureMessage = '';
+  // Structured events are not a liveness signal: reasoning and tool calls can be quiet.
+  // Report quiet periods without killing work; runProcess owns the hard deadline.
   const idleMs = options.idleTimeoutMs ?? 180000;
-  let idle = setTimeout(() => { stalled = true; watchdog.abort(); }, idleMs);
-  const touch = () => {clearTimeout(idle);idle=setTimeout(()=>{stalled=true;watchdog.abort();},idleMs);};
-  const combined = options.signal ? AbortSignal.any([options.signal,watchdog.signal]) : watchdog.signal;
+  let idle = setTimeout(() => options.onQuiet?.(), idleMs);
+  const touch = () => {clearTimeout(idle);idle=setTimeout(()=>options.onQuiet?.(),idleMs);};
   const result = await runProcess({ command: options.command ?? 'codex', args, cwd: options.cwd, input: options.prompt,
-    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }), signal: combined,
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }), ...(options.signal ? {signal:options.signal} : {}),
     ...(options.onSpawn ? { onSpawn: options.onSpawn } : {}),
     onStdoutLine(line) {
       try {
@@ -65,8 +66,8 @@ export async function runCodex(options: CodexOptions): Promise<CodexResult> {
   });
   clearTimeout(idle);
   if (result.code !== 0 || result.timedOut || result.aborted || failureMessage) {
-    const message = failureMessage || (stalled ? `Worker silent for ${idleMs / 1000}s; stopped and work retained.` : result.aborted ? 'Cancelled' : result.timedOut ? 'Execution timed out; work retained.' : result.stderr.slice(-1500) || 'Codex exited without a result');
-    return {process:result,result:null,usage,error:message,failureKind:stalled?'stalled':classifyFailure(message)};
+    const message = failureMessage || (result.aborted ? 'Cancelled' : result.timedOut ? 'Execution timed out; work retained.' : result.stderr.slice(-1500) || 'Codex exited without a result');
+    return {process:result,result:null,usage,error:message,failureKind:classifyFailure(message)};
   }
   try { return { process: result, result: parseResult(JSON.parse(await readFile(outputPath, 'utf8')), options.role), usage }; }
   catch { return { process: result, result: null, usage, error: 'Codex did not produce a valid structured result' }; }
