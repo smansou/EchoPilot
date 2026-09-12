@@ -1,0 +1,28 @@
+{
+  "id": "v01-utterance-15s",
+  "description": "Synthetic 15-second English utterance for the V01 acceptance path. Words are spaced 300 ms apart so speech is effectively continuous to 13.54 s; the following second of trailing silence closes the utterance. No user audio is stored in the repository.",
+  "sampleRate": 16000,
+  "channels": 1,
+  "packetMs": 20,
+  "durationMs": 15000,
+  "speechEndMs": 14200,
+  "words": [
+    { "text": "luna", "startMs": 240, "endMs": 740 },
+    { "text": "check", "startMs": 1040, "endMs": 1540 },
+    { "text": "the", "startMs": 1840, "endMs": 2340 },
+    { "text": "local", "startMs": 2640, "endMs": 3140 },
+    { "text": "transcript", "startMs": 3440, "endMs": 3940 },
+    { "text": "path", "startMs": 4240, "endMs": 4740 },
+    { "text": "before", "startMs": 5040, "endMs": 5540 },
+    { "text": "the", "startMs": 5840, "endMs": 6340 },
+    { "text": "widget", "startMs": 6640, "endMs": 7140 },
+    { "text": "commits", "startMs": 7440, "endMs": 7940 },
+    { "text": "it", "startMs": 8240, "endMs": 8740 },
+    { "text": "with", "startMs": 9040, "endMs": 9540 },
+    { "text": "timestamps", "startMs": 9840, "endMs": 10340 },
+    { "text": "and", "startMs": 10640, "endMs": 11140 },
+    { "text": "no", "startMs": 11440, "endMs": 11940 },
+    { "text": "network", "startMs": 12240, "endMs": 12740 },
+    { "text": "access", "startMs": 13040, "endMs": 13540 }
+  ]
+}
