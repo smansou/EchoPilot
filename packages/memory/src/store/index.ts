@@ -4,15 +4,27 @@
  * Encryption gate: this fork ships no SQLCipher native addon (there is no `better-sqlite3*`
  * dependency and no network access to build a Node-API one), so the encrypted SQLite wrapper is
  * implemented here: every record body (envelope, payload, capsule summary/search text, decision
- * text, derived task provenance) is sealed with AES-256-GCM under HKDF-derived, domain-separated
- * subkeys before it reaches SQLite. The profile database and each project database therefore hold
- * ciphertext for record content, and opening an existing store with the wrong key fails the stored
- * key check instead of resetting or silently re-initializing the store.
+ * text and actor, and the reduced task provenance including its tool/command/receipt/task
+ * identifiers) is sealed with AES-256-GCM under HKDF-derived, domain-separated subkeys before it
+ * reaches SQLite. Plaintext columns hold routing metadata only: normalized-envelope ids, kinds,
+ * trust levels, timestamps, sequences, scope ids and numeric verdicts that the section 5.8 indexes
+ * need. The profile database and each project database therefore hold ciphertext for record
+ * content, and opening an existing store with the wrong key fails the stored key check instead of
+ * resetting or silently re-initializing the store.
  *
  * Durability: the profile database and every project database are attached to one SQLite
  * connection and all ingest writes (events, payloads, capsules, derived records, source offsets,
  * durable cursor) happen in a single transaction. The default rollback journal is kept so
  * multi-database commit is atomic, and `onBeforeCommit` faults roll the whole batch back.
+ *
+ * Attach slots: SQLite caps each connection at ten attached databases, so a project database stays
+ * attached only while an operation pins it; the least recently used unpinned databases are DETACHed
+ * before a new one is attached, and an ingest batch that spans more project databases than one
+ * connection can hold fails with a typed MemoryStoreCapacityError instead of a raw SQLite error.
+ *
+ * First run: init-vs-verify is chosen from the database contents, not from file existence, so a
+ * crash between SQLite creating profile.db and the initialization transaction committing cannot
+ * brick the directory; anything that holds data without a key check is refused, never reset.
  */
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
@@ -25,6 +37,7 @@ import {
   reduceTaskRecord,
   type NormalizedEvent,
   type TaskObservation,
+  type TaskRecord,
 } from '../reducers/index.js';
 import { deriveStoreKey, fingerprint, openJson, openText, profileDomain, projectDomain, sealJson, sealValue } from './crypto.js';
 import {
@@ -49,6 +62,24 @@ const PROFILE_KEY_CHECK_KIND = 'echopilot-memory-key-check';
 const PROJECT_KEY_CHECK_KIND = 'echopilot-memory-project-key-check';
 const CURSOR_ID = 'store';
 const CURSOR_PREFIX = 'mem-cursor-v1';
+/** SQLite's default SQLITE_MAX_ATTACHED cap; the `main` schema occupies one of those slots. */
+export const MAX_ATTACHED_DATABASES = 10;
+export const MAX_ATTACHED_PROJECTS = MAX_ATTACHED_DATABASES - 1;
+
+/** Raised when one operation needs more simultaneously attached project databases than SQLite holds. */
+export class MemoryStoreCapacityError extends Error {
+  readonly code = 'MEMORY_STORE_CAPACITY';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'MemoryStoreCapacityError';
+  }
+}
+
+/** Routing key for a task: a fingerprint, so the external task id itself never lands in plaintext. */
+function taskRoutingKey(taskId: string): string {
+  return fingerprint('task', taskId).slice(0, 32);
+}
 
 type SqlValue = string | number | bigint | null | Uint8Array;
 type Row = Record<string, unknown>;
@@ -105,7 +136,8 @@ class SqliteMemoryStore implements MemoryStore {
   private readonly masterKey: string;
   private readonly profilePath: string;
   private readonly profileKey: Buffer;
-  private readonly bindings = new Map<string, ProjectBinding>();
+  /** Project databases currently ATTACHed to the single connection, in least-recently-used order. */
+  private readonly attached = new Map<string, ProjectBinding>();
   private attachCounter = 0;
   private cursor = '';
   private closed = false;
@@ -121,33 +153,30 @@ class SqliteMemoryStore implements MemoryStore {
 
   /** Opens an existing encrypted store; a wrong key must fail here, before any write. */
   verifyExistingProfile(): void {
-    const check = this.readProfileMeta('key_check');
-    if (check === undefined) {
-      throw new Error(`memory store at ${this.profilePath} is not an echopilot memory store (missing key check)`);
-    }
-    let header: unknown;
-    try {
-      header = openJson<unknown>(this.profileKey, check);
-    } catch {
-      throw new Error(`memory store at ${this.profilePath} could not be decrypted with the provided key (wrong key or damaged store)`);
-    }
-    if (!isRecord(header) || header.kind !== PROFILE_KEY_CHECK_KIND || header.profileId !== this.profileId) {
-      throw new Error(`memory store key check does not match profile ${this.profileId}`);
-    }
-    const version = this.readProfileMeta('schema_version');
-    if (version !== undefined) {
-      let decoded: string;
-      try {
-        decoded = openText(this.profileKey, version);
-      } catch {
-        throw new Error(`memory store at ${this.profilePath} could not be decrypted with the provided key (wrong key or damaged store)`);
-      }
-      if (decoded !== String(MEMORY_SCHEMA_VERSION)) {
-        throw new Error(`memory store schema version ${decoded} is not supported by this build`);
-      }
-    }
+    this.classifySchema(
+      'main',
+      'profile_meta',
+      this.profileKey,
+      `at ${this.profilePath}`,
+      (header) => header.kind === PROFILE_KEY_CHECK_KIND && header.profileId === this.profileId,
+    );
     const row = this.queryOne('SELECT cursor FROM main.durable_cursor WHERE cursor_id = ?', CURSOR_ID);
     this.cursor = row === undefined ? '' : (asString(row.cursor) ?? '');
+  }
+
+  /**
+   * Chooses init-vs-verify from the profile database contents instead of from file existence: a
+   * first run that crashed after SQLite created profile.db but before the initialization
+   * transaction committed leaves an empty database, which is safe to initialize again.
+   */
+  profileState(): 'fresh' | 'initialized' {
+    return this.classifySchema(
+      'main',
+      'profile_meta',
+      this.profileKey,
+      `at ${this.profilePath}`,
+      (header) => header.kind === PROFILE_KEY_CHECK_KIND && header.profileId === this.profileId,
+    );
   }
 
   initializeProfile(): void {
@@ -198,8 +227,16 @@ class SqliteMemoryStore implements MemoryStore {
 
     // ATTACH cannot run inside a transaction, and every touched project database must be part of
     // the same transaction so the batch commits (or rolls back) as one unit.
+    const pinned = new Set(orderedGroups.map(([projectId]) => projectId));
+    const projectIds = [...pinned].filter((projectId) => projectId !== profileScopeId(this.profileId));
+    if (projectIds.length > MAX_ATTACHED_PROJECTS) {
+      throw new MemoryStoreCapacityError(
+        `memory store ingest batch spans ${projectIds.length} project databases but one connection can hold `
+        + `${MAX_ATTACHED_PROJECTS}; split the batch into smaller per-project batches`,
+      );
+    }
     const bindings = new Map<string, ProjectBinding>();
-    for (const [projectId] of orderedGroups) bindings.set(projectId, await this.ensureProject(projectId));
+    for (const [projectId] of orderedGroups) bindings.set(projectId, await this.ensureProject(projectId, pinned));
 
     const insertedEventIds: string[] = [];
     let inserted = 0;
@@ -269,19 +306,20 @@ class SqliteMemoryStore implements MemoryStore {
     }
 
     const tasks = this.query(
-      `SELECT task_id, status, occurred_at, summary, search_text, source_event_ids
-         FROM ${binding.ref}.task_records ORDER BY occurred_at, task_id`,
+      `SELECT task_key, status, occurred_at, record
+         FROM ${binding.ref}.task_records ORDER BY occurred_at, task_key`,
     );
     for (const row of tasks) {
-      const summary = this.decryptText(binding, row.summary, 'task summary');
-      const searchText = this.decryptText(binding, row.search_text, 'task search text');
-      if (!matchesNeedles(searchText, needles)) continue;
-      const sourceEventIds = this.decryptJson<unknown>(binding, row.source_event_ids, 'task source events');
+      const record = this.decryptJson<TaskRecord>(binding, row.record, 'task record');
+      if (!isRecord(record) || typeof record.id !== 'string' || typeof record.summary !== 'string') {
+        throw new Error('memory store found a corrupt task record');
+      }
+      if (!matchesNeedles(record.searchText ?? '', needles)) continue;
       items.push({
-        id: String(row.task_id),
+        id: record.id,
         kind: 'task',
-        summary,
-        sourceEventIds: Array.isArray(sourceEventIds) ? sourceEventIds.map((value) => String(value)) : [],
+        summary: record.summary,
+        sourceEventIds: Array.isArray(record.sourceEventIds) ? record.sourceEventIds.map((value) => String(value)) : [],
         occurredAt: String(row.occurred_at),
         status: String(row.status),
       });
@@ -348,7 +386,7 @@ class SqliteMemoryStore implements MemoryStore {
     return row !== undefined;
   }
 
-  /** Inserts the envelope, payload and capsule; returns the touched task id, if any. */
+  /** Inserts the envelope, payload and capsule; returns the touched task routing key, if any. */
   private insertEvent(binding: ProjectBinding, event: NormalizedEvent, payload: unknown): string | null {
     const scope = event.scope;
     this.run(
@@ -398,13 +436,14 @@ class SqliteMemoryStore implements MemoryStore {
     if (event.kind === 'decision') {
       const record = isRecord(payload) ? payload : {};
       const rationale = asString(record.rationale);
+      const decidingActor = asString(record.decidingActor);
       this.run(
         `INSERT OR REPLACE INTO ${binding.ref}.decisions(decision_id, event_id, occurred_at, deciding_actor, question, choice, rationale)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         event.eventId,
         event.eventId,
         event.occurredAt,
-        asString(record.decidingActor) ?? null,
+        decidingActor === undefined ? null : sealValue(binding.key, decidingActor),
         sealValue(binding.key, asString(record.question) ?? ''),
         sealValue(binding.key, asString(record.choice) ?? ''),
         rationale === undefined ? null : sealValue(binding.key, rationale),
@@ -413,23 +452,20 @@ class SqliteMemoryStore implements MemoryStore {
 
     const observation = reduceTaskObservation(event, payload);
     if (observation === null) return null;
+    const taskKey = taskRoutingKey(observation.taskId);
     this.run(
       `INSERT OR REPLACE INTO ${binding.ref}.task_observations(
-         observation_id, task_id, event_id, phase, tool, command, title, exit_code, receipt_id, occurred_at, ingest_sequence
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         observation_id, task_key, event_id, phase, occurred_at, ingest_sequence, observation
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       observation.observationId,
-      observation.taskId,
+      taskKey,
       observation.eventId,
       observation.phase,
-      observation.tool ?? null,
-      observation.command ?? null,
-      observation.title ?? null,
-      observation.exitCode ?? null,
-      observation.receiptId ?? null,
       observation.occurredAt,
       observation.ingestSequence,
+      sealJson(binding.key, observation),
     );
-    return observation.taskId;
+    return taskKey;
   }
 
   private recordSourceOffset(binding: ProjectBinding, event: NormalizedEvent): void {
@@ -464,47 +500,26 @@ class SqliteMemoryStore implements MemoryStore {
     );
   }
 
-  private refreshTaskRecord(binding: ProjectBinding, taskId: string): void {
+  /** Re-reduces a task from its sealed observations; every provenance field stays ciphertext. */
+  private refreshTaskRecord(binding: ProjectBinding, taskKey: string): void {
     const rows = this.query(
-      `SELECT observation_id, task_id, event_id, phase, tool, command, title, exit_code, receipt_id, occurred_at, ingest_sequence
-         FROM ${binding.ref}.task_observations WHERE task_id = ?`,
-      taskId,
+      `SELECT observation_id, observation FROM ${binding.ref}.task_observations WHERE task_key = ?`,
+      taskKey,
     );
     if (rows.length === 0) return;
-    const record = reduceTaskRecord(rows.map((row) => this.rowToTaskObservation(row)));
+    const observations = rows.map((row) => this.decryptJson<TaskObservation>(
+      binding,
+      row.observation,
+      'task observation',
+    ));
+    const record = reduceTaskRecord(observations);
     this.run(
-      `INSERT OR REPLACE INTO ${binding.ref}.task_records(
-         task_id, status, occurred_at, latest_receipt_id, summary, search_text, source_event_ids
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      record.id,
+      `INSERT OR REPLACE INTO ${binding.ref}.task_records(task_key, status, occurred_at, record) VALUES (?, ?, ?, ?)`,
+      taskKey,
       record.status,
       record.occurredAt,
-      record.latestReceiptId ?? null,
-      sealValue(binding.key, record.summary),
-      sealValue(binding.key, record.searchText),
-      sealJson(binding.key, record.sourceEventIds),
+      sealJson(binding.key, record),
     );
-  }
-
-  private rowToTaskObservation(row: Row): TaskObservation {
-    const tool = asString(row.tool);
-    const command = asString(row.command);
-    const title = asString(row.title);
-    const receiptId = asString(row.receipt_id);
-    const exitCode = asNumber(row.exit_code);
-    return {
-      observationId: String(row.observation_id),
-      taskId: String(row.task_id),
-      eventId: String(row.event_id),
-      phase: row.phase === 'started' ? 'started' : 'completed',
-      occurredAt: String(row.occurred_at),
-      ingestSequence: asNumber(row.ingest_sequence) ?? 0,
-      ...(tool === undefined ? {} : { tool }),
-      ...(command === undefined ? {} : { command }),
-      ...(title === undefined ? {} : { title }),
-      ...(exitCode === undefined ? {} : { exitCode }),
-      ...(receiptId === undefined ? {} : { receiptId }),
-    };
   }
 
   /** Advances the durable cursor inside the open transaction; the caller commits it. */
@@ -526,79 +541,165 @@ class SqliteMemoryStore implements MemoryStore {
 
   // ------------------------------------------------------------------ projects
 
-  private async ensureProject(projectId: string): Promise<ProjectBinding> {
-    const cached = this.bindings.get(projectId);
-    if (cached !== undefined) return cached;
+  /**
+   * Attaches (and lazily initializes) the database for one project. `pinned` names every project the
+   * running operation needs at once, so eviction only ever drops databases this operation is done
+   * with; SQLite's attach budget is respected before the ATTACH is attempted.
+   */
+  private async ensureProject(projectId: string, pinned: ReadonlySet<string>): Promise<ProjectBinding> {
+    const cached = this.attached.get(projectId);
+    if (cached !== undefined) {
+      this.touch(projectId);
+      return cached;
+    }
     if (projectId === profileScopeId(this.profileId)) return this.profileBinding();
 
     const row = this.queryOne('SELECT db_file FROM main.project_registry WHERE project_id = ?', projectId);
     const registeredFile = row === undefined ? undefined : asString(row.db_file);
     const dbFile = registeredFile ?? this.newProjectFile(projectId);
-    const ref = `p${this.attachCounter}`;
-    this.attachCounter += 1;
-    await mkdir(join(this.directory, PROJECTS_DIR), { recursive: true, mode: 0o700 });
-    this.db.prepare(`ATTACH DATABASE ? AS ${ref}`).run(join(this.directory, PROJECTS_DIR, dbFile));
-    for (const statement of projectSchemaSql(ref)) this.db.exec(statement);
-
     const key = deriveStoreKey(this.masterKey, projectDomain(this.profileId, projectId));
-    const check = this.readProjectMeta(ref, 'key_check');
-    if (check === undefined) {
-      this.run(
-        `INSERT OR REPLACE INTO ${ref}.project_meta(key, value) VALUES (?, ?)`,
-        'key_check',
-        sealJson(key, { kind: PROJECT_KEY_CHECK_KIND, profileId: this.profileId, projectId, schemaVersion: MEMORY_SCHEMA_VERSION }),
+    await mkdir(join(this.directory, PROJECTS_DIR), { recursive: true, mode: 0o700 });
+    this.freeAttachSlots(pinned);
+    const ref = this.attachDatabase(dbFile);
+    try {
+      const state = this.classifySchema(
+        ref,
+        'project_meta',
+        key,
+        `project database for ${projectId}`,
+        (header) => header.kind === PROJECT_KEY_CHECK_KIND
+          && header.profileId === this.profileId
+          && header.projectId === projectId,
       );
-      this.run(
-        `INSERT OR REPLACE INTO ${ref}.project_meta(key, value) VALUES (?, ?)`,
-        'schema_version',
-        sealValue(key, String(MEMORY_SCHEMA_VERSION)),
-      );
-    } else {
-      let header: unknown;
-      try {
-        header = openJson<unknown>(key, check);
-      } catch {
-        throw new Error(`memory store project database for ${projectId} could not be decrypted with the provided key`);
+      for (const statement of projectSchemaSql(ref)) this.db.exec(statement);
+      if (state === 'fresh') {
+        this.run(
+          `INSERT OR REPLACE INTO ${ref}.project_meta(key, value) VALUES (?, ?)`,
+          'key_check',
+          sealJson(key, { kind: PROJECT_KEY_CHECK_KIND, profileId: this.profileId, projectId, schemaVersion: MEMORY_SCHEMA_VERSION }),
+        );
       }
-      if (!isRecord(header) || header.kind !== PROJECT_KEY_CHECK_KIND || header.projectId !== projectId) {
-        throw new Error(`memory store project database for ${projectId} failed its key check`);
+      if (this.readProjectMeta(ref, 'schema_version') === undefined) {
+        this.run(
+          `INSERT OR REPLACE INTO ${ref}.project_meta(key, value) VALUES (?, ?)`,
+          'schema_version',
+          sealValue(key, String(MEMORY_SCHEMA_VERSION)),
+        );
       }
+      if (registeredFile === undefined) {
+        this.run(
+          'INSERT INTO main.project_registry(project_id, db_file, created_at) VALUES (?, ?, ?)',
+          projectId,
+          dbFile,
+          new Date().toISOString(),
+        );
+      }
+      const binding: ProjectBinding = { projectId, ref, dbFile, key, scope: 'project' };
+      this.attached.set(projectId, binding);
+      return binding;
+    } catch (error) {
+      this.detachRef(projectId, ref);
+      throw error;
     }
-
-    if (registeredFile === undefined) {
-      this.run(
-        'INSERT INTO main.project_registry(project_id, db_file, created_at) VALUES (?, ?, ?)',
-        projectId,
-        dbFile,
-        new Date().toISOString(),
-      );
-    }
-    const binding: ProjectBinding = { projectId, ref, dbFile, key, scope: 'project' };
-    this.bindings.set(projectId, binding);
-    return binding;
   }
 
   /** Read path: never creates a database, so a query cannot mutate durable state. */
   private readProject(projectId: string): ProjectBinding | null {
-    const cached = this.bindings.get(projectId);
-    if (cached !== undefined) return cached;
+    const cached = this.attached.get(projectId);
+    if (cached !== undefined) {
+      this.touch(projectId);
+      return cached;
+    }
     if (projectId === profileScopeId(this.profileId)) return this.profileBinding();
     const row = this.queryOne('SELECT db_file FROM main.project_registry WHERE project_id = ?', projectId);
     const dbFile = row === undefined ? undefined : asString(row.db_file);
     if (dbFile === undefined) return null;
     if (!existsSync(join(this.directory, PROJECTS_DIR, dbFile))) return null;
-    const ref = `p${this.attachCounter}`;
-    this.attachCounter += 1;
-    this.db.prepare(`ATTACH DATABASE ? AS ${ref}`).run(join(this.directory, PROJECTS_DIR, dbFile));
-    if (this.readProjectMeta(ref, 'key_check') === undefined) return null;
     const key = deriveStoreKey(this.masterKey, projectDomain(this.profileId, projectId));
+    this.freeAttachSlots(new Set([projectId]));
+    const ref = this.attachDatabase(dbFile);
+    let state: 'fresh' | 'initialized';
+    try {
+      state = this.classifySchema(
+        ref,
+        'project_meta',
+        key,
+        `project database for ${projectId}`,
+        (header) => header.kind === PROJECT_KEY_CHECK_KIND
+          && header.profileId === this.profileId
+          && header.projectId === projectId,
+      );
+    } catch (error) {
+      this.detachRef(projectId, ref);
+      throw error;
+    }
+    if (state === 'fresh') {
+      this.detachRef(projectId, ref);
+      return null;
+    }
     const binding: ProjectBinding = { projectId, ref, dbFile, key, scope: 'project' };
-    this.bindings.set(projectId, binding);
+    this.attached.set(projectId, binding);
     return binding;
   }
 
+  /** Moves a binding to the most-recently-used end so eviction drops the coldest database first. */
+  private touch(projectId: string): void {
+    const binding = this.attached.get(projectId);
+    if (binding === undefined) return;
+    this.attached.delete(projectId);
+    this.attached.set(projectId, binding);
+  }
+
+  private attachedProjectCount(): number {
+    let count = 0;
+    for (const binding of this.attached.values()) if (binding.scope === 'project') count += 1;
+    return count;
+  }
+
+  /** DETACHes least-recently-used project databases until the next ATTACH fits SQLite's budget. */
+  private freeAttachSlots(pinned: ReadonlySet<string>): void {
+    while (this.attachedProjectCount() >= MAX_ATTACHED_PROJECTS) {
+      const victim = [...this.attached.values()].find(
+        (binding) => binding.scope === 'project' && !pinned.has(binding.projectId),
+      );
+      if (victim === undefined) {
+        throw new MemoryStoreCapacityError(
+          `memory store cannot attach a project database while ${this.attachedProjectCount()} pinned project databases `
+          + `are attached; SQLite allows ${MAX_ATTACHED_PROJECTS} at once`,
+        );
+      }
+      this.detach(victim);
+    }
+  }
+
+  private detach(binding: ProjectBinding): void {
+    this.detachRef(binding.projectId, binding.ref);
+  }
+
+  private detachRef(projectId: string, ref: string): void {
+    this.attached.delete(projectId);
+    this.db.exec(`DETACH DATABASE ${ref}`);
+  }
+
+  private attachDatabase(dbFile: string): string {
+    const ref = `p${this.attachCounter}`;
+    this.attachCounter += 1;
+    try {
+      this.db.prepare(`ATTACH DATABASE ? AS ${ref}`).run(join(this.directory, PROJECTS_DIR, dbFile));
+    } catch (error) {
+      if (/too many attached databases/i.test(String((error as Error).message))) {
+        throw new MemoryStoreCapacityError(
+          `memory store hit SQLite's limit of ${MAX_ATTACHED_PROJECTS} attached project databases; `
+          + 'split the operation into smaller batches',
+        );
+      }
+      throw error;
+    }
+    return ref;
+  }
+
   private profileBinding(): ProjectBinding {
-    const existing = this.bindings.get(profileScopeId(this.profileId));
+    const existing = this.attached.get(profileScopeId(this.profileId));
     if (existing !== undefined) return existing;
     const binding: ProjectBinding = {
       projectId: profileScopeId(this.profileId),
@@ -607,7 +708,7 @@ class SqliteMemoryStore implements MemoryStore {
       key: this.profileKey,
       scope: 'profile',
     };
-    this.bindings.set(binding.projectId, binding);
+    this.attached.set(binding.projectId, binding);
     return binding;
   }
 
@@ -619,9 +720,66 @@ class SqliteMemoryStore implements MemoryStore {
 
   // -------------------------------------------------------------------- sqlite
 
-  private readProfileMeta(metaKey: string): Uint8Array | undefined {
+  /**
+   * Classifies a database before init-vs-verify is chosen, using its contents: an empty schema is
+   * fresh (a first run that crashed before its initialization transaction committed), a sealed key
+   * check makes it initialized, and rows without a usable key check mean damaged - never reset.
+   */
+  private classifySchema(
+    ref: string,
+    metaTable: 'profile_meta' | 'project_meta',
+    key: Buffer,
+    label: string,
+    validateKeyCheck: (header: Record<string, unknown>) => boolean,
+  ): 'fresh' | 'initialized' {
+    let tables: Row[];
     try {
-      const row = this.queryOne('SELECT value FROM main.profile_meta WHERE key = ?', metaKey);
+      tables = this.query(`SELECT name FROM ${ref}.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`);
+    } catch (error) {
+      throw new Error(`memory store ${label} is not a readable SQLite database: ${(error as Error).message}`);
+    }
+    if (tables.length === 0) return 'fresh';
+    if (!tables.some((row) => String(row.name) === metaTable)) {
+      throw new Error(`memory store ${label} is damaged: it holds records but no ${metaTable} (refusing to re-initialize)`);
+    }
+    const check = this.readMeta(ref, metaTable, 'key_check');
+    if (check === undefined) {
+      for (const table of tables) {
+        const name = String(table.name).replace(/"/g, '""');
+        const count = this.queryOne(`SELECT COUNT(*) AS count FROM ${ref}."${name}"`);
+        if ((asNumber(count?.count) ?? 0) > 0) {
+          throw new Error(`memory store ${label} is damaged: it holds records but no key check (refusing to re-initialize)`);
+        }
+      }
+      return 'fresh';
+    }
+    let header: unknown;
+    try {
+      header = openJson<unknown>(key, check);
+    } catch {
+      throw new Error(`memory store ${label} could not be decrypted with the provided key (wrong key or damaged store)`);
+    }
+    if (!isRecord(header) || !validateKeyCheck(header)) {
+      throw new Error(`memory store ${label} failed its key check`);
+    }
+    const version = this.readMeta(ref, metaTable, 'schema_version');
+    if (version !== undefined) {
+      let decoded: string;
+      try {
+        decoded = openText(key, version);
+      } catch {
+        throw new Error(`memory store ${label} could not be decrypted with the provided key (wrong key or damaged store)`);
+      }
+      if (decoded !== String(MEMORY_SCHEMA_VERSION)) {
+        throw new Error(`memory store ${label} uses schema version ${decoded}, which is not supported by this build`);
+      }
+    }
+    return 'initialized';
+  }
+
+  private readMeta(ref: string, metaTable: 'profile_meta' | 'project_meta', metaKey: string): Uint8Array | undefined {
+    try {
+      const row = this.queryOne(`SELECT value FROM ${ref}.${metaTable} WHERE key = ?`, metaKey);
       return row === undefined ? undefined : toBytes(row.value);
     } catch {
       return undefined;
@@ -633,12 +791,7 @@ class SqliteMemoryStore implements MemoryStore {
   }
 
   private readProjectMeta(ref: string, metaKey: string): Uint8Array | undefined {
-    try {
-      const row = this.queryOne(`SELECT value FROM ${ref}.project_meta WHERE key = ?`, metaKey);
-      return row === undefined ? undefined : toBytes(row.value);
-    } catch {
-      return undefined;
-    }
+    return this.readMeta(ref, 'project_meta', metaKey);
   }
 
   private decryptText(binding: ProjectBinding, value: unknown, label: string): string {
@@ -685,7 +838,6 @@ export async function createMemoryStore(options: CreateMemoryStoreOptions): Prom
 
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const profilePath = join(directory, PROFILE_DB_FILE);
-  const existing = existsSync(profilePath);
   let db: DatabaseSync;
   try {
     db = new DatabaseSync(profilePath);
@@ -695,7 +847,9 @@ export async function createMemoryStore(options: CreateMemoryStoreOptions): Prom
 
   const store = new SqliteMemoryStore({ directory, key, profileId }, db, profilePath, deriveStoreKey(key, profileDomain(profileId)));
   try {
-    if (existing) store.verifyExistingProfile();
+    // Init-vs-verify is content-based: a crashed first run leaves an empty profile.db, which must
+    // initialize again instead of failing its key check forever.
+    if (store.profileState() === 'initialized') store.verifyExistingProfile();
     else store.initializeProfile();
   } catch (error) {
     store.closeSync();

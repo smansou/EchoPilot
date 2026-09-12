@@ -1,10 +1,12 @@
 /**
  * Essential section 5.8 tables/indexes for the profile database and each project database.
  * Record bodies live in BLOB columns that only ever receive sealed envelopes; plaintext columns
- * hold routing metadata (ids, kinds, timestamps, sequences) needed to index and page records.
+ * hold routing metadata only (envelope ids, kinds, trust levels, timestamps, sequences, scope ids
+ * and numeric verdicts) needed to index and page records. Every payload-derived value - text,
+ * tool/command/title and receipt identity, external task id, choices and actors - is sealed.
  */
 
-export const MEMORY_SCHEMA_VERSION = 1;
+export const MEMORY_SCHEMA_VERSION = 2;
 export const PROFILE_DB_FILE = 'profile.db';
 export const PROJECTS_DIR = 'projects';
 
@@ -63,34 +65,27 @@ export function recordSchemaSql(ref: string): string[] {
        decision_id TEXT PRIMARY KEY,
        event_id TEXT NOT NULL,
        occurred_at TEXT NOT NULL,
-       deciding_actor TEXT,
+       deciding_actor BLOB,
        question BLOB NOT NULL,
        choice BLOB NOT NULL,
        rationale BLOB
      )`,
     `CREATE TABLE IF NOT EXISTS ${ref}.task_observations (
        observation_id TEXT PRIMARY KEY,
-       task_id TEXT NOT NULL,
+       task_key TEXT NOT NULL,
        event_id TEXT NOT NULL,
        phase TEXT NOT NULL,
-       tool TEXT,
-       command TEXT,
-       title TEXT,
-       exit_code INTEGER,
-       receipt_id TEXT,
        occurred_at TEXT NOT NULL,
        ingest_sequence INTEGER NOT NULL,
+       observation BLOB NOT NULL,
        UNIQUE (event_id, phase)
      )`,
-    `CREATE INDEX IF NOT EXISTS ${ref}.idx_task_observations_task ON task_observations (task_id)`,
+    `CREATE INDEX IF NOT EXISTS ${ref}.idx_task_observations_task ON task_observations (task_key)`,
     `CREATE TABLE IF NOT EXISTS ${ref}.task_records (
-       task_id TEXT PRIMARY KEY,
+       task_key TEXT PRIMARY KEY,
        status TEXT NOT NULL,
        occurred_at TEXT NOT NULL,
-       latest_receipt_id TEXT,
-       summary BLOB NOT NULL,
-       search_text BLOB NOT NULL,
-       source_event_ids BLOB NOT NULL
+       record BLOB NOT NULL
      )`,
     `CREATE INDEX IF NOT EXISTS ${ref}.idx_task_records_occurred ON task_records (occurred_at)`,
     `CREATE TABLE IF NOT EXISTS ${ref}.source_offsets (
