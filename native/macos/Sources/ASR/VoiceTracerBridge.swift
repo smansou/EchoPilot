@@ -63,6 +63,11 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     /// A visible host failure (denial, device removal, lock, helper crash) is terminal for the
     /// session: the widget keeps the error state and the pipeline stops consuming audio.
     private var failed = false
+    /// Bumped whenever the buffered audio stops being trustworthy (mute, host failure, close). A
+    /// transcription that is still in flight when the epoch moves is invalidated: its result can
+    /// never be applied or emitted, and the planner no longer owns the window it was cut from.
+    private var pipelineEpoch = 0
+    private var inFlightTranscription: Task<ASRWindowResult, Error>?
 
     public init(
         host: MicrophoneGraph,
@@ -126,9 +131,13 @@ public final class VoiceTracerBridge: @unchecked Sendable {
 
     public func mute() async {
         stateQueue.sync {
+            // Set the capture guarantee first: no further packet opens a window after this point.
             muted = true
+            pipelineEpoch &+= 1
             planner.reset()
             host.pcmChannel.clear()
+            inFlightTranscription?.cancel()
+            inFlightTranscription = nil
             // Mute is a capture guarantee, not an error: a healthy session shows `muted`, while a
             // session that already surfaced a host failure keeps that error state visible.
             if error == nil { input = "muted" }
@@ -137,14 +146,19 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     }
 
     public func close() async {
-        running = false
+        stateQueue.sync {
+            running = false
+            pipelineEpoch &+= 1
+            planner.reset()
+            inFlightTranscription?.cancel()
+            inFlightTranscription = nil
+        }
         signal.finish()
         consumer?.cancel()
         consumer = nil
         unsubscribeHost?()
         unsubscribeHost = nil
         await host.stopCapture()
-        stateQueue.sync { planner.reset() }
     }
 
     public func status() -> VoiceStatusSnapshot {
@@ -193,7 +207,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
             host.pcmChannel.drain()
             if failed || muted { return }
             if discontinuity {
-                planner.markDiscontinuity()
+                stateQueue.sync { planner.markDiscontinuity() }
                 setInput("listening")
             }
             guard !batch.isEmpty else { return }
@@ -209,7 +223,13 @@ public final class VoiceTracerBridge: @unchecked Sendable {
         if vadState.isSpeech, status().input == "listening" {
             setInput("speech_candidate")
         }
-        guard let event = planner.append(packet: packet) else { return }
+        // The mute/failure flag and the planner append share one lock: a packet that raced the mute
+        // can never reopen the window the mute just cleared.
+        let event = stateQueue.sync { () -> ASRPlannerEvent? in
+            guard running, !muted, !failed else { return nil }
+            return planner.append(packet: packet)
+        }
+        guard let event else { return }
         switch event {
         case let .partial(window):
             setInput("utterance_open")
@@ -221,18 +241,35 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     }
 
     private func run(window: ASRWindow, sealed: Bool, endpoint: Bool) async {
+        let epoch = stateQueue.sync { pipelineEpoch }
+        let transcription = Task { [transcriber] in try await transcriber.transcribe(window) }
+        stateQueue.sync { inFlightTranscription = transcription }
         do {
-            let result = try await transcriber.transcribe(window)
-            let outcome = planner.apply(
-                result: ASRWindowResult(text: result.text, words: result.words, endpoint: result.endpoint || endpoint),
-                window: window,
-                sealed: sealed
-            )
+            let result = try await transcription.value
+            // Mute, close or a host failure may have landed while the engine was running: the
+            // pending window is gone, so its late result must not be applied or emitted.
+            guard isPipelineCurrent(epoch) else { return }
+            stateQueue.sync { inFlightTranscription = nil }
+            let outcome = stateQueue.sync {
+                planner.apply(
+                    result: ASRWindowResult(text: result.text, words: result.words, endpoint: result.endpoint || endpoint),
+                    window: window,
+                    sealed: sealed
+                )
+            }
             apply(outcome)
         } catch {
-            planner.markDiscontinuity()
+            guard isPipelineCurrent(epoch) else { return }
+            stateQueue.sync { inFlightTranscription = nil }
+            stateQueue.sync { planner.markDiscontinuity() }
             setInput("listening")
         }
+    }
+
+    /// True while the session still runs on the pipeline generation `epoch` captured when the
+    /// engine call started: it is false after mute, close or a visible host failure.
+    private func isPipelineCurrent(_ epoch: Int) -> Bool {
+        stateQueue.sync { pipelineEpoch == epoch && running && !muted && !failed }
     }
 
     private func apply(_ outcome: ASRPlannerOutcome) {
@@ -246,7 +283,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
         case let .displayOnly(text, words):
             emit(VoiceTranscriptUpdate(
                 phase: "partial",
-                utteranceId: planner.currentUtteranceId ?? "utterance-unknown",
+                utteranceId: stateQueue.sync { planner.currentUtteranceId } ?? "utterance-unknown",
                 text: text,
                 words: words
             ))
@@ -291,10 +328,13 @@ public final class VoiceTracerBridge: @unchecked Sendable {
         }
         stateQueue.sync {
             failed = true
+            pipelineEpoch &+= 1
             error = mapped
             input = "closed"
             planner.reset()
             host.pcmChannel.clear()
+            inFlightTranscription?.cancel()
+            inFlightTranscription = nil
         }
         Task { await host.stopCapture() }
     }
@@ -315,9 +355,13 @@ public final class VoiceTracerBridge: @unchecked Sendable {
         }
         stateQueue.sync {
             failed = true
+            pipelineEpoch &+= 1
             error = VoiceErrorState(code: code, message: message)
             input = "closed"
+            planner.reset()
             host.pcmChannel.clear()
+            inFlightTranscription?.cancel()
+            inFlightTranscription = nil
         }
     }
 }

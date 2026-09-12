@@ -111,6 +111,14 @@ public final class ASRWindowPlanner {
 
     public var currentUtteranceId: String? { utteranceId }
 
+    /// True when `window` belongs to the utterance the planner still holds open. A window that was
+    /// cut before a mute, a host failure or a discontinuity describes audio the session has already
+    /// dropped, so its late engine result must never be applied.
+    public func owns(window: ASRWindow) -> Bool {
+        guard let utteranceId else { return false }
+        return window.utteranceId == utteranceId
+    }
+
     public func committedPrefix() -> ASRCommit? {
         guard let utteranceId, !committedWords.isEmpty else { return nil }
         return ASRCommit(
@@ -210,7 +218,11 @@ public final class ASRWindowPlanner {
         window: ASRWindow,
         sealed: Bool
     ) -> ASRPlannerOutcome {
-        let id = utteranceId ?? window.utteranceId
+        // A reset planner (mute, host failure, close) no longer owns any window: an engine result
+        // that lands after the reset is dropped instead of being committed under the old
+        // utterance id.
+        guard owns(window: window) else { return .unchanged }
+        let id = window.utteranceId
         let fresh = result.words.filter { window.startMs + $0.endMs > committedEndAbsMs }
         let relative = fresh.map { word in
             ASRWordTimestamp(

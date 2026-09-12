@@ -98,6 +98,83 @@ final class V01PipelineTests: XCTestCase {
         }
     }
 
+    /// Collects emitted updates from the session's listener thread without racing the test thread.
+    private final class TranscriptRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var updates: [VoiceTranscriptUpdate] = []
+
+        func record(_ update: VoiceTranscriptUpdate) {
+            lock.lock()
+            updates.append(update)
+            lock.unlock()
+        }
+
+        var all: [VoiceTranscriptUpdate] {
+            lock.lock()
+            defer { lock.unlock() }
+            return updates
+        }
+    }
+
+    /// A transcriber whose engine call does not return until the test opens the gate. It drives the
+    /// window between "engine call started" and "result lands" that mute and a host failure must
+    /// invalidate: the released result is an endpoint that *would* commit a final transcript.
+    private final class GatedTranscriber: LocalTranscriber, @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuations: [CheckedContinuation<ASRWindowResult, Error>] = []
+        private var startedCount = 0
+        private var isOpen = false
+        private let result = ASRWindowResult(
+            text: "late words",
+            words: [ASRWordTimestamp(text: "late", startMs: 0, endMs: 120)],
+            endpoint: true
+        )
+
+        var started: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return startedCount
+        }
+
+        /// Synchronous bookkeeping: the async entry point never touches the lock directly.
+        private func beginCall() -> (alreadyOpen: Bool, late: ASRWindowResult) {
+            lock.lock()
+            defer { lock.unlock() }
+            startedCount += 1
+            return (isOpen, result)
+        }
+
+        private func suspendOrResume(_ continuation: CheckedContinuation<ASRWindowResult, Error>) {
+            lock.lock()
+            if isOpen {
+                lock.unlock()
+                continuation.resume(returning: result)
+            } else {
+                continuations.append(continuation)
+                lock.unlock()
+            }
+        }
+
+        func transcribe(_ window: ASRWindow) async throws -> ASRWindowResult {
+            let (alreadyOpen, late) = beginCall()
+            if alreadyOpen { return late }
+            return try await withCheckedThrowingContinuation { continuation in
+                suspendOrResume(continuation)
+            }
+        }
+
+        /// Releases every engine call that was still in flight.
+        func open() {
+            lock.lock()
+            isOpen = true
+            let pending = continuations
+            continuations = []
+            let late = result
+            lock.unlock()
+            for continuation in pending { continuation.resume(returning: late) }
+        }
+    }
+
     /// Session bridge wired to a graph without opening (or prompting for) a capture device.
     private func makeBridge(host: MicrophoneGraph) throws -> (bridge: VoiceTracerBridge, transcriber: RecordingTranscriber) {
         var configuration = SileroVADConfiguration()
@@ -419,6 +496,132 @@ final class V01PipelineTests: XCTestCase {
         XCTAssertThrowsError(try WhisperKitSmallEN(configuration: offline)) { error in
             guard case ASRError.modelPackMissing = error else {
                 return XCTFail("a missing model pack must fail closed, got \(error)")
+            }
+        }
+    }
+
+    // MARK: - 8. A late transcription can never survive mute or a host failure
+
+    /// `mute()` must invalidate a transcription that is already in flight: the engine result that
+    /// lands afterwards is dropped instead of being committed as a final transcript.
+    func testMuteDropsTranscriptionThatWasInFlight() async throws {
+        let host = MicrophoneGraph(maxQueuedFrames: 64)
+        var configuration = SileroVADConfiguration()
+        configuration.allowEnergyFallback = true
+        let transcriber = GatedTranscriber()
+        let bridge = VoiceTracerBridge(
+            host: host,
+            vad: try SileroVAD(configuration: configuration),
+            transcriber: transcriber
+        )
+        bridge.beginSessionForTesting()
+        host.attachFrameListenerForTesting(bridge.frameListenerForTesting())
+        addTeardownBlock { await bridge.close() }
+
+        let recorder = TranscriptRecorder()
+        let unsubscribe = bridge.subscribe { recorder.record($0) }
+        addTeardownBlock { unsubscribe() }
+
+        host.deliverForTesting(samples: silentSamples(packetCount: 25), startNs: 0)
+        await waitUntil { transcriber.started >= 1 }
+        XCTAssertGreaterThanOrEqual(transcriber.started, 1, "the engine call is in flight before mute")
+
+        await bridge.mute()
+        transcriber.open()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        XCTAssertTrue(
+            bridge.transcript().isEmpty,
+            "mute must not commit a transcription that answers after the microphone closed"
+        )
+        XCTAssertFalse(
+            recorder.all.contains { $0.phase == "final" },
+            "no final transcript is emitted after mute"
+        )
+        XCTAssertEqual(bridge.status().input, "muted", "mute stays visible")
+        XCTAssertEqual(host.pcmChannel.status().queuedFrames, 0, "mute leaves no queued input behind")
+    }
+
+    /// The same invalidation holds for a visible host failure: the late result is dropped, the
+    /// failure state stays visible, and the widget is not handed a transcript it cannot show.
+    func testHostFailureDropsTranscriptionThatWasInFlight() async throws {
+        let host = MicrophoneGraph(maxQueuedFrames: 64)
+        var configuration = SileroVADConfiguration()
+        configuration.allowEnergyFallback = true
+        let transcriber = GatedTranscriber()
+        let bridge = VoiceTracerBridge(
+            host: host,
+            vad: try SileroVAD(configuration: configuration),
+            transcriber: transcriber
+        )
+        bridge.beginSessionForTesting()
+        host.attachFrameListenerForTesting(bridge.frameListenerForTesting())
+        addTeardownBlock { await bridge.close() }
+
+        let recorder = TranscriptRecorder()
+        let unsubscribe = bridge.subscribe { recorder.record($0) }
+        addTeardownBlock { unsubscribe() }
+
+        host.deliverForTesting(samples: silentSamples(packetCount: 25), startNs: 0)
+        await waitUntil { transcriber.started >= 1 }
+        XCTAssertGreaterThanOrEqual(transcriber.started, 1, "the engine call is in flight before the failure")
+
+        host.emitForTesting(.deviceRemoved(deviceId: "fixture-mic-late"))
+        await waitUntil { bridge.status().error != nil }
+        transcriber.open()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        let status = bridge.status()
+        XCTAssertEqual(status.error?.code, "device_removed", "the failure stays visible")
+        XCTAssertEqual(status.input, "closed", "a failed session stays closed")
+        XCTAssertTrue(status.error?.message.isEmpty == false, "the visible state needs a readable message")
+        XCTAssertTrue(
+            bridge.transcript().isEmpty,
+            "a failed session must not commit a transcription that answers after the failure"
+        )
+        XCTAssertFalse(
+            recorder.all.contains { $0.phase == "final" },
+            "no final transcript is emitted after a host failure"
+        )
+    }
+
+    // MARK: - 9. The production path links WhisperKit and registers the Silero runtime
+
+    /// Guards the wiring the reviewer asked for: the built package links WhisperKit small.en and
+    /// production code registers a Silero backend, so `transcribe(_:)` cannot fall back to
+    /// `backendUnavailable` and `SileroVAD` cannot fall back to the test-only energy stand-in.
+    func testProductionBootstrapLinksWhisperKitAndRegistersSileroBackend() throws {
+        XCTAssertTrue(
+            WhisperKitSmallEN.isBackendLinked,
+            "the packaged build links WhisperKit; otherwise transcribe(_:) only throws backendUnavailable"
+        )
+        VoiceSessionBootstrap.registerProductionBackends()
+        XCTAssertTrue(
+            SileroVADBackendRegistry.hasRegisteredBackend,
+            "production code registers the Silero backend before capture opens"
+        )
+
+        let packRoot = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("v01-production-pack-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: packRoot.appendingPathComponent(WhisperModelPack.englishSmall.name),
+            withIntermediateDirectories: true
+        )
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: packRoot)
+        }
+
+        let transcriber = try WhisperKitSmallEN(configuration: .init(modelDirectory: packRoot))
+        XCTAssertFalse(transcriber.configuration.allowsNetwork, "the production pack stays on disk")
+        XCTAssertEqual(transcriber.configuration.pack, .englishSmall)
+
+        // A pack folder without the Silero model fails closed in the factory: the helper reports a
+        // visible error instead of opening capture without a VAD backend.
+        XCTAssertThrowsError(try VoiceSessionBootstrap.makeLocalSession(
+            VoiceHostConfiguration(asrModelDirectory: packRoot, vadModelDirectory: packRoot)
+        )) { error in
+            guard case SileroVADError.modelPackMissing = error else {
+                return XCTFail("expected a missing Silero pack, got \(error)")
             }
         }
     }

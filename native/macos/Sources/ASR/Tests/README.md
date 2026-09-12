@@ -10,7 +10,14 @@ uses, without asking for microphone permission or opening a device:
    dropped audio fails the ramp check;
 3. mute settles and clears pending audio, and an ordinary capture release settles while the tap
    path keeps delivering audio;
-4. one oversized (16 s) packet is split so no ASR window exceeds 15 s.
+4. one oversized (16 s) packet is split so no ASR window exceeds 15 s;
+5. mic denial, device removal, lock and helper crash stay visible (code, message, `closed` input),
+   drop the pending ring, open no new ASR windows and still settle on `close()`;
+6. a transcription that answers only *after* `mute()` or a host failure is invalidated: no final
+   transcript is committed and nothing is emitted (gated-transcriber race);
+7. the production wiring is real: `WhisperKitSmallEN.isBackendLinked` is true,
+   `registerProductionBackends()` registers a Silero backend and a pack folder without the Silero
+   model fails closed in `VoiceSessionBootstrap.makeLocalSession(_:)`.
 
 ```sh
 swift test --package-path native/macos/Sources/ASR

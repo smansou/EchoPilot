@@ -59,6 +59,16 @@ public final class WhisperKitSmallEN: LocalTranscriber {
 
     public let configuration: Configuration
 
+    /// True when this build actually links the pinned WhisperKit backend. The packaged helper must
+    /// report `true`; a `false` here means `transcribe(_:)` can only throw `backendUnavailable`.
+    public static var isBackendLinked: Bool {
+        #if canImport(WhisperKit)
+        return true
+        #else
+        return false
+        #endif
+    }
+
     public init(configuration: Configuration) throws {
         guard !configuration.allowsNetwork else {
             throw ASRError.networkDisabled("local mode must not download or route audio")
@@ -91,9 +101,10 @@ public final class WhisperKitSmallEN: LocalTranscriber {
     #if canImport(WhisperKit)
     /// Pinned WhisperKit API: `WhisperKitConfig(model:modelFolder:download:)` + word timestamps.
     private func transcribeWithWhisperKit(_ window: ASRWindow) async throws -> ASRWindowResult {
+        let packFolder = configuration.modelDirectory.appendingPathComponent(configuration.pack.name)
         let kit = try await WhisperKit(WhisperKitConfig(
             model: configuration.pack.name,
-            modelFolder: configuration.modelDirectory.path,
+            modelFolder: packFolder.path,
             download: false
         ))
         let samples = SileroVAD.floatSamples(from: window.pcm)

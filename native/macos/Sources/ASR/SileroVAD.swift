@@ -1,5 +1,8 @@
 import Foundation
 import Audio
+#if canImport(CoreML)
+import CoreML
+#endif
 
 /// The bundled Silero VAD model, injected by the helper's packaging step (ONNX Runtime / CoreML).
 public protocol SileroVADModel: AnyObject {
@@ -11,6 +14,45 @@ public protocol SileroVADModel: AnyObject {
 public enum SileroVADError: Error, Equatable {
     case modelPackMissing(String)
     case backendUnavailable(String)
+}
+
+/// The bundled Silero v5 pack. The pack is resolved from disk (override, helper environment or the
+/// app bundle); nothing here downloads a model or touches the network.
+public enum SileroVADModelPack {
+    public static let compiledModelName = "silero_vad.mlmodelc"
+    public static let sourceModelName = "silero_vad.mlmodel"
+    public static let onnxModelName = "silero_vad.onnx"
+
+    public static func isPack(at directory: URL) -> Bool {
+        let manager = FileManager.default
+        return [compiledModelName, sourceModelName, onnxModelName].contains { name in
+            manager.fileExists(atPath: directory.appendingPathComponent(name).path)
+        }
+    }
+
+    /// Search order: the packaged helper's explicit override, the app-bundle resources, then the
+    /// folder next to the executable.
+    public static func defaultSearchPaths(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [URL] {
+        var paths: [URL] = []
+        if let override = environment["ECHOPILOT_SILERO_MODEL_DIR"], !override.isEmpty {
+            paths.append(URL(fileURLWithPath: override, isDirectory: true))
+        }
+        let bundle = Bundle.main
+        if let resource = bundle.resourceURL {
+            paths.append(resource.appendingPathComponent("Silero", isDirectory: true))
+            paths.append(resource)
+        }
+        if let executable = bundle.executableURL {
+            paths.append(executable.deletingLastPathComponent().appendingPathComponent("Silero", isDirectory: true))
+        }
+        return paths
+    }
+
+    public static func resolve(searchPaths: [URL] = defaultSearchPaths()) -> URL? {
+        searchPaths.first { isPack(at: $0) }
+    }
 }
 
 public struct SileroVADConfiguration: Sendable {
@@ -46,15 +88,26 @@ public final class SileroVAD {
 
     public init(configuration: SileroVADConfiguration = SileroVADConfiguration()) throws {
         self.configuration = configuration
-        if let directory = configuration.modelDirectory,
-           FileManager.default.fileExists(atPath: directory.appendingPathComponent("silero_vad.onnx").path),
-           let backend = SileroVADBackendRegistry.makeBackend() {
-            try backend.load(from: directory)
-            self.model = backend
-        } else if configuration.allowEnergyFallback {
+        if let directory = configuration.modelDirectory {
+            // A packaged runtime registered by the helper wins; otherwise the CoreML pack shipped
+            // with the signed build is used, so production never depends on the test-only energy
+            // stand-in.
+            if let backend = SileroVADBackendRegistry.makeBackend() {
+                try backend.load(from: directory)
+                self.model = backend
+                return
+            }
+            if SileroVADModelPack.isPack(at: directory), let backend = SileroVADProductionBackend.make() {
+                try backend.load(from: directory)
+                self.model = backend
+                return
+            }
+        }
+        if configuration.allowEnergyFallback {
             self.model = EnergyVADModel()
         } else {
-            let path = configuration.modelDirectory?.appendingPathComponent("silero_vad.onnx").path ?? "silero_vad.onnx"
+            let path = configuration.modelDirectory?.appendingPathComponent(SileroVADModelPack.compiledModelName).path
+                ?? SileroVADModelPack.compiledModelName
             throw SileroVADError.modelPackMissing(path)
         }
     }
@@ -129,12 +182,141 @@ public enum SileroVADBackendRegistry {
         factory = make
     }
 
+    /// True once production (or a harness) registered a Silero runtime.
+    public static var hasRegisteredBackend: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return factory != nil
+    }
+
     static func makeBackend() -> SileroVADModel? {
         lock.lock()
         defer { lock.unlock() }
         return factory?()
     }
 }
+
+/// The Silero runtime the signed helper ships: the CoreML build of the v5 pack, driven with the
+/// same 512-sample frames, 16 kHz rate and recurrent state the ONNX pack uses.
+public enum SileroVADProductionBackend {
+    public static func make() -> SileroVADModel? {
+        #if canImport(CoreML)
+        return SileroVADCoreMLBackend()
+        #else
+        return nil
+        #endif
+    }
+}
+
+#if canImport(CoreML)
+/// CoreML Silero v5 backend. Inputs: `input` (1 × 512 audio), `state` (2 × 1 × 128 recurrent
+/// state) and `sr` (16 kHz sample rate); outputs: `output` (speech probability) and `stateN`
+/// (next recurrent state). A pack without recurrent state still works: the backend then runs
+/// stateless, exactly like the v4 pack.
+public final class SileroVADCoreMLBackend: SileroVADModel {
+    private static let stateShape: [NSNumber] = [2, 1, 128]
+
+    private let lock = NSLock()
+    private var model: MLModel?
+    private var state: MLMultiArray?
+    private var inputName = "input"
+    private var outputName = "output"
+    private var stateInputName: String?
+    private var stateOutputName: String?
+    private var sampleRateInputName: String?
+
+    public init() {}
+
+    public func load(from modelDirectory: URL) throws {
+        let compiled = modelDirectory.appendingPathComponent(SileroVADModelPack.compiledModelName)
+        let source = modelDirectory.appendingPathComponent(SileroVADModelPack.sourceModelName)
+        let modelURL: URL
+        if FileManager.default.fileExists(atPath: compiled.path) {
+            modelURL = compiled
+        } else if FileManager.default.fileExists(atPath: source.path) {
+            modelURL = try MLModel.compileModel(at: source)
+        } else {
+            throw SileroVADError.modelPackMissing(source.path)
+        }
+
+        let configuration = MLModelConfiguration()
+        configuration.computeUnits = .all
+        let loaded = try MLModel(contentsOf: modelURL, configuration: configuration)
+        let inputs = loaded.modelDescription.inputDescriptionsByName
+        let outputs = loaded.modelDescription.outputDescriptionsByName
+        guard let audioInput = ["input", "audio", "input_1"].first(where: { inputs[$0] != nil })
+            ?? inputs.keys.sorted().first
+        else {
+            throw SileroVADError.backendUnavailable("the Silero pack declares no audio input")
+        }
+        let probabilityOutput = ["output", "prob", "speech"].first(where: { outputs[$0] != nil })
+            ?? outputs.keys.sorted().first ?? "output"
+        let nextStateOutput = ["stateN", "state_out", "state_out_0"].first(where: { outputs[$0] != nil })
+        let recurrentStateInput = ["state", "state_in", "state_in_0"].first(where: { inputs[$0] != nil })
+
+        lock.lock()
+        defer { lock.unlock() }
+        model = loaded
+        inputName = audioInput
+        outputName = probabilityOutput
+        stateInputName = recurrentStateInput
+        stateOutputName = nextStateOutput
+        sampleRateInputName = inputs["sr"] != nil ? "sr" : nil
+        if recurrentStateInput != nil {
+            let fresh = try MLMultiArray(shape: Self.stateShape, dataType: .float32)
+            zero(fresh)
+            state = fresh
+        } else {
+            state = nil
+        }
+    }
+
+    public func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let state else { return }
+        zero(state)
+    }
+
+    public func speechProbability(samples: [Float]) throws -> Double {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let model else {
+            throw SileroVADError.backendUnavailable("the Silero pack is not loaded")
+        }
+
+        let audio = try MLMultiArray(shape: [1, NSNumber(value: samples.count)], dataType: .float32)
+        let audioPointer = audio.dataPointer.bindMemory(to: Float32.self, capacity: samples.count)
+        for index in 0..<samples.count { audioPointer[index] = samples[index] }
+
+        var features: [String: MLFeatureValue] = [inputName: MLFeatureValue(multiArray: audio)]
+        if let stateInputName, let state {
+            features[stateInputName] = MLFeatureValue(multiArray: state)
+        }
+        if let sampleRateInputName {
+            let rate = try MLMultiArray(shape: [1], dataType: .int32)
+            rate[0] = NSNumber(value: PCMPacket.sampleRate)
+            features[sampleRateInputName] = MLFeatureValue(multiArray: rate)
+        }
+
+        let prediction = try model.prediction(from: try MLDictionaryFeatureProvider(dictionary: features))
+        if let stateOutputName, let next = prediction.featureValue(for: stateOutputName)?.multiArrayValue {
+            state = next
+        }
+        guard let probability = prediction.featureValue(for: outputName)?.multiArrayValue,
+              probability.count > 0
+        else {
+            throw SileroVADError.backendUnavailable("the Silero pack produced no speech probability")
+        }
+        return probability[0].doubleValue
+    }
+
+    private func zero(_ array: MLMultiArray) {
+        let pointer = array.dataPointer.bindMemory(to: Float32.self, capacity: array.count)
+        for index in 0..<array.count { pointer[index] = 0 }
+    }
+}
+#endif
 
 /// Energy stand-in used only by development harnesses (`allowEnergyFallback`); the acceptance path
 /// for the model pack itself is the bundled Silero model.

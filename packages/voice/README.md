@@ -29,7 +29,11 @@ Rules:
 
 Native counterpart: `native/macos/Sources/Audio/` (microphone graph, bounded PCM channel, device
 enumeration, permissions) and `native/macos/Sources/ASR/` (Silero VAD, WhisperKit small.en, window
-planner, session bridge).
+planner, session bridge). The production tracer is the `echopilot-voice` binary built by the root
+`native/macos/Package.swift`: it links the pinned WhisperKit small.en backend, registers the CoreML
+Silero runtime (`SileroVADCoreMLBackend`) and drives the same session shape over stdio JSON. The
+native bridge mirrors this module's rules, including the pipeline epoch that discards a
+transcription which answers after `mute()` or after a host failure.
 
 ## Acceptance oracle
 

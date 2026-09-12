@@ -28,7 +28,9 @@ state lock, so holding it across the release would deadlock mute, lock and devic
 ## Build and test without Xcode
 
 `Package.swift` in this directory builds this module on its own; the root `native/macos/Package.swift`
-keeps building only the signed `echopilot-secrets` helper.
+builds the signed `echopilot-secrets` helper and the production voice tracer
+`echopilot-voice` (`Sources/ASR/VoiceHost`), which links this module, the `ASR` package and the
+pinned WhisperKit small.en backend.
 
 ```sh
 swift build --package-path native/macos/Sources/Audio
