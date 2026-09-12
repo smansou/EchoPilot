@@ -1,0 +1,15 @@
+{
+  "session_id": "claude-hook-session-h02",
+  "transcript_path": "/tmp/echopilot-h02/transcript.jsonl",
+  "cwd": "/tmp/echopilot-h02/project",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_use_id": "toolu-h02-fixture-1",
+  "tool_input": {
+    "command": "node --import tsx --test packages/core/src/index.test.ts"
+  },
+  "tool_response": {
+    "stdout": "6 tests passed",
+    "interrupted": false
+  }
+}

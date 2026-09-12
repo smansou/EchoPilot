@@ -1,0 +1,38 @@
+{
+  "model": "claude-sonnet-4-5",
+  "env": {
+    "ECHOPILOT_FIXTURE_PROJECT": "h02"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)"
+    ],
+    "deny": [
+      "Read(./.env)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/logger -t claude-tool-observed"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/logger -t claude-compact"
+          }
+        ]
+      }
+    ]
+  }
+}
