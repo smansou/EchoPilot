@@ -4,7 +4,15 @@ import { join, resolve, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createCoordinator, parseJournal, serializeJournal } from '../../../../packages/core/src/index';
 import { parseCommand } from '../../../../packages/contracts/src/index';
-import { createShell, WIDGET_FALLBACK_CONTROLS, type Shell, type WidgetStatus } from './shell';
+import { createShell, WIDGET_FALLBACK_CONTROLS, type Shell } from './shell';
+import { widgetStatusSnapshot, type WidgetSnapshot } from './widget-status';
+import {
+  applyForegroundSafeWindowBehavior,
+  revealWidgetWindow,
+  shouldQuitWhenAllWindowsClosed,
+  widgetWindowAction,
+  windowBehavior,
+} from './window-policy';
 import { createNativeHost, type NativeHost } from './native-host';
 import { createShellTray, type ShellTray } from './tray';
 
@@ -31,22 +39,29 @@ const fixtureJournalPath = resolve(__dirname, '../../fixtures/bootstrap/session.
 function publish() {
   const state = coordinator.getState();
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send('echo:state', state);
+  // The tray renders the same coordinator-derived snapshot as the widget, so a coordinator-only
+  // change (the widget's Mute button) has to re-read it here.
+  tray?.refresh();
   return state;
 }
 /**
- * The widget snapshot the renderer polls. Target session prefers the signed helper's reported
- * session and falls back to the session id of the latest real coordinator event.
+ * The one status snapshot behind both the widget panel and the tray menu. Target session prefers
+ * the signed helper's reported session and falls back to the latest coordinator event.
  */
+function widgetStatus(): WidgetSnapshot {
+  const state = coordinator.getState();
+  // The signed helper reports *permission*; the coordinator owns the live mute state. Deriving the
+  // mute affordance from that one flag keeps the widget, the tray item, and the real session in
+  // step no matter which control was used last.
+  return widgetStatusSnapshot(requireShell().status(), {
+    muted: state.muted,
+    sessionId: state.event?.sessionId ?? null,
+  });
+}
 function shellSnapshot() {
   const state = coordinator.getState();
-  const status = requireShell().status();
-  // The signed helper reports *permission*; the coordinator owns the live mute state. Showing the
-  // coordinator's view keeps the widget honest when a helper reconnect re-reports permissions.
-  const microphone = status.microphone === 'denied' || status.microphone === 'unknown'
-    ? status.microphone
-    : state.muted ? 'muted' : 'granted';
   return {
-    status: { ...status, microphone, targetSession: status.targetSession ?? state.event?.sessionId ?? null },
+    status: widgetStatus(),
     hotkeys: {
       registered: requireShell().hotkeys.registered.map(hotkey => hotkey.accelerator),
       conflicts: requireShell().hotkeys.conflicts.map(conflict => ({
@@ -60,11 +75,9 @@ function shellSnapshot() {
   };
 }
 function openWidget() {
-  if (widget && !widget.isDestroyed()) {
-    ensureForegroundSafe(widget);
-    widget.showInactive();
-    return;
-  }
+  // Survives Mission Control closure, Cmd-W, and Space changes: a live window is re-revealed
+  // without activation, a closed/destroyed one is recreated.
+  if (widget && widgetWindowAction(widget) === 'reveal') { revealWidgetWindow(widget); return; }
   widget = createWindow('widget');
   widget.on('closed', () => { widget = null; });
 }
@@ -72,35 +85,26 @@ function toggleWidget() {
   if (widget && !widget.isDestroyed() && widget.isVisible()) widget.hide();
   else openWidget();
 }
-/**
- * Foreground-safe widget: floats above other apps, lives on every Space including full-screen
- * Spaces, and is shown with `showInactive()` so opening it never steals the user's keystrokes.
- */
-function ensureForegroundSafe(window: BrowserWindow) {
-  if (process.platform !== 'darwin') return;
-  // `skipTransformProcessType` keeps the app's normal activation policy (dock + menu bar + a
-  // focusable Mission Control window) while the widget follows every Space and full-screen Space.
-  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
-  window.setAlwaysOnTop(true, 'floating');
-}
 function createWindow(view: 'widget' | 'dashboard') {
   const isWidget = view === 'widget';
   const window = new BrowserWindow({
     width:isWidget ? 390 : 1040, height:isWidget ? 420 : 780, minWidth:isWidget ? 360 : 760,
-    minHeight:isWidget ? 360 : 600, show:false, alwaysOnTop:isWidget,
-    // Foreground-safe widget: it never becomes the key window, so opening or clicking it cannot
-    // pull focus from the app the user is working in. `acceptFirstMouse` keeps the first click
-    // landing on the Mute/Stop buttons even though EchoPilot stays in the background.
-    focusable:!isWidget, acceptFirstMouse:isWidget,
+    minHeight:isWidget ? 360 : 600, show:false,
+    // Foreground-safe widget options live in `window-policy.ts` so the focus/Space matrix is
+    // covered by a deterministic test instead of only by the manual signed-app run.
+    ...windowBehavior(view),
     title:isWidget ? 'EchoPilot' : 'EchoPilot · Mission Control', backgroundColor:'#10171d',
-    autoHideMenuBar:true, skipTaskbar:isWidget,
     webPreferences:{preload:resolve(__dirname,'../preload/index.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,webviewTag:false},
   });
   window.webContents.setWindowOpenHandler(() => ({action:'deny'}));
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('will-attach-webview', event => event.preventDefault());
-  if (isWidget) ensureForegroundSafe(window);
-  window.once('ready-to-show', () => { if (!smoke) isWidget ? window.showInactive() : window.show(); });
+  if (isWidget) applyForegroundSafeWindowBehavior(window);
+  window.once('ready-to-show', () => {
+    if (smoke) return;
+    if (isWidget) revealWidgetWindow(window);
+    else window.show();
+  });
   void window.loadURL(`echo://app/index.html?view=${view}`);
   return window;
 }
@@ -195,11 +199,11 @@ async function ready() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'EchoPilot',submenu:[{label:'Mission Control',click:openDashboard},{role:'quit'}]},{role:'editMenu'},{role:'windowMenu'}]));
   widget = createWindow('widget');
   widget.on('closed', () => { widget = null; });
-  tray = createShellTray({shell:requireShell(),onShowWidget:openWidget,onOpenDashboard:openDashboard,onQuit:() => app.quit()});
+  tray = createShellTray({shell:requireShell(),status:widgetStatus,onShowWidget:openWidget,onOpenDashboard:openDashboard,onQuit:() => app.quit()});
   nativeHost?.start();
   // Closing the widget (Mission Control, Cmd-W, a Space change) must keep the session reachable
   // through the menu bar instead of ending the app.
-  app.on('window-all-closed', () => {});
+  app.on('window-all-closed', () => { if (shouldQuitWhenAllWindowsClosed()) app.quit(); });
   app.on('will-quit', () => { nativeHost?.dispose(); tray?.dispose(); tray = null; globalShortcut.unregisterAll(); });
   app.on('activate',openDashboard);
   if (smoke) {

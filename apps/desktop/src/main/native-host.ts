@@ -86,7 +86,14 @@ export function createNativeHost(options: NativeHostOptions): NativeHost {
   const env = options.env ?? process.env;
   const baseDelay = options.restartDelayMs ?? 500;
   const maxDelay = options.maxRestartDelayMs ?? 5_000;
-  const log = options.log ?? (() => {});
+  const writeLog = options.log ?? (() => {});
+  /**
+   * The per-launch token is a secret: every line that leaves the supervisor for the app log passes
+   * through here, so a raw helper frame or a chatty stderr can never publish it.
+   */
+  function log(message: string): void {
+    writeLog(token ? message.split(token).join('[redacted helper token]') : message);
+  }
   const helper = resolveHelperCommand(env);
   const mode: NativeHostMode = helper ? 'helper' : 'simulator';
 
@@ -99,18 +106,29 @@ export function createNativeHost(options: NativeHostOptions): NativeHost {
   let stopping = false;
 
   function ingest(raw: string): void {
-    let kind: unknown;
+    let parsed: unknown;
     try {
-      kind = (JSON.parse(raw) as { type?: unknown }).type;
+      parsed = JSON.parse(raw);
     } catch {
-      kind = undefined;
+      parsed = undefined;
     }
-    if (kind === 'log') {
-      log(`helper: ${raw}`);
+    const record = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : undefined;
+    if (record?.type === 'log') {
+      // The wire frame echoes the per-launch token; relay only the human-readable field so the
+      // secret never reaches the app log.
+      log(`helper: ${typeof record.message === 'string' ? record.message : 'unprintable helper log'}`);
       return;
     }
     const result = shell.ingestNativeMessage(raw);
-    if (!result.ok) log(`rejected helper message: ${result.reason}`);
+    if (result.ok) {
+      // A completed authenticated handshake means this helper is healthy: the next restart starts
+      // from the base delay instead of inheriting a previous crash's backoff.
+      restartDelay = baseDelay;
+      return;
+    }
+    log(`rejected helper message: ${result.reason}`);
   }
 
   function scheduleRestart(): void {
@@ -172,7 +190,6 @@ export function createNativeHost(options: NativeHostOptions): NativeHost {
       handleExit(null, null);
     });
     spawned.on('exit', handleExit);
-    restartDelay = baseDelay;
     log(`native helper started: ${helper.description}`);
   }
 

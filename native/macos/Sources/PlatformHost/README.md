@@ -37,3 +37,8 @@ exercised without a signed binary.
 
 A message with a wrong token, wrong `protocolVersion`, unknown `type`, or malformed `status` is
 rejected by the shell and leaves widget state untouched.
+
+The supervisor writes only the `message` field of a `log` frame to the app log and redacts the
+per-launch token from every line it logs, so the secret never lands in the app log. Launch helpers
+with `ECHOPILOT_NATIVE_TOKEN` in the environment (as the supervisor does) rather than on the
+command line, where `ps` can read it.

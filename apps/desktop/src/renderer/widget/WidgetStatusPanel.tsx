@@ -19,6 +19,9 @@ export function WidgetStatusPanel({ snapshot, busy, onControl }: {
   const status = snapshot?.status;
   const conflicts = snapshot?.hotkeys.conflicts ?? [];
   const helperConnected = status?.helper === 'connected';
+  // The mute affordance follows the coordinator flag, the same flag the widget's Mute button
+  // writes; `status.microphone` keeps reporting the helper's permission state.
+  const muted = snapshot?.coordinator.muted === true;
   return (
     <section className="shell-panel" aria-label="Capture and permission status">
       <dl className="shell-grid">
@@ -46,7 +49,7 @@ export function WidgetStatusPanel({ snapshot, busy, onControl }: {
       {/* Foreground-safe controls: always reachable, even when every global shortcut conflicts. */}
       <div className="shell-controls" aria-label="Foreground-safe controls">
         <button type="button" disabled={busy} onClick={() => onControl('mute')}>
-          {status?.microphone === 'muted' ? 'Unmute microphone' : 'Mute microphone'}
+          {muted ? 'Unmute microphone' : 'Mute microphone'}
         </button>
         <button type="button" disabled={busy} onClick={() => onControl('stop')}>Stop speech</button>
       </div>

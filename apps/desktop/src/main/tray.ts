@@ -4,13 +4,19 @@
  */
 import { Menu, nativeImage, Tray as ElectronTray } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
-import { WIDGET_FALLBACK_CONTROLS, hotkeyActionLabel, type Shell, type WidgetStatus } from './shell';
+import { WIDGET_FALLBACK_CONTROLS, hotkeyActionLabel, type Shell } from './shell';
+import { muteControlLabel, type WidgetSnapshot } from './widget-status';
 
 /** 16x16 macOS template icon (monochrome mic glyph); template images adopt the menu bar tone. */
 const TRAY_ICON_PNG = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKElEQVR4nGNgGOzgPxRTpJlsQ0YNoIIBDNS0nSyDqOYFigDFBtAeAAAMsifZQLmmGAAAAABJRU5ErkJggg==';
 
 export type TrayOptions = Readonly<{
   shell: Shell;
+  /**
+   * The same coordinator-derived snapshot the widget renders (`index.ts` passes one function to
+   * both surfaces). The tray never reads a second mute copy of its own.
+   */
+  status(): WidgetSnapshot;
   onShowWidget(): void;
   onOpenDashboard(): void;
   onQuit(): void;
@@ -33,13 +39,13 @@ export function createShellTray(options: TrayOptions): ShellTray {
     return accelerator ? { accelerator } : {};
   }
 
-  function menuFor(status: WidgetStatus): Menu {
+  function menuFor(status: WidgetSnapshot): Menu {
     const conflicts = shell.hotkeys.conflicts;
     const template: MenuItemConstructorOptions[] = [
       { label: 'Show widget', click: options.onShowWidget },
       { type: 'separator' },
       {
-        label: status.microphone === 'muted' ? 'Unmute microphone' : 'Mute microphone',
+        label: muteControlLabel(status),
         enabled: WIDGET_FALLBACK_CONTROLS.includes('mute'),
         ...shortcut('mute-microphone'),
         click: () => { shell.activate('mute'); },
@@ -78,7 +84,7 @@ export function createShellTray(options: TrayOptions): ShellTray {
   }
 
   function refresh(): void {
-    const status = shell.status();
+    const status = options.status();
     tray.setToolTip(`EchoPilot · helper ${status.helper}`);
     tray.setContextMenu(menuFor(status));
   }
