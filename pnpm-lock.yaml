@@ -48,6 +48,8 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/security: {}
+
 packages:
 
   '@electron-internal/extract-zip@1.0.5':
