@@ -410,12 +410,57 @@ function scoreExpectation(
   }
 }
 
+/**
+ * Deterministic default replay clock.
+ *
+ * Anchored to the scenario's earliest recorded event timestamp so that a normal caller (no
+ * `options.now`) still gets byte-identical policy traces across runs. Callers may inject their own
+ * clock; that clock is used verbatim and must itself be deterministic for comparable replays.
+ */
+function fixtureClock(scenario: EvalScenario): () => Date {
+  const anchor = scenario.events.reduce((earliest, event) => {
+    const recorded = Date.parse(event.at);
+    return Number.isFinite(recorded) && recorded < earliest ? recorded : earliest;
+  }, Number.POSITIVE_INFINITY);
+  let tick = 0;
+  return () => new Date((Number.isFinite(anchor) ? anchor : 0) + tick++);
+}
+
+/** Stable canonical form of one authority entry, so snapshots are order- and key-order-independent. */
+function canonicalAuthority(entry: unknown): string {
+  if (entry === null || typeof entry !== 'object') return JSON.stringify(entry) ?? 'undefined';
+  if (Array.isArray(entry)) return `[${entry.map((item) => canonicalAuthority(item)).join(',')}]`;
+  const fields = Object.entries(entry as Record<string, unknown>)
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  return `{${fields.map(([key, value]) => `${JSON.stringify(key)}:${canonicalAuthority(value)}`).join(',')}}`;
+}
+
+function authoritySnapshot(grants: readonly Readonly<Record<string, unknown>>[]): readonly string[] {
+  return grants.map((grant) => canonicalAuthority(grant));
+}
+
+/** Number of authority entries added, removed, or modified between two snapshots (multiset diff). */
+function authorityChanges(
+  before: readonly string[],
+  after: readonly string[],
+): number {
+  const remaining = [...after];
+  let removed = 0;
+  for (const entry of before) {
+    const index = remaining.indexOf(entry);
+    if (index === -1) removed += 1;
+    else remaining.splice(index, 1);
+  }
+  return removed + remaining.length;
+}
+
 /** Replay a validated scenario with fake time, a fake NativeHost, and injected fake providers. */
 export async function replayScenario(scenario: EvalScenario, options: ReplayOptions = {}): Promise<EvalRun> {
-  const now = options.now ?? (() => new Date());
+  const now = options.now ?? fixtureClock(scenario);
   const host = (options.nativeHost ?? {}) as NativeHostLike;
   const providers = options.providers ?? [];
   const grants = options.grants ?? DEFAULT_GRANTS;
+  const authorityBefore = authoritySnapshot(grants);
 
   const eventsById = new Map<string, ScenarioEvent>(scenario.events.map((event) => [event.eventId, event]));
   const knownEventIds: ReadonlySet<string> = new Set(eventsById.keys());
@@ -431,7 +476,6 @@ export async function replayScenario(scenario: EvalScenario, options: ReplayOpti
   const policyTrace: Record<string, unknown>[] = [];
   const calledProviderIds: string[] = [];
   let toolInvocations = 0;
-  let grantChanges = 0;
 
   const policy = (decision: string, subjectEventId: string, detail: string, extra: Record<string, unknown> = {}): void => {
     policyTrace.push({
@@ -560,6 +604,9 @@ export async function replayScenario(scenario: EvalScenario, options: ReplayOpti
   // 5. Score every expectation against the derived outcome; failures cite their source events.
   const findings = scenario.expectations.map((expectation) => scoreExpectation(expectation, outcome, knownEventIds));
   const failures = findings.filter((entry) => entry.status === 'fail');
+  // Real diff of the authority the replay actually consulted; a quarantined fixture that tried to
+  // mint or widen a grant would show up here instead of being reported as a hard-coded zero.
+  const grantChanges = authorityChanges(authorityBefore, authoritySnapshot(grants));
 
   const report: EvalReport = {
     deterministic: {
