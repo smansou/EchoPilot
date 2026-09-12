@@ -282,10 +282,10 @@ test('reports separate deterministic correctness, model quality, and human ratin
     assert.equal(typeof report.deterministic, 'object', 'report must contain deterministic correctness');
     assert.equal(typeof report.modelQuality, 'object', 'report must contain model quality');
     assert.equal(typeof report.humanRatings, 'object', 'report must contain human ratings');
-    assert.ok(
-      report.deterministic !== report.modelQuality
-      && report.deterministic !== report.humanRatings
-      && report.modelQuality !== report.humanRatings,
+    const reportSections: readonly unknown[] = [report.deterministic, report.modelQuality, report.humanRatings];
+    assert.equal(
+      new Set(reportSections).size,
+      reportSections.length,
       'deterministic correctness, model quality, and human ratings must stay separate sections',
     );
     assert.ok(Array.isArray(report.humanRatings.ratings), 'human ratings stay an explicit, separate collection');
