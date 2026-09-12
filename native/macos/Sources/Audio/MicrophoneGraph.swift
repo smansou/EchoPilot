@@ -94,11 +94,47 @@ public final class MicrophoneGraph: @unchecked Sendable {
     }
 
     public func stopCapture() async {
-        stateQueue.sync {
-            guard running || tapInstalled else { return }
+        releaseCapture()
+    }
+
+    /// Releases capture without ever holding `stateQueue` while the engine is touched.
+    ///
+    /// Removing a tap (and stopping the engine) waits for an in-flight audio-tap block, and that
+    /// block takes `stateQueue.sync` at its start: holding the state lock across `removeTap` /
+    /// `engine.stop()` would deadlock mute, failure-stop and lock-stop while audio is flowing.
+    private func releaseCapture() {
+        let hadTap: Bool? = stateQueue.sync {
+            guard running || tapInstalled else { return nil }
+            let installed = tapInstalled
             running = false
-            teardown()
+            tapInstalled = false
+            return installed
         }
+        guard let hadTap else { return }
+        if hadTap { engine.inputNode.removeTap(onBus: 0) }
+        engine.stop()
+        clearSessionState()
+    }
+
+    /// Drops the per-session state once the engine is released. Only short mutations stay under
+    /// `stateQueue`, so the tap path can always take the lock and finish.
+    private func clearSessionState() {
+        let observer: AudioDeviceObserver? = stateQueue.sync {
+            converter = nil
+            packetizer.reset()
+            frameListener = nil
+            channel.clear()
+            let current = deviceObserver
+            deviceObserver = nil
+            return current
+        }
+        observer?.stop()
+        let tokens: [NSObjectProtocol] = stateQueue.sync {
+            let current = notificationTokens
+            notificationTokens.removeAll()
+            return current
+        }
+        for token in tokens { DistributedNotificationCenter.default().removeObserver(token) }
     }
 
     /// The parent process calls this when the helper exits; a crash is a visible widget state.
@@ -158,9 +194,7 @@ public final class MicrophoneGraph: @unchecked Sendable {
         do {
             try engine.start()
         } catch {
-            stateQueue.sync {
-                teardown()
-            }
+            releaseCapture()
             throw MicrophoneGraphError.engineStartFailed(String(describing: error))
         }
         stateQueue.sync { running = true }
@@ -196,17 +230,39 @@ public final class MicrophoneGraph: @unchecked Sendable {
         let startNs = time.isHostTimeValid
             ? AudioHostClock.nanoseconds(fromHostTime: time.hostTime)
             : AudioHostClock.nowNs()
+        deliver(samples: samples, count: Int(output.frameLength), startNs: startNs)
+    }
+
+    /// Re-chunks converted samples into 20 ms packets and hands each packet to the frame listener
+    /// exactly once. The listener owns the transport ring (`VoiceTracerBridge.blockingEnqueue`), so
+    /// the graph must not enqueue a second copy: doing so doubled every packet in the ring, halved
+    /// its capacity and made the ASR windows/endpoints advance at twice the real audio rate.
+    private func deliver(samples: UnsafePointer<Int16>, count: Int, startNs: UInt64) {
         var emitted: [PCMPacket] = []
         stateQueue.sync {
-            packetizer.append(samples: samples, count: Int(output.frameLength), startNs: startNs) { packet in
+            packetizer.append(samples: samples, count: count, startNs: startNs) { packet in
                 emitted.append(packet)
             }
         }
-        let listener = stateQueue.sync { frameListener }
-        for packet in emitted {
-            // Never block on the ASR consumer: hand off and let the bounded ring absorb stalls.
-            listener?(packet)
-            channel.enqueue(packet)
+        guard let listener = stateQueue.sync(execute: { frameListener }) else { return }
+        for packet in emitted { listener(packet) }
+    }
+
+    // MARK: - Test seams
+
+    /// Installs the session frame listener exactly like `startCapture(_:)` does, without asking for
+    /// permission or opening a device. Used by the V01 native pipeline regression.
+    func attachFrameListenerForTesting(_ listener: @escaping FrameListener) {
+        stateQueue.sync { frameListener = listener }
+    }
+
+    /// Pushes already-converted 16 kHz mono Int16 samples through the same packetizer + listener
+    /// path the audio tap uses.
+    func deliverForTesting(samples: [Int16], startNs: UInt64 = 0) {
+        guard !samples.isEmpty else { return }
+        samples.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return }
+            deliver(samples: base, count: buffer.count, startNs: startNs)
         }
     }
 
@@ -233,23 +289,6 @@ public final class MicrophoneGraph: @unchecked Sendable {
             }
             notificationTokens.append(locked)
         }
-    }
-
-    private func teardown() {
-        if tapInstalled {
-            engine.inputNode.removeTap(onBus: 0)
-            tapInstalled = false
-        }
-        engine.stop()
-        converter = nil
-        packetizer.reset()
-        frameListener = nil
-        channel.clear()
-        deviceObserver?.stop()
-        deviceObserver = nil
-        let tokens = notificationTokens
-        notificationTokens.removeAll()
-        for token in tokens { DistributedNotificationCenter.default().removeObserver(token) }
     }
 
     private func emit(_ event: AudioHostEvent) {

@@ -80,6 +80,16 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     }
 
     public func start() async {
+        beginSession()
+        do {
+            try await host.startCapture(onFrame: frameListener())
+            setInput("listening")
+        } catch {
+            handleStartFailure(error)
+        }
+    }
+
+    private func beginSession() {
         guard !running else { return }
         running = true
         unsubscribeHost = host.onEvent { [weak self] event in
@@ -91,14 +101,22 @@ public final class VoiceTracerBridge: @unchecked Sendable {
                 await self.drainAndProcess()
             }
         }
-        do {
-            try await host.startCapture(onFrame: { [weak self] packet in
-                self?.blockingEnqueue(packet)
-            })
-            setInput("listening")
-        } catch {
-            handleStartFailure(error)
-        }
+    }
+
+    /// The one frame listener the session registers with the host. The listener owns the transport
+    /// ring: `MicrophoneGraph` must not enqueue the same packet a second time.
+    private func frameListener() -> (PCMPacket) -> Void {
+        { [weak self] packet in self?.blockingEnqueue(packet) }
+    }
+
+    /// Test seam: starts the session consumer without opening (or prompting for) a capture device.
+    func beginSessionForTesting() {
+        beginSession()
+    }
+
+    /// Test seam: the frame listener `start()` hands to the host.
+    func frameListenerForTesting() -> (PCMPacket) -> Void {
+        frameListener()
     }
 
     public func mute() async {

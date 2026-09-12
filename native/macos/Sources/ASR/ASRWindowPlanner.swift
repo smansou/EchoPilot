@@ -122,13 +122,66 @@ public final class ASRWindowPlanner {
     /// Feeds one native packet and reports whether the current window is due for the engine.
     public func append(packet: PCMPacket) -> ASRPlannerEvent? {
         let packetMs = packet.durationMs
+        let segmentLimitMs = Double(configuration.maxWindowMs - configuration.overlapMs)
+        if packetMs > segmentLimitMs, packetMs > 0, packet.sampleRate > 0, packet.channels > 0 {
+            return appendOversized(packet: packet, segmentLimitMs: segmentLimitMs)
+        }
+        return appendSegment(
+            pcm: packet.pcm,
+            durationMs: packetMs,
+            startMs: timelineMs(for: packet)
+        )
+    }
+
+    /// One packet longer than `maxWindowMs - overlapMs` (a host that does not send 20 ms packets)
+    /// must not open a window past the 15 s bound: cut it into segments any roll-over tail can
+    /// absorb, and report the strongest event the segments produced.
+    private func appendOversized(packet: PCMPacket, segmentLimitMs: Double) -> ASRPlannerEvent? {
+        let bytesPerFrame = packet.channels * 2
+        let dataStart = packet.pcm.startIndex
+        let frameCount = packet.pcm.count / bytesPerFrame
+        guard frameCount > 0 else { return nil }
+        let framesPerSegment = max(1, Int((segmentLimitMs / 1_000) * Double(packet.sampleRate)))
+        let baseNs = UInt64(packet.monotonicNs)
+        let fallbackStartMs = timelineMs(for: packet)
+        var sealed: ASRPlannerEvent?
+        var partial: ASRPlannerEvent?
+        var offset = 0
+        while offset < frameCount {
+            let take = min(framesPerSegment, frameCount - offset)
+            let start = offset * bytesPerFrame
+            let end = start + take * bytesPerFrame
+            let offsetMs = (Double(offset) / Double(packet.sampleRate)) * 1_000
+            let startMs = baseNs.map { ns -> Int in
+                let absolute = ns &+ UInt64((offsetMs * 1_000_000).rounded())
+                return timelineMs(ns: absolute, fallbackMs: fallbackStartMs + Int(offsetMs.rounded()))
+            } ?? fallbackStartMs + Int(offsetMs.rounded())
+            let event = appendSegment(
+                pcm: packet.pcm.subdata(in: (dataStart + start)..<(dataStart + end)),
+                durationMs: (Double(take) / Double(packet.sampleRate)) * 1_000,
+                startMs: startMs
+            )
+            switch event {
+            case .seal: sealed = event
+            case .partial: partial = event
+            case nil: break
+            }
+            offset += take
+        }
+        // A sealed window carries the committed prefix, so it outranks a display-only partial.
+        return sealed ?? partial
+    }
+
+    /// Appends one contiguous segment (already short enough for the roll-over tail) and reports the
+    /// window event it produced.
+    private func appendSegment(pcm: Data, durationMs: Double, startMs: Int) -> ASRPlannerEvent? {
         if windowBytes.isEmpty, windowDurationMs == 0 {
-            windowStartMs = timelineMs(for: packet)
+            windowStartMs = startMs
         }
         if utteranceId == nil { openUtterance(startMs: windowStartMs) }
 
         // Seal before the window would cross the 15 s bound, then continue with the overlap.
-        if windowDurationMs + packetMs > Double(configuration.maxWindowMs) {
+        if windowDurationMs + durationMs > Double(configuration.maxWindowMs) {
             let sealedStartMs = windowStartMs
             let sealedDurationMs = windowDurationMs
             let sealed = makeWindow()
@@ -136,13 +189,13 @@ public final class ASRWindowPlanner {
             windowStartMs = Int(
                 (Double(sealedStartMs) + sealedDurationMs - Double(configuration.overlapMs)).rounded()
             )
-            windowBytes.append(contentsOf: packet.pcm)
-            windowDurationMs += packetMs
+            windowBytes.append(contentsOf: pcm)
+            windowDurationMs += durationMs
             return .seal(sealed)
         }
 
-        windowBytes.append(contentsOf: packet.pcm)
-        windowDurationMs += packetMs
+        windowBytes.append(contentsOf: pcm)
+        windowDurationMs += durationMs
         if windowDurationMs - lastTranscribedMs >= Double(configuration.partialIntervalMs) {
             lastTranscribedMs = windowDurationMs
             return .partial(makeWindow())
@@ -216,9 +269,14 @@ public final class ASRWindowPlanner {
 
     /// Native monotonic clock → session-relative milliseconds.
     private func timelineMs(for packet: PCMPacket) -> Int {
-        guard let ns = UInt64(packet.monotonicNs) else {
-            return windowStartMs + Int(windowDurationMs.rounded())
-        }
+        timelineMs(
+            ns: UInt64(packet.monotonicNs),
+            fallbackMs: windowStartMs + Int(windowDurationMs.rounded())
+        )
+    }
+
+    private func timelineMs(ns: UInt64?, fallbackMs: Int) -> Int {
+        guard let ns else { return fallbackMs }
         if baseNs == nil { baseNs = ns }
         let base = baseNs ?? ns
         guard ns >= base else { return 0 }

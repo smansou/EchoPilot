@@ -12,10 +12,19 @@ The signed helper builds the capture side of the V01 tracer bullet:
 
 Capture path: `AVAudioEngine` input tap → `AVAudioConverter` to 16 kHz mono Int16 → `AudioPacketizer`
 (20 ms packets, monotonic packet start times) → `frameListener` → bounded ring → ASR consumer.
+The listener is the only producer into the ring: the graph hands each packet over exactly once, so
+the ring's capacity and the ASR window/endpoint timing match real audio time.
 
 Failure path: denial, device removal (CoreAudio listener), screen lock (distributed notification)
 and helper crash (`reportHelperCrash`) all emit a host event, release capture, and leave the widget
 a visible state instead of hanging.
+`stopCapture()` flips the capture flags under the state lock and then releases it before
+`removeTap`/`engine.stop()`: those calls wait for an in-flight tap block, and a tap block takes the
+state lock, so holding it across the release would deadlock mute, lock and device-removal stops.
+
+`Tests/main.swift` is the native pipeline regression (exactly-once packet delivery through
+`MicrophoneGraph` + `VoiceTracerBridge`, bounded windows); it is test-only and stays out of the
+helper target.
 
 The deterministic acceptance path drives `packages/voice` through the fake host contract; this
 module is what the signed helper feeds into in the app.

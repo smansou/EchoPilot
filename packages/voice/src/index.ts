@@ -129,6 +129,15 @@ type PcmWindow = {
   voiced: boolean;
 };
 
+/** One contiguous slice of an accepted `AudioFrame`; the bound is enforced per segment. */
+type FrameSegment = Readonly<{
+  startMs: number;
+  durationMs: number;
+  sampleRate: number;
+  channels: number;
+  pcm: Uint8Array;
+}>;
+
 type AbsoluteWord = { text: string; absStartMs: number; absEndMs: number };
 
 function pcmDurationMs(pcm: Uint8Array, sampleRate: number, channels: number): number {
@@ -139,6 +148,61 @@ function pcmDurationMs(pcm: Uint8Array, sampleRate: number, channels: number): n
 
 function packetDurationMs(frame: AudioFrame): number {
   return pcmDurationMs(frame.pcm, frame.sampleRate, frame.channels);
+}
+
+/**
+ * The 15 s window bound must hold for every accepted frame, not only for the 20 ms native packets:
+ * a single oversized packet is cut into segments that always fit inside `ASR_MAX_WINDOW_MS` even
+ * after the 1 s roll-over tail, so the pump can never open a window longer than the bound.
+ */
+function splitForAsrWindow(
+  frame: AudioFrame,
+  startMs: number,
+  durationMs: number,
+): FrameSegment[] {
+  const bytesPerSampleFrame = Math.max(1, frame.channels * 2);
+  const maxSegmentMs = ASR_MAX_WINDOW_MS - ASR_OVERLAP_MS;
+  const single = (
+    segmentStartMs: number,
+    segmentDurationMs: number,
+    pcm: Uint8Array,
+  ): FrameSegment => ({
+    startMs: segmentStartMs,
+    durationMs: segmentDurationMs,
+    sampleRate: frame.sampleRate,
+    channels: frame.channels,
+    pcm,
+  });
+  if (
+    durationMs <= maxSegmentMs
+    || durationMs <= 0
+    || frame.sampleRate <= 0
+    || frame.pcm.byteLength <= bytesPerSampleFrame
+  ) {
+    return [single(startMs, durationMs, frame.pcm)];
+  }
+
+  const frameCount = Math.floor(frame.pcm.byteLength / bytesPerSampleFrame);
+  const framesPerSegment = Math.max(1, Math.floor((maxSegmentMs / 1_000) * frame.sampleRate));
+  const segments: FrameSegment[] = [];
+  let offset = 0;
+  let elapsedMs = 0;
+  while (offset < frameCount) {
+    const take = Math.min(framesPerSegment, frameCount - offset);
+    const segmentStartMs = startMs + (offset / frame.sampleRate) * 1_000;
+    const segmentPcm = frame.pcm.subarray(
+      offset * bytesPerSampleFrame,
+      (offset + take) * bytesPerSampleFrame,
+    );
+    offset += take;
+    // The final segment carries the residual so the segments still sum to the frame duration.
+    const segmentDurationMs = offset >= frameCount
+      ? durationMs - elapsedMs
+      : (take / frame.sampleRate) * 1_000;
+    elapsedMs += segmentDurationMs;
+    segments.push(single(segmentStartMs, segmentDurationMs, segmentPcm));
+  }
+  return segments;
 }
 
 function parseMonotonicNs(value: string): bigint | null {
@@ -420,13 +484,13 @@ export function createLocalVoiceSession(options: LocalVoiceSessionOptions): Loca
     return fallbackTimelineMs;
   };
 
-  const appendFrame = (frame: AudioFrame, startMs: number, durationMs: number): void => {
+  const appendFrame = (segment: FrameSegment): void => {
     let active = window;
     if (!active) {
       active = {
-        startMs,
-        sampleRate: frame.sampleRate,
-        channels: frame.channels,
+        startMs: segment.startMs,
+        sampleRate: segment.sampleRate,
+        channels: segment.channels,
         chunks: [],
         bytes: 0,
         durationMs: 0,
@@ -435,10 +499,10 @@ export function createLocalVoiceSession(options: LocalVoiceSessionOptions): Loca
       };
       window = active;
     }
-    const pcm = frame.pcm.byteLength > 0 ? frame.pcm.slice() : frame.pcm;
+    const pcm = segment.pcm.byteLength > 0 ? segment.pcm.slice() : segment.pcm;
     active.chunks.push(pcm);
     active.bytes += pcm.byteLength;
-    active.durationMs += durationMs;
+    active.durationMs += segment.durationMs;
     if (rms(pcm) >= VAD_RMS_FLOOR) {
       active.voiced = true;
       if (input === 'listening') input = 'speech_candidate';
@@ -460,16 +524,19 @@ export function createLocalVoiceSession(options: LocalVoiceSessionOptions): Loca
         const frameDurationMs = packetDurationMs(frame);
         fallbackTimelineMs = Math.max(fallbackTimelineMs, frameStartMs + frameDurationMs);
 
-        if (window && window.durationMs + frameDurationMs > ASR_MAX_WINDOW_MS) {
-          await transcribeWindow('seal');
+        for (const segment of splitForAsrWindow(frame, frameStartMs, frameDurationMs)) {
           if (closed || muted || fatal) return;
-          if (discontinuityPending) continue;
-        }
+          if (window && window.durationMs + segment.durationMs > ASR_MAX_WINDOW_MS) {
+            await transcribeWindow('seal');
+            if (closed || muted || fatal) return;
+            if (discontinuityPending) break;
+          }
 
-        appendFrame(frame, frameStartMs, frameDurationMs);
-        const active = window;
-        if (active && active.durationMs - active.lastTranscribedMs >= PARTIAL_INTERVAL_MS) {
-          await transcribeWindow('partial');
+          appendFrame(segment);
+          const active = window;
+          if (active && active.durationMs - active.lastTranscribedMs >= PARTIAL_INTERVAL_MS) {
+            await transcribeWindow('partial');
+          }
         }
       }
     } finally {

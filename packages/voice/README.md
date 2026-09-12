@@ -16,6 +16,9 @@ Rules:
 - Windows roll at 15 s with a 1 s overlap. Only fully heard words are committed, only on a window
   boundary or an endpoint ("commit stable prefixes"); `partial` updates are display-only and are
   never routed or committed.
+- The 15 s bound holds for every accepted `AudioFrame`, not only the 20 ms native packets: a host
+  that hands over one oversized packet gets it split into in-bound segments
+  (`test/window-bound.test.ts`).
 - The transport ring holds at most `maxQueuedFrames` packets. A stalled ASR consumer makes the ring
   drop the oldest audio and count a discontinuity; the affected window is discarded instead of
   splicing non-contiguous audio.
