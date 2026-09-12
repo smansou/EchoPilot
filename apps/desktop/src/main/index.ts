@@ -1,5 +1,4 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, protocol, session, Menu, type IpcMainInvokeEvent } from 'electron';
-import { existsSync } from 'node:fs';
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
 import { join, resolve, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -26,6 +25,7 @@ import {
   createSecurityKernel,
   parseKeyEntryRequest,
   parseKeyEntryResult,
+  resolveNativeHelperPath,
   type NativeHelperBridge,
   type SecurityKernel,
 } from '../../../../packages/security/src/index';
@@ -52,14 +52,13 @@ const rendererRoot = resolve(__dirname, '../renderer');
 const fixtureJournalPath = resolve(__dirname, '../../fixtures/bootstrap/session.jsonl');
 let secretHelperBridge: NativeHelperBridge | null = null;
 let securityKernel: SecurityKernel | null = null;
-/** The native helper is spawned with stdio pipes only: it is reachable from this parent process and nowhere else. */
+/**
+ * The native helper is spawned with stdio pipes only: it is reachable from this parent process and
+ * nowhere else. Candidates come from the running bundle (`dist/main`), so the lookup works from any
+ * launch directory and can never pick up a stray binary from the process working directory.
+ */
 function resolveSecretHelperPath(): string {
-  const candidates = [
-    resolve(__dirname, '../../../native/macos/.build/release/echopilot-secrets'),
-    resolve(process.cwd(), 'native/macos/.build/release/echopilot-secrets'),
-    resolve(process.cwd(), 'native/macos/.build/debug/echopilot-secrets'),
-  ];
-  return candidates.find(candidate => existsSync(candidate)) ?? candidates[0] ?? 'echopilot-secrets';
+  return resolveNativeHelperPath({ bundleDir: __dirname });
 }
 function getSecurityKernel(): SecurityKernel {
   if (securityKernel) return securityKernel;

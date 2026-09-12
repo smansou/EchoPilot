@@ -10,10 +10,10 @@
  *    state, exported settings, audit receipts, logs, argv, or model prompts;
  *  - provider egress is granted per provider *and* per data category;
  *  - revocations are versioned and survive a restart;
- *  - the grant version is re-read immediately before execution, so a revocation that lands while
- *    a request is queued still denies it.
+ *  - the targeted grant is re-read immediately before execution, so a revocation that lands while
+ *    a request is queued still denies it — without disabling any other grant.
  */
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 import { KEY_ENTRY_CHANNEL, maskSecretSuffix } from './channels';
 import type {
@@ -35,6 +35,8 @@ export { KEY_ENTRY_CHANNEL, maskSecretSuffix, parseKeyEntryRequest, parseKeyEntr
 export type { KeyEntryRequest, KeyEntryResult } from './channels';
 export { createKeychainSecretStore } from './keychain';
 export type { KeychainOptions } from './keychain';
+export { nativeHelperCandidates, resolveNativeHelperPath } from './helper-path';
+export type { NativeHelperPathOptions } from './helper-path';
 export { createNativeCaptureOperation, createNativeHelperBridge } from './native-helper';
 export type { NativeHelperBridge, NativeHelperCapability, NativeHelperOptions } from './native-helper';
 export { createFileKernelStorage } from './storage';
@@ -136,7 +138,9 @@ class Kernel implements SecurityKernel {
     // entering a key must never create cloud egress.
     await this.dependencies.secrets.put(provider, secret);
 
-    const keyRef = `keychain://${provider}#${fingerprint(secret)}`;
+    // Opaque handle only: a digest of the secret would let anything that can read the reference
+    // (renderer state, settings, receipts) confirm a guessed key offline.
+    const keyRef = `keychain://${provider}#${randomUUID()}`;
     const maskedSuffix = maskSecretSuffix(secret);
     this.state.providers[provider] = { provider, keyRef, maskedSuffix, submittedAt: nowIso() };
     this.state.receipts.push({
@@ -198,14 +202,33 @@ class Kernel implements SecurityKernel {
     const grant = this.state.grants.find((candidate) => candidate.grantId === grantId);
     if (!grant) throw new Error(`Unknown grant '${grantId}'`);
 
-    // Revocation bumps the tuple's version counter, so every token/decision minted at the old
-    // version is invalid from here on — and that counter is part of the durable state.
-    const grantVersion = this.bumpVersion(grant);
-    if (grant.status === 'active') {
-      grant.status = 'revoked';
-      grant.revokedAt = nowIso();
-      grant.revokeReason = reason;
+    // Revocation invalidates exactly the targeted grant: its own version moves and its status is
+    // persisted, so a newer live grant that shares the same tuple keeps working. Revoking a grant
+    // that is already consumed/superseded/revoked is an explicit no-op.
+    if (grant.status !== 'active') {
+      this.state.receipts.push({
+        receiptId: newId('receipt'),
+        requestId: `revoke:${grantId}`,
+        status: 'revocation-no-op',
+        grantId,
+        grantVersion: grant.version,
+        capability: grant.capability,
+        resource: { ...grant.resource },
+        dataCategory: grant.dataCategory,
+        destination: grant.destination,
+        effect: grant.effect,
+        reason,
+        detail: `grant was already ${grant.status}; no live authority was revoked`,
+        recordedAt: nowIso(),
+      });
+      await this.persist();
+      return { grantId, grantVersion: grant.version };
     }
+
+    grant.status = 'revoked';
+    grant.revokedAt = nowIso();
+    grant.revokeReason = reason;
+    const grantVersion = this.bumpVersion(grant);
     this.state.receipts.push({
       receiptId: newId('receipt'),
       requestId: `revoke:${grantId}`,
@@ -293,13 +316,13 @@ class Kernel implements SecurityKernel {
     const live = this.selectLiveGrant(operation);
     if (!live) return this.deny(operation, this.denialReason(operation));
 
-    // Re-read the version at the last instant before side effects: a revocation (or a re-grant
-    // that superseded this version) must stop a request that was queued while the grant was live.
-    const currentVersion = this.state.versionCounters[tupleKey(live)] ?? live.version;
-    if (live.status !== 'active' || live.version !== currentVersion) {
+    // Re-read the targeted grant at the last instant before side effects: a revocation that landed
+    // while the request was queued must stop it, without touching any other grant.
+    const current = this.state.grants.find((candidate) => candidate.grantId === live.grantId);
+    if (!current || current.status !== 'active' || current.version !== live.version) {
       return this.deny(
         operation,
-        `Grant ${live.grantId} version ${live.version} is no longer current (version ${currentVersion}); the request was denied.`,
+        `Grant ${live.grantId} version ${live.version} is no longer active; the request was denied.`,
       );
     }
 
@@ -384,8 +407,7 @@ class Kernel implements SecurityKernel {
         grant.dataCategory === operation.dataCategory &&
         grant.destination === operation.destination &&
         grant.effect === operation.effect &&
-        resourceMatches(grant.resource, operation.resource) &&
-        grant.version === (this.state.versionCounters[tupleKey(grant)] ?? grant.version),
+        resourceMatches(grant.resource, operation.resource),
     );
     if (candidates.length === 0) return null;
     return candidates.reduce((best, candidate) => (candidate.version > best.version ? candidate : best));
@@ -441,6 +463,9 @@ class Kernel implements SecurityKernel {
     const key = tupleKey(grant);
     const next = Math.max(this.state.versionCounters[key] ?? grant.version, grant.version) + 1;
     this.state.versionCounters[key] = next;
+    // The counter keeps future grants of this tuple monotonic; the targeted grant carries the new
+    // version itself so only it is invalidated.
+    grant.version = next;
     return next;
   }
 
@@ -503,10 +528,6 @@ function sortedResource(resource: ResourceSelector): Record<string, string> {
 
 function resourceMatches(selector: ResourceSelector, resource: ResourceSelector): boolean {
   return Object.entries(selector).every(([name, value]) => resource[name] === value);
-}
-
-function fingerprint(secret: string): string {
-  return createHash('sha256').update(secret, 'utf8').digest('hex').slice(0, 16);
 }
 
 function newId(prefix: string): string {
