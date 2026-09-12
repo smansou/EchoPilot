@@ -1,78 +1,48 @@
-# Autonomous implementation handoff
+# Autonomous implementation loop
 
-The project is implemented from `BACKLOG.json` by `scripts/loop.mjs`. Do not give one long-lived model the entire implementation plan and ask it to remember progress. The loop creates a fresh context per bounded role and keeps durable state in Git plus `.loop/state.json`.
+## Start
 
-## Before the first run
-
-1. Review and commit the current orchestration cleanup. The integration checkout must be clean because accepted ticket branches are fast-forwarded into it.
-2. Confirm the tools in your own Terminal, not only inside the desktop app:
-
-   ```sh
-   command -v node npm
-   command -v pnpm codex
-   ```
-
-3. If `pnpm` is missing and Node was installed through nvm, run `corepack enable` and `corepack prepare pnpm@11.19.0 --activate`.
-4. If `codex` is missing, install the CLI with `npm install -g @openai/codex`. With nvm's standard shell setup, no additional PATH line is needed; open a new Terminal afterward.
-5. Keep the desktop app's normal `~/.codex` configuration unchanged. Run DeepSeek's installer with its supported `CODEX_HOME` override so it writes an isolated worker configuration:
-
-   ```sh
-   DEEPSEEK_WORKER_CONFIG="$HOME/.codex-deepseek-worker"
-   mkdir -p "$DEEPSEEK_WORKER_CONFIG"
-   CODEX_HOME="$DEEPSEEK_WORKER_CONFIG" bash <(curl -fsSL https://cdn.deepseek.com/api-docs/codex-deepseek-setup-en.sh)
-   ```
-
-   Choose `deepseek-flash`. This writes only under `~/.codex-deepseek-worker`, so it does not replace the desktop app's OpenAI provider configuration.
-6. Verify the isolated worker configuration without changing the desktop app:
-
-   ```sh
-   CODEX_HOME="$HOME/.codex-deepseek-worker" codex exec -m deepseek-flash "Reply with ready"
-   ```
-
-   The header must report `provider: deepseek`.
-7. Install dependencies with `pnpm install --frozen-lockfile` and run `pnpm loop:self-test`, `pnpm check`, and `pnpm smoke`.
-8. Run `pnpm loop:init`; it should report `42 tickets: 1 done, 41 remaining` and identify F01's integrated commit.
-9. Inspect model routing with `LOOP_MODEL=deepseek-flash pnpm loop:dry`.
-
-## Run
+From the EchoPilot control checkout:
 
 ```sh
-LOOP_CODEX_HOME="$HOME/.codex-deepseek-worker" LOOP_MODEL=deepseek-flash LOOP_MAX_AGENTS=10 pnpm loop
+pnpm install --frozen-lockfile
+pnpm loop:policy-test
+pnpm loop:start
 ```
 
-Open `http://127.0.0.1:4318` for read-only status. Stop with Ctrl-C; the next run recovers tickets that were active when the process stopped.
+The launcher uses a dedicated integration worktree on `codex/autonomous`, preserves the original `.loop` state and candidates, and shows progress at http://127.0.0.1:4318. The control checkout can hold maintenance changes without dirtying the product integration checkout. Do not edit candidate worktrees while their agents run.
 
-If a ticket is blocked after an infrastructure interruption, requeue only the affected tickets while preserving their worktrees and test evidence:
+Default test/implementation provider: `deepseek-flash`, max effort, with `CODEX_HOME=/Users/sobhi/.codex-deepseek-worker` and automatic approval review. Default independent reviewer: `gpt-5.6-sol`, high effort, with its separate OpenAI home `/Users/sobhi/.codex`. Credentials remain in those homes, not in this repository. No expensive model continuously supervises the scheduler.
 
-```sh
-pnpm loop:retry -- F02 Q01 S01
-```
+Two active tickets is the default. File ownership and shared manifest reservations can reduce concurrency; that is preferable to repeatedly repairing races. Override `LOOP_MAX_AGENTS` only after observing actual throughput. `LOOP_WORKER_MODEL`, `LOOP_WORKER_EFFORT`, `LOOP_REVIEW_MODEL`, `LOOP_REVIEW_EFFORT`, and the corresponding provider-home variables are explicit controls.
 
-The normal terminal mode is direct subprocess execution. For visible worker tabs, open a terminal inside cmux and run:
+Ctrl-C stops the controller. The next run reconciles retained evidence. Do not launch a second loop against the same state directory. The controller owns a process lock; the dashboard port alone is not the lock.
 
-```sh
-LOOP_CODEX_HOME="$HOME/.codex-deepseek-worker" LOOP_MODEL=deepseek-flash LOOP_MAX_AGENTS=10 pnpm loop:cmux
-```
+## Tickets and evidence
 
-The loop creates one right-side helper pane and one persistent, labeled terminal tab per ticket. It reuses that tab for retries and leaves completed transcripts visible. cmux mode requires the shell's `CMUX_WORKSPACE_ID`/`CMUX_SURFACE_ID`; it intentionally fails fast when launched from an ordinary Terminal because cmux rejects outside processes.
+`BACKLOG.json` describes product scope. `loop-contracts.json` specifies owned paths, acceptance criteria, check overrides, and non-blocking follow-up boundaries. Broad root manifest access is not implicit: declared shared paths participate in reservations.
 
-`LOOP_MAX_AGENTS=0` removes the policy cap. The dependency graph and declared file ownership still prevent conflicting tickets from running together. Full checks and merges are serialized. Start with 10 and lower it only if API throttling, memory pressure, or local installation contention reduces throughput.
+Each candidate receives an independent test oracle, implementation, deterministic gates, and independent review. Ordinary repair reuses the frozen oracle. Defective oracles have a separate bounded test-author repair phase with retained prior hashes. Review findings are durable records with stable IDs and explicit resolution evidence. A commit title is never sufficient completion evidence.
 
-## Useful controls
+After rebase, dependencies are reconciled before checking the candidate. Gates discover all app/package tests rather than only core tests, rerun the frozen ticket command, check generated contracts, typecheck, and build. Changed Swift sources require actual package wiring and native build coverage. Missing native test wiring is reported, not replaced with a mock-success claim.
 
-- `LOOP_MODEL`: default model for test, implementation, and review roles; defaults to `deepseek-flash`.
-- `LOOP_TEST_MODEL`, `LOOP_WORKER_MODEL`, `LOOP_REVIEW_MODEL`: optional per-role overrides.
-- `LOOP_TEST_EFFORT`, `LOOP_WORKER_EFFORT`, `LOOP_REVIEW_EFFORT`: optional reasoning-effort overrides.
-- Every role defaults to `max` reasoning effort for DeepSeek V4.1 Flash.
-- `LOOP_MAX_AGENTS`: maximum simultaneous ticket workers; `0` means uncapped.
-- `LOOP_MAX_TRANSIENT_FAILURES`: infrastructure retries before blocking; default `3`.
-- `LOOP_MAX_SUBSTANTIVE_FAILURES`: failed implementation/review attempts before blocking; default `3`.
-- `LOOP_AGENT_BIN`: Codex-compatible CLI executable; defaults to `codex`.
-- `LOOP_CODEX_HOME`: isolated Codex configuration and credentials used only by ticket-worker subprocesses.
+Provider failures, dependency failures, oracle defects, implementation defects, review findings, and integration failures have distinct recovery paths. Retry delays and attempt limits are bounded. An exhausted ticket is parked while independent work can continue. Auth/credential failures and unresolved safety-critical ambiguity cannot be fabricated away. Quiet reasoning is not a fatal failure; overall invocation deadlines still apply.
 
-## Operator contract
+## Existing work and release readiness
 
-- `done` means the candidate passed deterministic checks, blind review, integration, and publication when enabled.
-- `blocked` is terminal for unattended execution. Read the ticket's `lastFailure` in `.loop/state.json`; do not reset it blindly.
-- A rejected test oracle blocks the ticket instead of letting an implementation agent rewrite its own acceptance gate.
-- EchoPilot's OpenAI Realtime and managed Codex tickets are product requirements. They are unrelated to which model implements the backlog and must not be removed during provider configuration.
+Six legacy tickets were marked done before this audit. The all-project Node audit passed 43 tests in 14 files, but that alone does not retroactively prove every acceptance criterion. Existing done records without exact-head gate/review evidence are labeled unverified rather than silently reimplemented or rubber-stamped. See `docs/LOOP_REVIEW.md` for known native wiring and memory-encryption deviations.
+
+Run `pnpm release:validate` from the integration checkout for a distinct release gate. It records clean dependency installation, complete discovered tests, contracts/typecheck/build, native coverage, desktop smoke, packaging availability, and ticket-evidence gaps under `.loop/release/report.json`. Missing packaging or native evidence means incomplete, even if every ticket has a commit.
+
+The loop aims for useful unattended progress. It cannot honestly promise that this entire native, voice, gaze, memory, and agent product will be implemented and hardware-qualified in a few hours.
+
+## Local evidence
+
+- `.loop/state.json`: atomic current state.
+- `.loop/events.jsonl`: transition history.
+- `.loop/runs/`: role output, gate logs, and review evidence.
+- `.loop/worktrees/`: retained ticket candidates.
+- `.loop/integration/`: clean integration checkout.
+- `.loop/audits/`: independent audit output.
+
+All are local and Git-ignored. Do not publicly expose the local dashboard. Publishing follows the existing state setting; accepted commits may remain local when `publish` is false.

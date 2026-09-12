@@ -1,0 +1,780 @@
+{
+  "version": 1,
+  "sharedPaths": [],
+  "tickets": {
+    "F01": {
+      "ownedPaths": [
+        "apps/desktop/",
+        "packages/contracts/",
+        "packages/core/",
+        "fixtures/bootstrap/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "pnpm dev opens a widget and optional control window; closing the control window leaves the widget running.",
+        "One fixture event crosses validated IPC, renders, and replays with the same ID after restart.",
+        "Renderer has no Node access; invalid IPC payloads are rejected; contract generation is reproducible."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "F02": {
+      "ownedPaths": [
+        "apps/desktop/src/main/",
+        "apps/desktop/src/renderer/widget/",
+        "native/macos/Sources/PlatformHost/",
+        "native/macos/Package.swift",
+        "apps/desktop/src/renderer/main.tsx",
+        "apps/desktop/src/renderer/styles.css"
+      ],
+      "acceptance": [
+        "Widget does not steal focus and survives Mission Control closure, workspace switching, and full-screen use on the test matrix.",
+        "All hotkeys either register or show a conflict; mute and stop controls remain reachable.",
+        "Native helper disconnect produces a recoverable state; malformed or unauthenticated helper messages are rejected."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "F03": {
+      "ownedPaths": [
+        "apps/desktop/src/renderer/control/",
+        "packages/core/src/settings/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "Every setting has a displayed effective value and source; project overrides survive restart.",
+        "Changing verbosity, persona, capture scope, or attention applies at the next safe boundary and is reflected in the widget.",
+        "Keyboard and VoiceOver navigation reaches all primary controls; import rejects unknown privileged settings instead of silently granting them."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "S01": {
+      "ownedPaths": [
+        "packages/security/",
+        "apps/desktop/src/preload/",
+        "native/macos/Sources/Secrets/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift",
+        "apps/desktop/src/main/index.ts"
+      ],
+      "acceptance": [
+        "A granted operation succeeds; the same queued request fails after revocation, including after restart.",
+        "No raw key is present in renderer state after submission, logs, argv, exported settings, or mock model prompts.",
+        "Unknown capability/resource/destination combinations are denied and produce a clear permission proposal."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "S02": {
+      "ownedPaths": [
+        "packages/security/src/broker/",
+        "packages/core/src/outbox/",
+        "apps/desktop/src/renderer/control/permissions/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "A valid scoped harness action executes once; stale grant versions, changed arguments, and expired confirmations do not execute.",
+        "A disconnect after send becomes unknown until reconciled; no automatic resend causes a duplicate action.",
+        "Voice 'yes' outside the bound confirmation state cannot grant permission; audit links proposal, authorization, dispatch, and receipt."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "S03": {
+      "ownedPaths": [
+        "packages/security/src/privacy/",
+        "packages/memory/src/deletion/",
+        "apps/desktop/src/renderer/control/privacy/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "A forgotten decision disappears from facts, summaries, FTS, embeddings, cached answers, and replayable speech text.",
+        "Reimporting a forgotten source does not resurrect selected records; unrelated project imports remain unaffected.",
+        "Encrypted export restores into a new profile with evidence intact; wrong passphrase fails without modifying the destination."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "S04": {
+      "ownedPaths": [
+        "packages/security/src/execution/",
+        "packages/desktop-tools/src/commands/",
+        "native/macos/Sources/Execution/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "A VM command changes an allowed test workspace and cannot read a canary outside its mount or reach a denied network endpoint.",
+        "A macOS-specific command can run with a Host Autonomy grant and is labeled as host execution.",
+        "Timeout/cancel stops the managed process group; uncertain external children are reported rather than claimed stopped."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "V01": {
+      "ownedPaths": [
+        "packages/voice/",
+        "native/macos/Sources/Audio/",
+        "native/macos/Sources/ASR/",
+        "fixtures/audio/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "A 15-second utterance yields committed local text with timestamps and no network access.",
+        "Mute closes microphone capture and clears pending input; audio buffers stay bounded during a stalled consumer.",
+        "Mic denial, device removal, lock, and helper crash produce visible states without hanging the widget."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "V02": {
+      "ownedPaths": [
+        "packages/voice/src/playback/",
+        "workers/pocket-tts/",
+        "native/macos/Sources/Audio/",
+        "models/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "Offline signed app speaks, keeps transcribing the user during playback, and replays the last completed sentence.",
+        "Cancel prevents all late frames from an old epoch from becoming audible.",
+        "Worker needs no system Python or downloads; audio/voice licenses and source hashes are in the model manifest."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "V03": {
+      "ownedPaths": [
+        "packages/voice/src/duplex/",
+        "native/macos/Sources/Audio/",
+        "fixtures/duplex/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "Explicit stop and ordinary interruption meet Section 4.4 p95 targets on the reference machine.",
+        "Backchannel precision meets \u226595% on held-out exchanges; uncertain speech pauses output.",
+        "Agent execution continues after 'stop speaking' and receives interruption only after a separate routed agent-control request."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "V04": {
+      "ownedPaths": [
+        "packages/providers/src/openai-realtime/",
+        "packages/voice/src/backends/",
+        "fixtures/providers/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "Real opt-in API test answers a grounded session question and survives barge-in without retaining unheard content as heard.",
+        "Forced token/time rollover resumes from a compact handoff; provider context never exceeds the configured budget in instrumented tests.",
+        "Network loss, key revocation, or cost cap cancels old generations; no buffered private audio is uploaded on reconnect."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "V05": {
+      "ownedPaths": [
+        "packages/voice/src/activation/",
+        "apps/desktop/src/renderer/control/voice/",
+        "native/macos/Sources/Audio/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "A user enables conversation once and completes a 20-minute interaction without touching the UI.",
+        "Default idle closes the mic and unloads models; optional standby shows a distinct persistent indicator and passes its energy test.",
+        "Wake detection never authorizes an action; false triggers under TV/background speech are measured and reported."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "A01": {
+      "ownedPaths": [
+        "packages/capture/",
+        "native/macos/Sources/Capture/",
+        "native/macos/Sources/Accessibility/",
+        "fixtures/capture/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "Text reaches VS Code, TextEdit, and one browser text field without Enter or focus theft.",
+        "Focus changes preserve a draft instead of writing into the new target.",
+        "Excluded/secure fields are absent from the context bundle; denied capture produces a transcript-only mode."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "A02": {
+      "ownedPaths": [
+        "packages/capture/src/correction/",
+        "packages/capture/src/context/",
+        "fixtures/dictation/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "Paired fixtures demonstrate improvements from both screenshot context and prior project glossary, including cases where Jason is a person and must remain unchanged.",
+        "Every substituted technical token has evidence or a clear acoustic normalization reason.",
+        "End-to-end warm latency and harmful-edit gates are measured; an invalid model response falls back to raw text safely."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "A03": {
+      "ownedPaths": [
+        "packages/capture/src/glossary/",
+        "apps/desktop/src/renderer/control/dictation/",
+        "fixtures/dictation/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "A corrected proper name persists across restart and improves the next matching utterance without corrupting unrelated uses.",
+        "Global promotion is explicit; a project-only identifier never appears in another project without a grant.",
+        "Long dictation stays within context/audio budgets and concatenates committed chunks without duplicated overlap."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "A04": {
+      "ownedPaths": [
+        "packages/capture/",
+        "native/macos/Sources/Accessibility/",
+        "fixtures/dictation/",
+        "packages/eval/src/dictation/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "\u226525% technical-term error reduction and \u22641% harmful semantic edits on held-out data.",
+        "All insertion tests avoid unexpected submission; clipboard changes by the user are preserved.",
+        "Capture and insertion timing, missing-context behavior, and undo limitations are documented with reproducible measurements."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "H01": {
+      "ownedPaths": [
+        "packages/harness-codex/",
+        "fixtures/harness/codex/",
+        "apps/desktop/src/renderer/control/sessions/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "A real managed session performs a read-only fixture task, streams results, and can be interrupted and resumed.",
+        "Approval requests remain pending until an authorized response; companion failure never auto-approves.",
+        "Adapter reports version/capabilities and rejects incompatible mutation calls while preserving diagnostic observation."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "H02": {
+      "ownedPaths": [
+        "packages/harness-claude/",
+        "fixtures/harness/claude/",
+        "scripts/hooks/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "Managed session accepts a second prompt and emits normalized results; hook-only session is visibly observation-only unless a supported input path exists.",
+        "Hook enqueue/return meets 50 ms p95 and survives a stopped companion.",
+        "Installation and removal leave unrelated hooks/settings unchanged; retries deduplicate source events."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "H03": {
+      "ownedPaths": [
+        "packages/harness-generic/",
+        "fixtures/harness/generic/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "A 10 GB generated log streams through a \u226464 MiB parser working set and can resume from a committed offset.",
+        "Partial UTF-8, truncated JSON, rotation, and repeated terminal redraws do not corrupt adjacent events.",
+        "Unstructured content is labeled low-confidence/imported and never treated as an authorization request or executable instruction."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "H04": {
+      "ownedPaths": [
+        "packages/harness-codex/src/recovery/",
+        "packages/core/src/session-registry/",
+        "fixtures/harness/recovery/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "Two Codex sessions and one Claude session retain distinct project/turn identities and destinations.",
+        "All adapters pass the same lifecycle and capability tests; unsupported operations return typed errors.",
+        "No duplicate send after reconnect; unknown outcome is visible and can be reconciled from observed session state."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "M01": {
+      "ownedPaths": [
+        "packages/memory/src/store/",
+        "packages/memory/src/reducers/",
+        "fixtures/memory/basic/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "Events, task status, and a user decision survive restart with source links and correct project isolation.",
+        "DB/WAL/FTS files do not expose known plaintext canaries; wrong key cannot open the database.",
+        "Duplicate ingestion is idempotent; crash before transaction commit does not advance the durable cursor."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "M02": {
+      "ownedPaths": [
+        "packages/memory/src/consolidation/",
+        "packages/memory/src/context/",
+        "native/macos/Sources/Reasoner/",
+        "fixtures/memory/live/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "A multi-turn fixture produces a supported answer after restart without rereading the full raw log.",
+        "Every request obeys B=min(8192, floor(0.25*C)), including tools/images/output allowance; deliberately failed compaction cannot violate it.",
+        "Failed JSON, model crash, and duplicate jobs preserve deterministic state and mark semantic coverage partial."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "M03": {
+      "ownedPaths": [
+        "packages/memory/src/import/",
+        "packages/memory/src/jobs/",
+        "fixtures/memory/import/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "Equivalent live and imported event sequences yield equivalent current decisions/tasks and supported historical answers.",
+        "A killed 10 GB import resumes without loading the file into RAM or duplicating observations.",
+        "Preview and final results show exact processed coverage; imported instructions cannot call tools or modify grants."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "M04": {
+      "ownedPaths": [
+        "packages/memory/src/records/",
+        "apps/desktop/src/renderer/control/memory/",
+        "fixtures/memory/temporal/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "Reversing a decision preserves its historical answer while updating the current answer.",
+        "A conflicting agent claim cannot overwrite a user-confirmed fact or observed tool receipt.",
+        "Every displayed summary can reveal its sources, extraction version, and partial-coverage status."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "M05": {
+      "ownedPaths": [
+        "packages/memory/src/retrieval/",
+        "packages/memory/src/retention/",
+        "packages/eval/src/memory/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "Retrieval and temporal QA gates in Section 4 pass, including explicit historical queries and cross-project denial cases.",
+        "Expired raw sources remain clearly unavailable; retained decisions keep small supporting capsules.",
+        "Quota pressure and summary-worker failure remain bounded and produce visible gaps rather than fabricated completeness."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "N01": {
+      "ownedPaths": [
+        "packages/narration/",
+        "fixtures/narration/basic/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "A real managed read-only/test fixture produces one correct spoken outcome rather than one utterance per log line.",
+        "Agent text claiming tests passed cannot override a nonzero observed exit code.",
+        "Muted or unleased output remains silent; replay identifies the original evidence and session."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "N02": {
+      "ownedPaths": [
+        "packages/narration/src/compiler/",
+        "packages/narration/src/formatting/",
+        "fixtures/narration/large/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "Concise through Thorough produce materially different, supported coverage of the same 200-run corpus.",
+        "Critical-event recall \u226595% and supported factual claims \u226598%; repeated progress redraws do not create speech storms.",
+        "Explicit exact-reading mode preserves requested text in bounded segments while ordinary mode omits raw paths/URLs/code."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "N03": {
+      "ownedPaths": [
+        "packages/narration/src/queue/",
+        "fixtures/narration/concurrent/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "A superseded failure/completion is not narrated after the newer outcome has been heard.",
+        "Interrupting mid-chapter preserves only the relevant unheard remainder and does not repeat an old approval.",
+        "Burst traffic from three sessions obeys speech budgets and never starves the foreground user's response."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "R01": {
+      "ownedPaths": [
+        "packages/routing/",
+        "packages/core/src/dialogue/",
+        "fixtures/routing/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "User can ask what happened, get a grounded spoken answer, then say 'Tell Codex to add a regression test' and receive an observed delivery acknowledgment.",
+        "Ambiguous destination or multiple matching sessions causes a concise clarification with no dispatch.",
+        "Held-out routing precision \u226599% for auto-dispatch; partial ASR and ambient 'yes' cannot trigger actions."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "R02": {
+      "ownedPaths": [
+        "packages/attention/",
+        "fixtures/attention/",
+        "apps/desktop/src/renderer/control/attention/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "No pillar can speak proactively without a valid lease; revoked/expired leases silence late audio.",
+        "Blocking events preempt routine assistant speech but never override explicit output silence or talk over the user's ongoing utterance.",
+        "Same event stream yields deterministic decisions under a fake clock; settings explain why an update was spoken or suppressed."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "R03": {
+      "ownedPaths": [
+        "packages/routing/src/state/",
+        "packages/core/src/dialogue/",
+        "fixtures/routing/adversarial/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "All mode changes are visible/audible and stale pending-answer bindings expire.",
+        "No corpus case routes a companion explanation or quoted instruction into an unintended agent session.",
+        "Stop all reports which managed turns acknowledged interruption and which external work may still be running."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "C01": {
+      "ownedPaths": [
+        "packages/desktop-tools/src/context/",
+        "apps/desktop/src/renderer/widget/",
+        "fixtures/desktop/questions/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "A user asks about a browser error and an IDE control without opening Mission Control.",
+        "Excluded apps are not captured; unrelated project memory is not retrieved by window-title similarity.",
+        "Missing AX/pixels yields a clear limited-context answer rather than invented control state."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "C02": {
+      "ownedPaths": [
+        "packages/desktop-tools/src/actions/",
+        "native/macos/Sources/Accessibility/",
+        "fixtures/desktop/actions/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "A voice request changes the intended field and produces before/after evidence and an action receipt.",
+        "Changed focus, target identity, disabled state, or expired grant stops execution.",
+        "User can cancel a multi-step action between steps; the app reports completed versus unexecuted steps."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "C03": {
+      "ownedPaths": [
+        "packages/desktop-tools/src/integrations/",
+        "packages/desktop-tools/src/visual/",
+        "native/macos/Sources/Capture/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "At least one browser workflow and one editor workflow work through structured interfaces with less focus interference than synthetic typing.",
+        "Coordinate execution rejects a moved/changed target and cannot rely on a stale screenshot.",
+        "Extension messages are origin/session authenticated and cannot request broader capabilities than granted."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "C04": {
+      "ownedPaths": [
+        "packages/desktop-tools/src/history/",
+        "packages/capture/src/sampling/",
+        "fixtures/desktop/history/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "A day-long replay supports later questions about selected work without retaining raw screen frames by default.",
+        "No-change desktop periods produce no repeated model calls; capture respects the frequency/energy budgets.",
+        "Revocation and private mode stop capture and purge pending unsaved snapshots before future export."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "G01": {
+      "ownedPaths": [
+        "packages/gaze/",
+        "native/macos/Sources/Gaze/",
+        "fixtures/gaze/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "Gaze samples include timestamps, display transforms, uncertainty, and calibration generation; no camera frames persist.",
+        "Held-out target resolution improves over the same context-only baseline and abstains when calibration fails.",
+        "Camera denial or invalid tracking returns to voice/named targets without breaking the active conversation."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "G02": {
+      "ownedPaths": [
+        "packages/gaze/src/resolution/",
+        "packages/desktop-tools/src/gaze-actions/",
+        "fixtures/gaze/actions/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "Ambiguous targets prompt a named/numbered clarification; read-only answers use the configured confidence threshold.",
+        "Every consequential gaze-derived action requires a fresh explicit target-and-effect confirmation.",
+        "Moving or replacing a target after confirmation prevents execution; no gaze-only event can create an action."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "G03": {
+      "ownedPaths": [
+        "native/macos/Sources/GazeTobii/",
+        "packages/gaze/src/devices/",
+        "packages/eval/src/gaze/",
+        "pnpm-lock.yaml",
+        "native/macos/Package.swift"
+      ],
+      "acceptance": [
+        "Device samples map to the shared gaze schema and use the same confirmation path as webcam input.",
+        "Supported device/SDK/OS combinations are listed from actual tests; disconnect invalidates gaze immediately.",
+        "Results separate successful target precision, abstention, calibration failures, and participant variation."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "Q01": {
+      "ownedPaths": [
+        "packages/eval/",
+        "fixtures/",
+        "scripts/check-contracts.ts",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "The same seed/fixture produces the same event and policy trace; failures link to exact source events.",
+        "A malicious screenshot/log fixture cannot call a tool or alter a grant.",
+        "Reports separate deterministic correctness, model quality, and human ratings; no hidden paid calls occur in normal CI."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "Q02": {
+      "ownedPaths": [
+        "packages/eval/src/performance/",
+        "packages/core/src/scheduler/",
+        "scripts/bench-macos/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "All hard resource budgets and eight-hour context invariants are measured on M4/24 GB and compatibility-tested on M2/16 GB.",
+        "No audio callback waits on JS/database work; queues and disk spools remain bounded.",
+        "Regression report identifies dropped/gapped data, cold-start time, swap behavior, and any failed hardware qualification."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "Q03": {
+      "ownedPaths": [
+        "scripts/release/",
+        "models/manifest.json",
+        "apps/desktop/forge.config.ts",
+        "docs/runbooks/"
+      ],
+      "acceptance": [
+        "Offline installer completes dictation, local conversation, memory restart, and narration without API keys or runtime downloads.",
+        "Tampered model/app updates are rejected; interrupted install leaves the old working version recoverable.",
+        "All A+B quality gates pass; support docs explain permissions, local/premium differences, data location, recovery, and measured limits."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    },
+    "Q04": {
+      "ownedPaths": [
+        "packages/eval/src/release/",
+        "docs/runbooks/",
+        "scripts/release/",
+        "pnpm-lock.yaml"
+      ],
+      "acceptance": [
+        "All four pillars pass their release gates using one voice layer and one context budgeter.",
+        "No unauthorized action or cross-project disclosure occurs in the adversarial suite; gaze confirmations cannot be bypassed.",
+        "Release is recoverable after update failure, worker crash, low disk, revoked TCC, and device removal; crash-free beta target is measured."
+      ],
+      "checks": [],
+      "nonBlocking": [
+        "Unrelated pre-existing architecture changes are follow-up work.",
+        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+      ]
+    }
+  }
+}

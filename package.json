@@ -13,7 +13,7 @@
     "dev": "pnpm build && electron .",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test packages/core/src/*.test.ts",
+    "test": "node scripts/test-project.mjs",
     "contracts:check": "pnpm --filter @echopilot/contracts check:generated",
     "check": "pnpm contracts:check && pnpm typecheck && pnpm test && pnpm build",
     "smoke": "node scripts/smoke.mjs",
@@ -22,7 +22,10 @@
     "loop:init": "node scripts/loop.mjs --initialize-only",
     "loop:retry": "node scripts/loop.mjs --retry-blocked",
     "loop:dry": "node scripts/loop.mjs --dry-run",
-    "loop:self-test": "node scripts/loop.mjs --self-test"
+    "loop:self-test": "node scripts/loop.mjs --self-test",
+    "loop:start": "node scripts/start-autonomous.mjs",
+    "loop:policy-test": "node --test scripts/loop-gates.test.mjs scripts/loop-policy.test.mjs",
+    "release:validate": "node scripts/validate-release.mjs"
   },
   "dependencies": {
     "react": "19.2.8",
