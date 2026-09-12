@@ -29,7 +29,7 @@ node scripts/generate-protocol.mjs --check            # fail when the projection
 ## What the adapter does
 
 ```ts
-const adapter = createCodexHarnessAdapter({ command, args, cwd, env, scope });
+const adapter = createCodexHarnessAdapter({ command, args, cwd, env, codexHome, scope });
 await adapter.start();          // spawn + initialize → initialized handshake
 const events = adapter.observe(); // AsyncIterable<EventEnvelope>, safe before or after start()
 await adapter.send('…', 'delivery-1'); // thread/start (once) + turn/start(text input)
@@ -40,8 +40,15 @@ await adapter.close();         // SIGTERM/EOF the child; never answers a pending
 ```
 
 Transport is newline-delimited JSON-RPC on stdio. `command`/`args` are spawned directly as an argv
-vector (never a shell) with a scrubbed environment plus the explicit `env` entries, so the child
-cannot silently inherit the user's ambient Codex home, desktop session, or `NODE_OPTIONS`.
+vector (never a shell) with a scrubbed environment plus the explicit `env` entries. `CODEX_HOME` is
+always set by the adapter after those entries: pass an absolute, separately provisioned
+`codexHome`, or omit it to create a fresh session-scoped temporary directory. Consequently the
+child cannot silently fall back to the user's ambient `~/.codex`, desktop session, or
+`NODE_OPTIONS`. A `CODEX_HOME` supplied through `env` is deliberately ignored.
+
+`resume(threadId)` is limited to thread ids returned by `thread/start` to this adapter instance.
+This prevents the managed child from using `thread/resume` as an attachment mechanism for an
+arbitrary ambient Codex thread. Cross-process attachment is not part of H01's guaranteed surface.
 
 ### Notification normalization
 

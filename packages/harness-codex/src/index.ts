@@ -25,7 +25,9 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
 import type {
   EventEnvelope,
   EventKind,
@@ -56,6 +58,12 @@ export type CodexHarnessOptions = Readonly<{
   cwd: string;
   /** Explicit extra environment entries on top of a scrubbed environment. */
   env?: Readonly<Record<string, string>>;
+  /**
+   * Dedicated state directory for this managed Codex child. When omitted, the adapter creates a
+   * fresh session-scoped directory under the system temporary directory. It never falls back to
+   * the user's ambient `~/.codex`.
+   */
+  codexHome?: string;
   /** Base scope for normalized events; `sessionId` becomes the app-server thread id. */
   scope: Scope;
 }>;
@@ -180,24 +188,30 @@ function parseServerVersion(userAgent: string | undefined): string | undefined {
  * The managed child inherits only what an app-server needs to boot. Nothing that could silently
  * attach it to the user's ambient Codex home, desktop session, or in-process Node configuration.
  */
-function scrubbedEnvironment(extra: Readonly<Record<string, string>> | undefined): NodeJS.ProcessEnv {
+function scrubbedEnvironment(
+  extra: Readonly<Record<string, string>> | undefined,
+  codexHome: string,
+): NodeJS.ProcessEnv {
   const inherited: NodeJS.ProcessEnv = {};
   for (const key of ['PATH', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'SystemRoot', 'COMSPEC']) {
     const value = process.env[key];
     if (value !== undefined) inherited[key] = value;
   }
   if (inherited.PATH === undefined && inherited.TMPDIR === undefined) inherited.TMPDIR = tmpdir();
-  return { ...inherited, ...extra };
+  // Set this last so an `env.CODEX_HOME` value cannot silently defeat managed-session isolation.
+  return { ...inherited, ...extra, CODEX_HOME: codexHome };
 }
 
 export class CodexAppServerHarnessAdapter implements CodexHarnessAdapter {
   private readonly scope: Scope;
   private readonly env: NodeJS.ProcessEnv;
+  private readonly codexHome: string;
   private readonly sourceId = `codex-app-server:${randomUUID()}`;
   private readonly shortId = this.sourceId.slice(-8);
   private readonly eventBus = new EventBus();
   private readonly pendingRequests = new Map<number, PendingRequest>();
   private readonly pendingApprovals = new Map<string, PendingApproval>();
+  private readonly managedThreadIds = new Set<string>();
   private readonly diagnosticLog: string[] = [];
 
   private child?: ChildProcess;
@@ -217,7 +231,12 @@ export class CodexAppServerHarnessAdapter implements CodexHarnessAdapter {
 
   constructor(private readonly options: CodexHarnessOptions) {
     this.scope = options.scope;
-    this.env = scrubbedEnvironment(options.env);
+    if (options.codexHome !== undefined && !isAbsolute(options.codexHome)) {
+      throw new TypeError('codexHome must be an absolute path');
+    }
+    this.codexHome = options.codexHome ?? mkdtempSync(join(tmpdir(), 'echopilot-codex-'));
+    mkdirSync(this.codexHome, { recursive: true, mode: 0o700 });
+    this.env = scrubbedEnvironment(options.env, this.codexHome);
   }
 
   async info(): Promise<CodexHarnessInfo> {
@@ -348,9 +367,16 @@ export class CodexAppServerHarnessAdapter implements CodexHarnessAdapter {
       throw new TypeError('resume() requires a thread id');
     }
     this.assertMutable('resume');
+    if (!this.managedThreadIds.has(sessionId)) {
+      throw new Error(
+        `resume() refuses thread "${sessionId}" because this adapter instance did not create it`,
+      );
+    }
     await this.serialize(async () => {
       const response = asRecord(await this.request(METHODS.threadResume, { threadId: sessionId }));
-      this.threadId = readString(asRecord(response.thread), 'id') ?? sessionId;
+      const resumedThreadId = readString(asRecord(response.thread), 'id') ?? sessionId;
+      this.managedThreadIds.add(resumedThreadId);
+      this.threadId = resumedThreadId;
     });
   }
 
@@ -410,6 +436,7 @@ export class CodexAppServerHarnessAdapter implements CodexHarnessAdapter {
       throw new Error('The app-server did not return a thread id for thread/start');
     }
     this.threadId = threadId;
+    this.managedThreadIds.add(threadId);
     return threadId;
   }
 

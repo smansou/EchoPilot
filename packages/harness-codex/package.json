@@ -8,6 +8,6 @@
   "scripts": {
     "generate": "node scripts/generate-protocol.mjs",
     "check:generated": "node scripts/generate-protocol.mjs --check",
-    "test": "node --import tsx --test test/h01.acceptance.test.ts"
+    "test": "node --import tsx --test test/*.test.ts"
   }
 }
