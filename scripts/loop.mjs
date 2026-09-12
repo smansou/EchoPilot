@@ -16,6 +16,7 @@ const IDLE_MS=180_000;
 const CALL_MS=30*60_000;
 const CHECK_MS=5*60_000;
 const AGENT_BIN=process.env.LOOP_AGENT_BIN??'codex';
+const AGENT_CODEX_HOME=process.env.LOOP_CODEX_HOME??'';
 const DEFAULT_MODEL=process.env.LOOP_MODEL??'deepseek-flash';
 const MAX_ACTIVE=Math.max(0,Number.parseInt(process.env.LOOP_MAX_AGENTS??'0',10)||0);
 const MAX_TRANSIENT_FAILURES=Math.max(1,Number.parseInt(process.env.LOOP_MAX_TRANSIENT_FAILURES??'3',10)||3);
@@ -78,9 +79,9 @@ async function update(id,patch,message){
  await save(message?{at:new Date().toISOString(),ticketId:id,message}:undefined);
 }
 
-async function processRun(command,args,{cwd=root,input='',timeout=CHECK_MS,onLine}={}){
+async function processRun(command,args,{cwd=root,input='',timeout=CHECK_MS,onLine,env={}}={}){
  return new Promise((resolveRun,reject)=>{
-  const child=spawn(command,args,{cwd,detached:process.platform!=='win32',stdio:['pipe','pipe','pipe'],env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'never',GIT_EDITOR:'true'}});
+  const child=spawn(command,args,{cwd,detached:process.platform!=='win32',stdio:['pipe','pipe','pipe'],env:{...process.env,...env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'never',GIT_EDITOR:'true'}});
   let out='',err='',buffer='',timedOut=false,idle;
   const stop=()=>{try{process.kill(-(child.pid??0),'SIGTERM');}catch{child.kill('SIGTERM');}setTimeout(()=>{try{process.kill(-(child.pid??0),'SIGKILL');}catch{}},1500).unref();};
   const hard=setTimeout(()=>{timedOut=true;stop();},timeout);
@@ -240,11 +241,11 @@ async function agentCall(ticket,record,role,cwd,prompt,dir){
  const args=['exec','-c','approval_policy="never"','-s',role==='review'?'read-only':'workspace-write','-C',cwd,'-m',route.model,'-c',`model_reasoning_effort=${JSON.stringify(route.effort)}`,'--ephemeral','--json','--output-schema',schemaPath,'-o',resultPath,'-'];
  let run;
  if(useCmux){
-  await writeFile(jobPath,JSON.stringify({agentBin:AGENT_BIN,args,cwd,promptFile:promptPath,logFile:logPath,exitFile:exitPath,model:route.model,label:`${ticket.id} · ${role}`}),{mode:0o600});
+  await writeFile(jobPath,JSON.stringify({agentBin:AGENT_BIN,args,cwd,promptFile:promptPath,logFile:logPath,exitFile:exitPath,model:route.model,label:`${ticket.id} · ${role}`,...(AGENT_CODEX_HOME?{env:{CODEX_HOME:AGENT_CODEX_HOME}}:{})}),{mode:0o600});
   const surface=await ticketSurface(ticket,cwd,`node ${quote(CMUX_RUNNER)} ${quote(jobPath)}`,`${ticket.id} · ${role}`);
   run=await waitForSurface(surface,{exitPath,logPath,ticketId:ticket.id,role});
  }else{
-  run=await processRun(AGENT_BIN,args,{cwd,input:prompt,timeout:CALL_MS,onLine:line=>{try{const event=JSON.parse(line);if(event.type)void update(ticket.id,{detail:`${role} · ${event.type}`});}catch{}}});
+  run=await processRun(AGENT_BIN,args,{cwd,input:prompt,timeout:CALL_MS,env:AGENT_CODEX_HOME?{CODEX_HOME:AGENT_CODEX_HOME}:{},onLine:line=>{try{const event=JSON.parse(line);if(event.type)void update(ticket.id,{detail:`${role} · ${event.type}`});}catch{}}});
   await writeFile(logPath,run.err+'\n'+run.out,{mode:0o600});
  }
  if(run.code!==0||run.timedOut){
