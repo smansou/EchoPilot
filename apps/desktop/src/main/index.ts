@@ -1,4 +1,5 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, protocol, session, Menu } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, protocol, session, Menu, type IpcMainInvokeEvent } from 'electron';
+import { existsSync } from 'node:fs';
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
 import { join, resolve, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -15,6 +16,19 @@ import {
 } from './window-policy';
 import { createNativeHost, type NativeHost } from './native-host';
 import { createShellTray, type ShellTray } from './tray';
+import {
+  KEY_ENTRY_CHANNEL,
+  createDisabledProvider,
+  createFileKernelStorage,
+  createKeychainSecretStore,
+  createNativeCaptureOperation,
+  createNativeHelperBridge,
+  createSecurityKernel,
+  parseKeyEntryRequest,
+  parseKeyEntryResult,
+  type NativeHelperBridge,
+  type SecurityKernel,
+} from '../../../../packages/security/src/index';
 
 protocol.registerSchemesAsPrivileged([{scheme:'echo',privileges:{standard:true,secure:true,supportFetchAPI:true}}]);
 const smoke = process.argv.includes('--smoke');
@@ -36,6 +50,36 @@ function requireShell(): Shell {
 }
 const rendererRoot = resolve(__dirname, '../renderer');
 const fixtureJournalPath = resolve(__dirname, '../../fixtures/bootstrap/session.jsonl');
+let secretHelperBridge: NativeHelperBridge | null = null;
+let securityKernel: SecurityKernel | null = null;
+/** The native helper is spawned with stdio pipes only: it is reachable from this parent process and nowhere else. */
+function resolveSecretHelperPath(): string {
+  const candidates = [
+    resolve(__dirname, '../../../native/macos/.build/release/echopilot-secrets'),
+    resolve(process.cwd(), 'native/macos/.build/release/echopilot-secrets'),
+    resolve(process.cwd(), 'native/macos/.build/debug/echopilot-secrets'),
+  ];
+  return candidates.find(candidate => existsSync(candidate)) ?? candidates[0] ?? 'echopilot-secrets';
+}
+function getSecurityKernel(): SecurityKernel {
+  if (securityKernel) return securityKernel;
+  secretHelperBridge = createNativeHelperBridge({ helperPath: resolveSecretHelperPath() });
+  securityKernel = createSecurityKernel({
+    // Native capabilities are registered through the private parent channel; the helper advertises
+    // keychain.* and capture.screen at handshake, and secrets travel on stdin rather than argv.
+    secrets: createKeychainSecretStore(secretHelperBridge),
+    storage: createFileKernelStorage(join(app.getPath('userData'), 'security', 'kernel-state.json')),
+    capture: createNativeCaptureOperation(secretHelperBridge),
+    // Local-only and Project Partner scopes are the default: egress stays unreachable until an endpoint is configured.
+    provider: createDisabledProvider(),
+  });
+  return securityKernel;
+}
+function isTrustedRenderer(event: IpcMainInvokeEvent): boolean {
+  return [widget, dashboard].some(window => window?.webContents === event.sender)
+    && event.senderFrame === event.sender.mainFrame
+    && !!event.senderFrame?.url.startsWith('echo://app/index.html?view=');
+}
 function publish() {
   const state = coordinator.getState();
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send('echo:state', state);
@@ -187,6 +231,7 @@ async function ready() {
   await bootstrapJournal();
   ipcMain.handle('echo:command', (event, payload: unknown) => {
     if (![widget,dashboard].some(window => window?.webContents === event.sender) || event.senderFrame !== event.sender.mainFrame || !event.senderFrame?.url.startsWith('echo://app/index.html?view=')) throw new Error('Untrusted IPC sender');
+    if (typeof payload === 'object' && payload !== null && ('secret' in payload || 'apiKey' in payload)) throw new Error('Secrets must be submitted over the dedicated key-entry channel');
     const command = parseCommand(payload);
     switch(command.type) {
       case 'get-state': return coordinator.getState();
@@ -195,6 +240,13 @@ async function ready() {
       case 'open-dashboard': openDashboard(); break;
     }
     return publish();
+  });
+  // Dedicated key-entry channel: the key is validated, stored in the Keychain through the native
+  // helper, and the renderer gets a redacted reference back. It is never logged or echoed.
+  ipcMain.handle(KEY_ENTRY_CHANNEL, async (event, payload: unknown) => {
+    if (!isTrustedRenderer(event)) throw new Error('Untrusted IPC sender');
+    const request = parseKeyEntryRequest(payload);
+    return parseKeyEntryResult(await getSecurityKernel().submitProviderKey(request), request.secret);
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'EchoPilot',submenu:[{label:'Mission Control',click:openDashboard},{role:'quit'}]},{role:'editMenu'},{role:'windowMenu'}]));
   widget = createWindow('widget');
@@ -222,6 +274,7 @@ async function ready() {
     app.quit();
   }
 }
+app.on('will-quit', () => { secretHelperBridge?.dispose(); secretHelperBridge = null; securityKernel = null; });
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance',openDashboard);
