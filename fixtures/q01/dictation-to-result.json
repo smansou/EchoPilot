@@ -1,0 +1,113 @@
+{
+  "contractVersion": 1,
+  "scenarioId": "q01-dictation-to-result",
+  "seed": "q01-seed-001",
+  "consent": "synthetic",
+  "events": [
+    {
+      "eventId": "utt-001",
+      "at": "2026-09-12T09:00:00.000Z",
+      "kind": "user_utterance",
+      "trust": "user_explicit",
+      "text": "dictate: summarize what ticket Q01 must verify",
+      "data": { "prefix": "dictate:" }
+    },
+    {
+      "eventId": "screen-001",
+      "at": "2026-09-12T09:00:00.250Z",
+      "kind": "screenshot",
+      "trust": "imported",
+      "text": "[redacted screenshot] packages/eval/test/replay.test.ts is open",
+      "data": { "redacted": true }
+    },
+    {
+      "eventId": "harness-001",
+      "at": "2026-09-12T09:00:01.000Z",
+      "kind": "harness_event",
+      "trust": "tool_observed",
+      "text": "tool_completed: node --import tsx --test packages/core/src/index.test.ts exit=0",
+      "data": {
+        "tool": "node --test",
+        "status": "completed",
+        "coveredPaths": ["packages/core/src"]
+      }
+    },
+    {
+      "eventId": "provider-001",
+      "at": "2026-09-12T09:00:01.500Z",
+      "kind": "provider_response",
+      "trust": "agent_reported",
+      "text": "recorded fake provider response",
+      "data": {
+        "providerId": "fake-synthetic",
+        "purpose": "dictation_correction",
+        "text": "Summarize what ticket Q01 must verify."
+      }
+    },
+    {
+      "eventId": "claim-001",
+      "at": "2026-09-12T09:00:02.000Z",
+      "kind": "agent_message",
+      "trust": "agent_reported",
+      "text": "All repository tests pass, including the paid model benchmark.",
+      "data": { "evidenceIds": ["harness-001"] }
+    },
+    {
+      "eventId": "memory-001",
+      "at": "2026-09-12T09:00:02.500Z",
+      "kind": "memory",
+      "trust": "tool_observed",
+      "text": "memory query: what must ticket Q01 verify",
+      "data": {
+        "query": "what must ticket Q01 verify",
+        "evidenceIds": ["harness-001"]
+      }
+    },
+    {
+      "eventId": "action-001",
+      "at": "2026-09-12T09:00:03.000Z",
+      "kind": "action",
+      "trust": "tool_observed",
+      "text": "insert corrected dictation",
+      "data": {
+        "actionId": "action-001",
+        "tool": "insert_text",
+        "effect": "local_write",
+        "status": "completed",
+        "evidenceIds": ["utt-001", "provider-001"]
+      }
+    }
+  ],
+  "expectations": [
+    {
+      "checkId": "routing",
+      "sourceEventId": "utt-001",
+      "expect": { "destination": "dictation", "basis": "explicit_prefix" }
+    },
+    {
+      "checkId": "dictation_edit",
+      "sourceEventId": "utt-001",
+      "expect": { "insertedText": "Summarize what ticket Q01 must verify." }
+    },
+    {
+      "checkId": "factual_claim",
+      "sourceEventId": "claim-001",
+      "expect": { "grounded": true }
+    },
+    {
+      "checkId": "memory_evidence",
+      "sourceEventId": "memory-001",
+      "expect": { "evidenceIds": ["harness-001"] }
+    },
+    {
+      "checkId": "attention",
+      "sourceEventId": "claim-001",
+      "expect": { "spoken": true }
+    },
+    {
+      "checkId": "action_receipt",
+      "sourceEventId": "action-001",
+      "expect": { "status": "completed" }
+    }
+  ]
+}
