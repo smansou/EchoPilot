@@ -335,8 +335,11 @@ function commandSpawn() {
   });
   const state = readState();
   const agents = [...new Set([...(state.agents ?? []), surface])];
-  const plan = sync({ ws, supervisorSurface, agents });
-  console.log(JSON.stringify({ surface, ...plan }));
+  // Keep workers as tabs in one helper pane. Rebuilding a split grid on every
+  // spawn races cmux's asynchronous pane collapse and can orphan surfaces;
+  // tabs provide the requested per-agent visibility without that failure mode.
+  writeState({ workspace: ws, supervisorSurface, agents, updatedAt: new Date().toISOString() });
+  console.log(JSON.stringify({ surface, workspace: ws, supervisorSurface, agents }));
 }
 
 function commandSync() {

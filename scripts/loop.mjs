@@ -129,7 +129,9 @@ async function worktree(ticket){
 // third of the workspace and the two thirds to the right hold one grid cell per
 // flying agent. LOOP_TERMINALS=direct keeps the subprocess-only behaviour for runs
 // that have no cmux around them.
-const CMUX_BIN=process.env.CMUX_BIN??'cmux';
+// cmux's CLI is bundled with the macOS app and is not normally on PATH.  Keep
+// the override for other installations, but make the desktop app the default.
+const CMUX_BIN=process.env.CMUX_BIN??'/Applications/cmux.app/Contents/Resources/bin/cmux';
 const CMUX_GRID=join(root,'scripts','cmux-grid.mjs');
 const CMUX_RUNNER=join(root,'scripts','loop-agent-call.mjs');
 const TERMINALS=(process.env.LOOP_TERMINALS??'direct').toLowerCase();
@@ -137,6 +139,7 @@ const CMUX_WORKSPACE=process.env.CMUX_WORKSPACE_ID??'';
 const CMUX_SUPERVISOR=process.env.CMUX_SUPERVISOR_SURFACE??process.env.CMUX_SURFACE_ID??'';
 const useCmux=TERMINALS==='cmux'||(TERMINALS==='auto'&&Boolean(CMUX_WORKSPACE&&CMUX_SUPERVISOR));
 const agentSurfaces=new Map();
+const activeSurfaces=new Set();
 let statusPending=false,lastStatusAt=0;
 
 function quote(value){return `'${String(value).replace(/'/g,"'\\''")}'`;}
@@ -161,25 +164,25 @@ async function ticketSurface(ticket,cwd,invocation,label){
  const existing=agentSurfaces.get(ticket.id);
  if(existing){
   const sent=await grid('send',['--surface',existing,'--command',invocation]);
-  if(sent.surface){await labelSurface(existing,label);return existing;}
+  if(sent.surface){activeSurfaces.add(existing);await labelSurface(existing,label);return existing;}
   agentSurfaces.delete(ticket.id);
  }
- const spawned=await grid('spawn',['--name',ticket.id,'--cwd',cwd,'--command',invocation,'--title',label]);
- agentSurfaces.set(ticket.id,spawned.surface);
- return spawned.surface;
+  const spawned=await grid('spawn',['--name',ticket.id,'--cwd',cwd,'--command',invocation,'--title',label]);
+  agentSurfaces.set(ticket.id,spawned.surface);
+  activeSurfaces.add(spawned.surface);
+  return spawned.surface;
 }
 async function releaseTicketSurface(ticketId){
  const surface=agentSurfaces.get(ticketId);if(!surface)return;
- agentSurfaces.delete(ticketId);
- try{await grid('release',['--surface',surface]);}catch(error){console.error(`cmux: could not release ${ticketId}: ${error.message}`);}
+ // Keep the completed transcript visible.  The same ticket reuses this tab on
+ // a later repair run; only the active-process marker is cleared.
+ activeSurfaces.delete(surface);
 }
 async function stopAgents(){
  if(!useCmux)return;
- for(const surface of [...agentSurfaces.values()]){
+ for(const surface of [...activeSurfaces]){
   try{await cmux(['send-key','--workspace',CMUX_WORKSPACE,'--surface',surface,'ctrl+c'],{timeout:15_000});}catch{}
  }
- await new Promise(resolveWait=>setTimeout(resolveWait,2000));
- for(const ticketId of [...agentSurfaces.keys()])await releaseTicketSurface(ticketId);
 }
 async function readExitCode(path){
  try{const value=Number.parseInt((await readFile(path,'utf8')).trim(),10);return Number.isNaN(value)?undefined:value;}catch{return undefined;}
@@ -347,5 +350,5 @@ async function retryBlocked(tickets,ids){
  console.log(`Requeued ${selected.map(ticket=>ticket.id).join(', ')}; no candidate files were discarded`);
 }
 async function selfTest(){const a={id:'A',deps:[],block:'A',files:['packages/a/']},b={id:'B',deps:[],block:'B',files:['packages/b/']},c={id:'C',deps:[],block:'C',files:['packages/a/x/']};state={tickets:{A:{status:'ready'},B:{status:'ready'},C:{status:'ready'}}};const recognized=integratedTicket('a5b57cdace8026f4a31a7f7b5f51fbc23acb0731\tfeat(F01): complete shared contracts');const fenced=parseStructuredResult('```json\n{"ok":true}\n```');if(conflict(a,b)||!conflict(a,c)||!testFile('x/a.test.ts')||allowed('../x',['x/'])||readyBatch([a,b,c],new Map()).map(x=>x.id).join(',')!=='A,B'||recognized?.id!=='F01'||recognized.commit!=='a5b57cdace8026f4a31a7f7b5f51fbc23acb0731'||integratedTicket('abc\ttest(F01): red baseline')||fenced.ok!==true)throw new Error('self-test failed');console.log('loop self-test passed');}
-async function main(){if(process.argv.includes('--self-test'))return selfTest();const tickets=JSON.parse(await readFile(join(root,'BACKLOG.json'),'utf8')).tickets;if(process.argv.includes('--dry-run')){console.table(tickets.map(t=>({id:t.id,deps:t.deps.join(','),...routeFor({substantiveFailures:0},'worker')})));return;}const available=await processRun(AGENT_BIN,['--version'],{timeout:15_000});if(available.code!==0)throw new Error(`Agent CLI is unavailable: ${AGENT_BIN}`);await initialize(tickets);if(process.argv.includes('--initialize-only')){const done=Object.values(state.tickets).filter(record=>record.status==='done');console.log(`Initialized ${tickets.length} tickets: ${done.length} done, ${tickets.length-done.length} remaining`);for(const record of done)console.log(`${record.id} ${record.commit}`);return;}const retryIndex=process.argv.indexOf('--retry-blocked');if(retryIndex>=0){await retryBlocked(tickets,process.argv.slice(retryIndex+1));return;}const server=serve();console.log(`EchoPilot lean loop: http://127.0.0.1:${PORT}`);process.on('SIGINT',()=>{stopping=true;server.close();});process.on('SIGTERM',()=>{stopping=true;server.close();});await loop(tickets);server.close();}
+async function main(){if(process.argv.includes('--self-test'))return selfTest();const tickets=JSON.parse(await readFile(join(root,'BACKLOG.json'),'utf8')).tickets;if(process.argv.includes('--dry-run')){console.table(tickets.map(t=>({id:t.id,deps:t.deps.join(','),...routeFor({substantiveFailures:0},'worker')})));return;}if(TERMINALS==='cmux'&&(!CMUX_WORKSPACE||!CMUX_SUPERVISOR))throw new Error('LOOP_TERMINALS=cmux requires a loop launched from a cmux terminal (CMUX_WORKSPACE_ID and CMUX_SURFACE_ID are missing)');const available=await processRun(AGENT_BIN,['--version'],{timeout:15_000});if(available.code!==0)throw new Error(`Agent CLI is unavailable: ${AGENT_BIN}`);await initialize(tickets);if(process.argv.includes('--initialize-only')){const done=Object.values(state.tickets).filter(record=>record.status==='done');console.log(`Initialized ${tickets.length} tickets: ${done.length} done, ${tickets.length-done.length} remaining`);for(const record of done)console.log(`${record.id} ${record.commit}`);return;}const retryIndex=process.argv.indexOf('--retry-blocked');if(retryIndex>=0){await retryBlocked(tickets,process.argv.slice(retryIndex+1));return;}const server=serve();console.log(`EchoPilot lean loop: http://127.0.0.1:${PORT}`);process.on('SIGINT',()=>{stopping=true;server.close();});process.on('SIGTERM',()=>{stopping=true;server.close();});await loop(tickets);server.close();}
 main().catch(error=>{console.error(error);process.exitCode=1;});

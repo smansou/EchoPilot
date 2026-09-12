@@ -48,7 +48,13 @@ If a ticket is blocked after an infrastructure interruption, requeue only the af
 pnpm loop:retry -- F02 Q01 S01
 ```
 
-The normal terminal mode is direct subprocess execution. Set `LOOP_TERMINALS=cmux` only when an on-screen cmux workspace and supervisor surface are intentionally available.
+The normal terminal mode is direct subprocess execution. For visible worker tabs, open a terminal inside cmux and run:
+
+```sh
+LOOP_CODEX_HOME="$HOME/.codex-deepseek-worker" LOOP_MODEL=deepseek-flash LOOP_MAX_AGENTS=10 pnpm loop:cmux
+```
+
+The loop creates one right-side helper pane and one persistent, labeled terminal tab per ticket. It reuses that tab for retries and leaves completed transcripts visible. cmux mode requires the shell's `CMUX_WORKSPACE_ID`/`CMUX_SURFACE_ID`; it intentionally fails fast when launched from an ordinary Terminal because cmux rejects outside processes.
 
 `LOOP_MAX_AGENTS=0` removes the policy cap. The dependency graph and declared file ownership still prevent conflicting tickets from running together. Full checks and merges are serialized. Start with 10 and lower it only if API throttling, memory pressure, or local installation contention reduces throughput.
 
