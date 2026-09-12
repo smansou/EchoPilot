@@ -1,0 +1,332 @@
+{
+  "contractVersion": 1,
+  "fixtureId": "memory-live-atlas",
+  "consent": "synthetic",
+  "note": "Synthetic multi-turn Atlas session for the M02 acceptance test (live event batch -> local extraction -> bounded context -> grounded answer). No real user data. The decision canary must be answerable after a restart; the raw-log canary lives only inside the padding turns and must never enter a bounded prompt.",
+  "profileId": "profile-live",
+  "projectId": "project-atlas",
+  "worktreeId": "worktree-atlas-main",
+  "sessionId": "session-atlas-1",
+  "question": {
+    "text": "What did we decide on 2026-09-08 about where Atlas keeps durable project memory?",
+    "expectedEvidenceEventId": "evt-atlas-decision-004",
+    "expectedAnswerCanary": "echopilotm02atlasdecision9d4c1e"
+  },
+  "padding": {
+    "turns": 300,
+    "canary": "echopilotm02rawlogcanary5b7f20",
+    "startedAt": "2026-09-09T08:00:00.000Z",
+    "eventIdPrefix": "evt-atlas-pad",
+    "payloadRefPrefix": "fixture://atlas/pad",
+    "sourceSequenceBase": 1000,
+    "sentence": "Routine Atlas session turn with no decision value."
+  },
+  "events": [
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-user-001",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0001",
+      "sourceSequence": 1,
+      "ingestSequence": 1,
+      "occurredAt": "2026-09-08T09:00:00.000Z",
+      "observedAt": "2026-09-08T09:00:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "user_utterance",
+      "payloadRef": "fixture://atlas/user-001",
+      "contentHash": "sha256:atlas-0001",
+      "trust": "user_explicit"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-agent-002",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0002",
+      "sourceSequence": 2,
+      "ingestSequence": 2,
+      "occurredAt": "2026-09-08T09:01:00.000Z",
+      "observedAt": "2026-09-08T09:01:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "agent_message",
+      "payloadRef": "fixture://atlas/agent-002",
+      "contentHash": "sha256:atlas-0002",
+      "trust": "agent_reported"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-tool-003",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0003",
+      "sourceSequence": 3,
+      "ingestSequence": 3,
+      "occurredAt": "2026-09-08T09:02:00.000Z",
+      "observedAt": "2026-09-08T09:02:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "tool_completed",
+      "payloadRef": "fixture://atlas/tool-003",
+      "contentHash": "sha256:atlas-0003",
+      "trust": "tool_observed"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-decision-004",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0004",
+      "sourceSequence": 4,
+      "ingestSequence": 4,
+      "occurredAt": "2026-09-08T09:04:00.000Z",
+      "observedAt": "2026-09-08T09:04:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "decision",
+      "payloadRef": "fixture://atlas/decision-004",
+      "contentHash": "sha256:atlas-0004",
+      "trust": "user_explicit"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-user-005",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0005",
+      "sourceSequence": 5,
+      "ingestSequence": 5,
+      "occurredAt": "2026-09-08T09:05:00.000Z",
+      "observedAt": "2026-09-08T09:05:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "user_utterance",
+      "payloadRef": "fixture://atlas/user-005",
+      "contentHash": "sha256:atlas-0005",
+      "trust": "user_explicit"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-agent-006",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0006",
+      "sourceSequence": 6,
+      "ingestSequence": 6,
+      "occurredAt": "2026-09-08T09:06:00.000Z",
+      "observedAt": "2026-09-08T09:06:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "agent_message",
+      "payloadRef": "fixture://atlas/agent-006",
+      "contentHash": "sha256:atlas-0006",
+      "trust": "agent_reported"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-user-007",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0007",
+      "sourceSequence": 7,
+      "ingestSequence": 7,
+      "occurredAt": "2026-09-08T09:07:00.000Z",
+      "observedAt": "2026-09-08T09:07:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "user_utterance",
+      "payloadRef": "fixture://atlas/user-007",
+      "contentHash": "sha256:atlas-0007",
+      "trust": "user_explicit"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-user-008",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0008",
+      "sourceSequence": 8,
+      "ingestSequence": 8,
+      "occurredAt": "2026-09-08T09:12:00.000Z",
+      "observedAt": "2026-09-08T09:12:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "user_utterance",
+      "payloadRef": "fixture://atlas/user-008",
+      "contentHash": "sha256:atlas-0008",
+      "trust": "user_explicit"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-tool-009",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0009",
+      "sourceSequence": 9,
+      "ingestSequence": 9,
+      "occurredAt": "2026-09-08T09:13:00.000Z",
+      "observedAt": "2026-09-08T09:13:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "tool_completed",
+      "payloadRef": "fixture://atlas/tool-009",
+      "contentHash": "sha256:atlas-0009",
+      "trust": "tool_observed"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-user-010",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0010",
+      "sourceSequence": 10,
+      "ingestSequence": 10,
+      "occurredAt": "2026-09-08T09:20:00.000Z",
+      "observedAt": "2026-09-08T09:20:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "user_utterance",
+      "payloadRef": "fixture://atlas/user-010",
+      "contentHash": "sha256:atlas-0010",
+      "trust": "user_explicit"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-agent-011",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0011",
+      "sourceSequence": 11,
+      "ingestSequence": 11,
+      "occurredAt": "2026-09-08T09:25:00.000Z",
+      "observedAt": "2026-09-08T09:25:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "agent_message",
+      "payloadRef": "fixture://atlas/agent-011",
+      "contentHash": "sha256:atlas-0011",
+      "trust": "agent_reported"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-atlas-decision-012",
+      "sourceId": "source-atlas-live",
+      "sourceEventId": "atlas-0012",
+      "sourceSequence": 12,
+      "ingestSequence": 12,
+      "occurredAt": "2026-09-08T09:30:00.000Z",
+      "observedAt": "2026-09-08T09:30:00.400Z",
+      "scope": {
+        "profileId": "profile-live",
+        "projectId": "project-atlas",
+        "worktreeId": "worktree-atlas-main",
+        "sessionId": "session-atlas-1",
+        "sensitivity": "normal"
+      },
+      "kind": "decision",
+      "payloadRef": "fixture://atlas/decision-012",
+      "contentHash": "sha256:atlas-0012",
+      "trust": "user_explicit"
+    }
+  ],
+  "payloads": {
+    "fixture://atlas/user-001": {
+      "text": "Atlas needs durable memory for project decisions. Where should that memory live?"
+    },
+    "fixture://atlas/agent-002": {
+      "text": "Two options: one shared database for every project, or one encrypted database per project."
+    },
+    "fixture://atlas/tool-003": {
+      "tool": "sqlite-bench",
+      "command": "sqlite-bench --project-database",
+      "taskId": "task-atlas-bench",
+      "title": "Benchmark the per-project database",
+      "exitCode": 0,
+      "receiptId": "receipt-atlas-bench-1",
+      "output": "per-project database stayed under the latency budget"
+    },
+    "fixture://atlas/decision-004": {
+      "question": "Where does Atlas keep durable project memory?",
+      "choice": "One encrypted database per project, with the profile registry stored separately. Canary echopilotm02atlasdecision9d4c1e marks this decision.",
+      "rationale": "Project-scoped databases keep a query from crossing project boundaries.",
+      "decidingActor": "user"
+    },
+    "fixture://atlas/user-005": {
+      "text": "Record that decision so it survives a restart."
+    },
+    "fixture://atlas/agent-006": {
+      "text": "I switched Atlas to one shared memory database instead."
+    },
+    "fixture://atlas/user-007": {
+      "text": "No - the per-project database decision stands; the agent claim is wrong."
+    },
+    "fixture://atlas/user-008": {
+      "text": "Unrelated: the widget should list the active sessions."
+    },
+    "fixture://atlas/tool-009": {
+      "tool": "pnpm",
+      "command": "pnpm typecheck",
+      "taskId": "task-atlas-typecheck",
+      "title": "Typecheck the memory package",
+      "exitCode": 0,
+      "receiptId": "receipt-atlas-typecheck-1"
+    },
+    "fixture://atlas/user-010": {
+      "text": "Keep the retention question open for later."
+    },
+    "fixture://atlas/agent-011": {
+      "text": "Retention is still undecided."
+    },
+    "fixture://atlas/decision-012": {
+      "question": "Which component owns bounded context budgeting?",
+      "choice": "packages/memory/src/context owns every compaction and budget decision.",
+      "decidingActor": "user"
+    }
+  }
+}
