@@ -1,0 +1,3 @@
+# Raw `codex app-server generate-json-schema` bundle: large upstream JSON, regenerated on demand by
+# scripts/generate-protocol.mjs. The reviewed, tracked artifact is src/generated/protocol.ts.
+schema/

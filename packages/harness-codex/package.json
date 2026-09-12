@@ -1,0 +1,13 @@
+{
+  "name": "@echopilot/harness-codex",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": { "@echopilot/contracts": "workspace:*" },
+  "scripts": {
+    "generate": "node scripts/generate-protocol.mjs",
+    "check:generated": "node scripts/generate-protocol.mjs --check",
+    "test": "node --import tsx --test test/h01.acceptance.test.ts"
+  }
+}
