@@ -12,11 +12,20 @@
  * are charged together with their call wrapper, and a deliberately failed compaction drops the
  * unadmitted dialogue while keeping the deterministic card, marking coverage `partial` without
  * ever crossing B.
+ *
+ * The budget describes what the request actually sends: tool charges use the exact `Tool <name>: `
+ * wrapper that reaches the prompt, `reserve` is the exact tokenizer's measurement of the assembled
+ * prompt minus its counted content sections, and the admitted image descriptors (with their
+ * measured charge) travel on the assembled context so the vision tower receives what was charged.
  */
 
 export const CONTEXT_CEILING_TOKENS = 8192;
 export const DEFAULT_OUTPUT_RESERVATION_TOKENS = 2048;
-/** Wrapper/separator/formatting allowance: belongs to `accounting.reserve`, never to content. */
+/**
+ * Admission allowance for wrappers/separators. Content is admitted only while this much room stays
+ * free; the returned `accounting.reserve` is then the exact measured formatting overhead, so an
+ * unusual tokenizer cannot smuggle uncounted headers past the ceiling.
+ */
 export const FORMAT_RESERVE_TOKENS = 64;
 
 export interface ModelDescriptor {
@@ -74,6 +83,15 @@ export interface EvidenceItem {
   readonly text: string;
 }
 
+/**
+ * An image that was admitted into the request: the descriptor the vision tower receives plus the
+ * processor-owned token charge it contributed. Charging pixels that are never transmitted (or
+ * transmitting pixels that were never charged) would misstate what the request actually sends.
+ */
+export interface AdmittedImage extends ImageDescriptor {
+  readonly tokens: number;
+}
+
 export interface ToolDescriptor {
   readonly name: string;
   readonly schema: unknown;
@@ -114,12 +132,19 @@ export interface AssembledContext {
   readonly totalTokens: number;
   readonly accounting: ContextAccounting;
   readonly evidenceIds: readonly string[];
+  /** The image descriptors (with their measured charge) this request actually transmits. */
+  readonly images: readonly AdmittedImage[];
   readonly prompt: string;
   readonly coverage: ContextCoverage;
 }
 
 export interface ContextAssembler {
   assemble(request: AssembleRequest): Promise<AssembledContext>;
+  /**
+   * The exact tokenizer this budget owner measures with. Consumers that must bound their own text
+   * (card levels, summaries) bound it with the same counter instead of inventing a second one.
+   */
+  readonly tokenizer: Tokenizer;
 }
 
 export interface CreateContextAssemblerOptions {
@@ -133,6 +158,7 @@ const HEADERS = {
   card: '[card]',
   dialogue: '[dialogue]',
   evidence: '[evidence]',
+  images: '[images]',
   tools: '[tools]',
 } as const;
 
@@ -185,6 +211,7 @@ export function createContextAssembler(options: CreateContextAssemblerOptions): 
   };
 
   return {
+    tokenizer,
     async assemble(request: AssembleRequest): Promise<AssembledContext> {
       if (!isRecord(request)) throw new TypeError('assemble requires a request');
       const budget = boundedBudget(request.model);
@@ -193,17 +220,18 @@ export function createContextAssembler(options: CreateContextAssemblerOptions): 
         coverage = 'partial';
       };
 
-      // Everything admitted below fits inside `remaining`; the fixed formatting allowance is
-      // charged to `accounting.reserve` so headers/separators can never push the prompt past B.
+      // Everything admitted below fits inside `remaining`; the formatting overhead is measured
+      // exactly after the prompt is assembled and charged to `accounting.reserve`, so
+      // headers/separators can never push the prompt past B.
       let remaining = Math.max(0, budget.input - FORMAT_RESERVE_TOKENS);
 
       const instruction = typeof request.instruction === 'string' ? request.instruction : '';
-      const system = trimToLimit(instruction, remaining);
+      let system = trimToLimit(instruction, remaining);
       if (system.truncated) markPartial();
       remaining -= system.tokens;
 
       const requestText = typeof request.request === 'string' ? request.request : '';
-      const requestSection = trimToLimit(requestText, remaining);
+      let requestSection = trimToLimit(requestText, remaining);
       if (requestSection.truncated) markPartial();
       remaining -= requestSection.tokens;
 
@@ -230,9 +258,19 @@ export function createContextAssembler(options: CreateContextAssemblerOptions): 
         admittedEvidence.push({ id: item.id, text: admission.value });
       }
 
+      const admittedImages: AdmittedImage[] = [];
       let imageTokensTotal = 0;
       for (const descriptor of request.images ?? []) {
-        if (!isRecord(descriptor) || typeof descriptor.id !== 'string') {
+        if (
+          !isRecord(descriptor)
+          || typeof descriptor.id !== 'string'
+          || typeof descriptor.width !== 'number'
+          || typeof descriptor.height !== 'number'
+          || !Number.isFinite(descriptor.width)
+          || !Number.isFinite(descriptor.height)
+          || descriptor.width <= 0
+          || descriptor.height <= 0
+        ) {
           markPartial();
           continue;
         }
@@ -248,6 +286,12 @@ export function createContextAssembler(options: CreateContextAssemblerOptions): 
         }
         remaining -= cost;
         imageTokensTotal += cost;
+        admittedImages.push({
+          id: descriptor.id,
+          width: descriptor.width,
+          height: descriptor.height,
+          tokens: cost,
+        });
       }
 
       const admittedTools: { name: string; schemaText: string; tokens: number }[] = [];
@@ -258,8 +302,9 @@ export function createContextAssembler(options: CreateContextAssemblerOptions): 
           continue;
         }
         const schemaText = safeSerialize(tool.schema);
-        // Schema plus its call wrapper; the raw schema text alone is never the whole charge.
-        const cost = count(schemaText) + count(`Tool call wrapper for ${tool.name}:`);
+        // Charge exactly the text the prompt below sends: the `Tool <name>: ` wrapper plus the
+        // serialized schema. The raw schema text alone is never the whole charge.
+        const cost = count(`Tool ${tool.name}: `) + count(schemaText);
         if (cost > remaining) {
           markPartial();
           continue;
@@ -320,18 +365,86 @@ export function createContextAssembler(options: CreateContextAssemblerOptions): 
         }
       }
 
-      const parts: string[] = [`${HEADERS.system}\n${system.value}`, `${HEADERS.request}\n${requestSection.value}`];
-      if (cards.value.length > 0) parts.push(`${HEADERS.card}\n${cards.value}`);
-      if (admittedDialogue.length > 0) {
-        parts.push(`${HEADERS.dialogue}\n${admittedDialogue.map((item) => item.text).join('\n')}`);
+      const renderPrompt = (): string => {
+        const parts: string[] = [
+          `${HEADERS.system}\n${system.value}`,
+          `${HEADERS.request}\n${requestSection.value}`,
+        ];
+        if (cards.value.length > 0) parts.push(`${HEADERS.card}\n${cards.value}`);
+        if (admittedDialogue.length > 0) {
+          parts.push(`${HEADERS.dialogue}\n${admittedDialogue.map((item) => item.text).join('\n')}`);
+        }
+        if (admittedEvidence.length > 0) {
+          parts.push(`${HEADERS.evidence}\n${admittedEvidence.map((item) => item.text).join('\n')}`);
+        }
+        if (admittedImages.length > 0) {
+          parts.push(`${HEADERS.images}\n${admittedImages
+            .map((image) => `Image ${image.id} ${String(image.width)}x${String(image.height)}`)
+            .join('\n')}`);
+        }
+        if (admittedTools.length > 0) {
+          parts.push(`${HEADERS.tools}\n${admittedTools.map((tool) => `Tool ${tool.name}: ${tool.schemaText}`).join('\n')}`);
+        }
+        return parts.join('\n\n');
+      };
+
+      // Measure what is actually sent. The formatting overhead is the exact tokenizer's count of
+      // the assembled prompt minus the counted content sections, so `reserve` can never understate
+      // the headers and separators the model receives.
+      const measure = (): { prompt: string; reserve: number; inputTokens: number } => {
+        const prompt = renderPrompt();
+        const bodyTokens = system.tokens
+          + requestSection.tokens
+          + cards.tokens
+          + dialogueTokens
+          + evidenceTokens
+          + toolTokens;
+        const reserve = Math.max(0, count(prompt) - bodyTokens);
+        return { prompt, reserve, inputTokens: bodyTokens + imageTokensTotal + reserve };
+      };
+
+      let fitted = measure();
+      // A tokenizer whose header/separator charge exceeds the nominal allowance, or an image-heavy
+      // request, is still never allowed past B: drop the least-grounded admitted parts until the
+      // exactly measured prompt plus the transmitted images fits the accounted input.
+      while (fitted.inputTokens > budget.input) {
+        markPartial();
+        const droppedDialogue = admittedDialogue.pop();
+        if (droppedDialogue !== undefined) {
+          dialogueTokens -= count(droppedDialogue.text);
+          fitted = measure();
+          continue;
+        }
+        const droppedTool = admittedTools.pop();
+        if (droppedTool !== undefined) {
+          toolTokens -= droppedTool.tokens;
+          fitted = measure();
+          continue;
+        }
+        const droppedImage = admittedImages.pop();
+        if (droppedImage !== undefined) {
+          imageTokensTotal -= droppedImage.tokens;
+          fitted = measure();
+          continue;
+        }
+        const droppedEvidence = admittedEvidence.pop();
+        if (droppedEvidence !== undefined) {
+          evidenceTokens -= count(droppedEvidence.text);
+          fitted = measure();
+          continue;
+        }
+        if (requestSection.tokens > 0) {
+          requestSection = { value: '', tokens: 0, truncated: true };
+          fitted = measure();
+          continue;
+        }
+        if (system.tokens > 0) {
+          system = { value: '', tokens: 0, truncated: true };
+          fitted = measure();
+          continue;
+        }
+        break;
       }
-      if (admittedEvidence.length > 0) {
-        parts.push(`${HEADERS.evidence}\n${admittedEvidence.map((item) => item.text).join('\n')}`);
-      }
-      if (admittedTools.length > 0) {
-        parts.push(`${HEADERS.tools}\n${admittedTools.map((tool) => `Tool ${tool.name}: ${tool.schemaText}`).join('\n')}`);
-      }
-      const prompt = parts.join('\n\n');
 
       const accounting: ContextAccounting = {
         system: system.tokens,
@@ -341,7 +454,7 @@ export function createContextAssembler(options: CreateContextAssemblerOptions): 
         evidence: evidenceTokens,
         images: imageTokensTotal,
         tools: toolTokens,
-        reserve: FORMAT_RESERVE_TOKENS,
+        reserve: fitted.reserve,
         output: budget.outputReservation,
       };
       const inputTokens = accounting.system
@@ -365,7 +478,8 @@ export function createContextAssembler(options: CreateContextAssemblerOptions): 
         totalTokens,
         accounting,
         evidenceIds: admittedEvidence.map((item) => item.id),
-        prompt,
+        images: admittedImages,
+        prompt: fitted.prompt,
         coverage,
       };
     },

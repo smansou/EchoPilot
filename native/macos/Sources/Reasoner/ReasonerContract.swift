@@ -29,6 +29,7 @@ public enum ReasonerContractError: Error, CustomStringConvertible, Equatable {
     case undeclaredCapacity(modelId: String)
     case missingBundle(path: String)
     case missingTokenizer(path: String)
+    case invalidTokenizer(path: String, reason: String)
     case missingWeights(path: String)
     case unboundedRequest(reason: String)
     case schemaMismatch(expected: String, received: String)
@@ -45,6 +46,8 @@ public enum ReasonerContractError: Error, CustomStringConvertible, Equatable {
             return "no Qwen3.5 bundle at \(path)"
         case .missingTokenizer(let path):
             return "bundle tokenizer is missing at \(path); exact counting is required"
+        case .invalidTokenizer(let path, let reason):
+            return "bundle tokenizer at \(path) is not usable: \(reason)"
         case .missingWeights(let path):
             return "bundle weights are missing at \(path)"
         case .unboundedRequest(let reason):
@@ -132,6 +135,23 @@ public struct ContextAccounting: Codable, Sendable, Equatable {
     }
 }
 
+/// An image descriptor the request actually transmits, together with the processor-measured token
+/// charge it contributed. A charge without a transmitted descriptor (or the reverse) would
+/// misstate what the bounded request sends, so the worker re-checks the two against each other.
+public struct AdmittedImage: Codable, Sendable, Equatable {
+    public let id: String
+    public let width: Int
+    public let height: Int
+    public let tokens: Int
+
+    public init(id: String, width: Int, height: Int, tokens: Int) {
+        self.id = id
+        self.width = width
+        self.height = height
+        self.tokens = tokens
+    }
+}
+
 public struct AssembledContext: Codable, Sendable {
     public let modelId: String
     public let maxTokens: Int
@@ -140,13 +160,15 @@ public struct AssembledContext: Codable, Sendable {
     public let totalTokens: Int
     public let accounting: ContextAccounting
     public let evidenceIds: [String]
+    /// The image descriptors (and their measured charge) this request transmits to the vision tower.
+    public let images: [AdmittedImage]
     public let prompt: String
     public let coverage: ContextCoverage
 
     public init(
         modelId: String, maxTokens: Int, outputReservation: Int, inputTokens: Int,
         totalTokens: Int, accounting: ContextAccounting, evidenceIds: [String],
-        prompt: String, coverage: ContextCoverage
+        images: [AdmittedImage], prompt: String, coverage: ContextCoverage
     ) {
         self.modelId = modelId
         self.maxTokens = maxTokens
@@ -155,6 +177,7 @@ public struct AssembledContext: Codable, Sendable {
         self.totalTokens = totalTokens
         self.accounting = accounting
         self.evidenceIds = evidenceIds
+        self.images = images
         self.prompt = prompt
         self.coverage = coverage
     }
@@ -181,6 +204,14 @@ public struct AssembledContext: Codable, Sendable {
         }
         guard inputTokens <= budget.input else {
             throw ReasonerContractError.unboundedRequest(reason: "input \(inputTokens) exceeds the input cap \(budget.input)")
+        }
+        guard accounting.images == images.reduce(0, { $0 + $1.tokens }) else {
+            throw ReasonerContractError.unboundedRequest(
+                reason: "image charge \(accounting.images) does not match the \(images.count) transmitted descriptor(s)"
+            )
+        }
+        guard images.allSatisfy({ $0.tokens > 0 }) else {
+            throw ReasonerContractError.unboundedRequest(reason: "a transmitted image was charged zero tokens")
         }
     }
 }

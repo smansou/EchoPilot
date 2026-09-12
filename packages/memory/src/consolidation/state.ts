@@ -184,11 +184,42 @@ export function cloneCoverage(coverage: CoverageRecord): CoverageRecord {
 }
 
 /**
- * Deterministic token bound for the §5.8 cards. Word counting is exact for whitespace
- * tokenizers and a lower bound for BPE tokenizers, so a bounded card never exceeds its allowance.
+ * Deterministic token bound for the §5.8 cards. The consolidator passes the exact tokenizer the
+ * context owner measures with, so a card's bound is the model's bound rather than an estimate;
+ * callers without a tokenizer fall back to whitespace counting.
  */
-export function boundCardText(text: string, maxTokens: number): string {
+export function boundCardText(
+  text: string,
+  maxTokens: number,
+  count: (value: string) => number = wordCount,
+): string {
+  const measure = (value: string): number => {
+    const measured = count(value);
+    if (typeof measured === 'number' && Number.isFinite(measured) && measured > 0) return Math.ceil(measured);
+    // A counter that cannot measure a value must never under-bound the card: fall back to the
+    // whitespace count for that value instead of pretending it costs nothing.
+    return wordCount(value);
+  };
+  if (measure(text) <= maxTokens) return text;
   const words = text.split(/\s+/).filter((word) => word.length > 0);
-  if (words.length <= maxTokens) return text;
-  return `${words.slice(0, Math.max(1, maxTokens - 1)).join(' ')} …`;
+  let low = 0;
+  let high = words.length;
+  let best = 0;
+  while (low < high) {
+    const middle = Math.floor((low + high + 1) / 2);
+    if (measure(words.slice(0, middle).join(' ')) <= maxTokens) {
+      best = middle;
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  const prefix = words.slice(0, best).join(' ');
+  if (prefix.length === 0) return '';
+  const withEllipsis = `${prefix} …`;
+  return measure(withEllipsis) <= maxTokens ? withEllipsis : prefix;
+}
+
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter((word) => word.length > 0).length;
 }

@@ -74,12 +74,17 @@ public struct ReasonerWorker {
             raw = try bundle.backend.generate(
                 task: request.task,
                 prompt: request.context.prompt,
+                images: request.context.images.map {
+                    ImageDescriptor(id: $0.id, width: $0.width, height: $0.height)
+                },
                 maxOutputTokens: request.context.outputReservation,
                 outputSchema: request.outputSchema
             )
         } catch {
             return failure(taskId: request.task.taskId, context: request.context, error: String(describing: error))
         }
+        // The generated reply is measured with the same exact tokenizer that charged the prompt;
+        // the entire decoded string (fences included) counts against the reservation.
         let measured = bundle.tokenizer.count(raw)
         guard measured <= request.context.outputReservation else {
             return failure(

@@ -42,17 +42,24 @@ export function sessionWindows(segments: readonly SegmentRecord[]): SegmentRecor
   return windows;
 }
 
-function buildSegmentCard(segments: readonly SegmentRecord[], projectId: string): string | undefined {
+function buildSegmentCard(
+  segments: readonly SegmentRecord[],
+  projectId: string,
+  count: (value: string) => number,
+): string | undefined {
   const latest = segments[segments.length - 1];
   if (latest === undefined) return undefined;
   return boundCardText([
     `Segment memory card for ${projectId} (${latest.id}, ${latest.startedAt} -> ${latest.endedAt})`,
     `Summary: ${latest.summary}`,
     `Events: ${String(latest.eventIds.length)}`,
-  ].join('\n'), SEGMENT_CARD_TOKENS);
+  ].join('\n'), SEGMENT_CARD_TOKENS, count);
 }
 
-function buildSessionCard(state: DurableConsolidationState): string | undefined {
+function buildSessionCard(
+  state: DurableConsolidationState,
+  count: (value: string) => number,
+): string | undefined {
   const windows = sessionWindows(state.segments);
   if (windows.length === 0) return undefined;
   // Prefer the newest session that actually carries a decision or fact.
@@ -83,10 +90,13 @@ function buildSessionCard(state: DurableConsolidationState): string | undefined 
     ...factLines(facts),
     `Segments: ${String(window.length)}`,
   ];
-  return boundCardText(lines.join('\n'), SESSION_CARD_TOKENS);
+  return boundCardText(lines.join('\n'), SESSION_CARD_TOKENS, count);
 }
 
-function buildProjectCard(state: DurableConsolidationState): string | undefined {
+function buildProjectCard(
+  state: DurableConsolidationState,
+  count: (value: string) => number,
+): string | undefined {
   if (state.decisions.length === 0 && state.facts.length === 0 && state.segments.length === 0) return undefined;
   const lines = [
     `Project memory card for ${state.projectId}`,
@@ -97,16 +107,24 @@ function buildProjectCard(state: DurableConsolidationState): string | undefined 
     `Segments consolidated: ${String(state.segments.length)}`,
     `Coverage: ${state.coverage.semantic}`,
   ];
-  return boundCardText(lines.join('\n'), PROJECT_CARD_TOKENS);
+  return boundCardText(lines.join('\n'), PROJECT_CARD_TOKENS, count);
 }
 
-export function buildCards(state: DurableConsolidationState): CardRecord {
+/**
+ * Cards are bounded with the tokenizer the context owner hands over, so a 500/800/1,200-token
+ * card is measured in the same tokens the bounded request will be charged.
+ */
+export function buildCards(
+  state: DurableConsolidationState,
+  count?: (value: string) => number,
+): CardRecord {
+  const measure = count ?? ((value: string) => value.split(/\s+/).filter((word) => word.length > 0).length);
   const cards: CardRecord = {};
-  const segment = buildSegmentCard(state.segments, state.projectId);
+  const segment = buildSegmentCard(state.segments, state.projectId, measure);
   if (segment !== undefined) cards.segment = segment;
-  const session = buildSessionCard(state);
+  const session = buildSessionCard(state, measure);
   if (session !== undefined) cards.session = session;
-  const project = buildProjectCard(state);
+  const project = buildProjectCard(state, measure);
   if (project !== undefined) cards.project = project;
   return cards;
 }

@@ -4,6 +4,7 @@ import Foundation
 ///
 ///   ECHOPILOT_QWEN35_BUNDLE  bundle directory (model.json + tokenizer.json + weights)
 ///   ECHOPILOT_REASONER_SCRIPT  optional scripted stand-in replies (no weights required)
+///   ECHOPILOT_REASONER_SELFTEST=1  run the deterministic tokenizer/context/worker self-test and exit
 ///
 /// One JSON request per line in, one JSON response per line out. The process never exits on a
 /// failed model call: it reports `status:"failed"` with `partial` coverage so the caller applies
@@ -44,6 +45,9 @@ func makeWorker(environment: [String: String]) -> Result<ReasonerWorker, Reasone
 }
 
 let environment = ProcessInfo.processInfo.environment
+if environment["ECHOPILOT_REASONER_SELFTEST"] == "1" {
+    exit(ReasonerSelfTest.run())
+}
 let worker: ReasonerWorker
 switch makeWorker(environment: environment) {
 case .success(let ready):

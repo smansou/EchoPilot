@@ -42,9 +42,12 @@ public struct Qwen35BundleManifest: Codable, Sendable, Equatable {
 /// The local model runtime, kept behind a protocol so the bounded-context and grounding behavior can
 /// be exercised end-to-end without weights, a download, or a paid call.
 public protocol LocalModelBackend: Sendable {
+    /// `images` are the descriptors the bounded context charged and admits; a backend forwards them
+    /// to the vision tower, so the accounting matches what the model actually receives.
     func generate(
         task: ReasoningTask,
         prompt: String,
+        images: [ImageDescriptor],
         maxOutputTokens: Int,
         outputSchema: OutputSchema
     ) throws -> String
@@ -87,9 +90,13 @@ public struct ScriptedStandInBackend: LocalModelBackend {
     public func generate(
         task: ReasoningTask,
         prompt: String,
+        images: [ImageDescriptor],
         maxOutputTokens: Int,
         outputSchema: OutputSchema
     ) throws -> String {
+        // The scripted stand-in has no vision tower; the descriptors are still the ones that were
+        // charged, which is what the budget contract is about.
+        _ = images
         if faults.contains(task.taskId) {
             throw ReasonerContractError.modelFailure(message: "scripted crash for \(task.taskId)")
         }
@@ -126,7 +133,8 @@ public struct Qwen35Bundle {
     }
 
     /// Loads a bundle directory. Weights are required unless a stand-in backend is supplied, and
-    /// the tokenizer is never optional: exact accounting cannot be an estimate.
+    /// a tokenizer that exists but does not parse is never silently replaced: exact accounting
+    /// cannot quietly degrade into an estimate.
     public static func load(at url: URL, backend suppliedBackend: LocalModelBackend? = nil) throws -> Qwen35Bundle {
         let manifestURL = url.appendingPathComponent("model.json")
         guard let data = try? Data(contentsOf: manifestURL),
@@ -138,7 +146,6 @@ public struct Qwen35Bundle {
         }
         let tokenizerURL = url.appendingPathComponent(manifest.tokenizer)
         let weightsURL = url.appendingPathComponent(manifest.weights)
-        let standIn = suppliedBackend as? ScriptedStandInBackend
         let backend: LocalModelBackend
         if let suppliedBackend {
             backend = suppliedBackend
@@ -146,20 +153,24 @@ public struct Qwen35Bundle {
             guard FileManager.default.fileExists(atPath: weightsURL.path) else {
                 throw ReasonerContractError.missingWeights(path: weightsURL.path)
             }
+            // The bundle ships the manifest, tokenizer and weights; linking the MLX runtime that
+            // executes them is a separate build step, so a missing runtime is reported instead of
+            // pretending a loaded bundle can generate.
             throw ReasonerContractError.missingWeights(
-                path: "\(weightsURL.path): no runtime linked; supply a LocalModelBackend"
+                path: "\(weightsURL.path): no local runtime is linked; supply a LocalModelBackend "
+                    + "(the Qwen3.5-4B MLX runtime is deferred)"
             )
         }
         let tokenizer: TokenCounting
-        if standIn != nil {
-            // The stand-in path mirrors the fixture seam without weights: counting still uses the
-            // real bundle tokenizer whenever it is loadable.
-            tokenizer = (try? Qwen35Tokenizer(contentsOf: tokenizerURL)) ?? ScriptedFixtureTokenizer()
-        } else {
-            guard FileManager.default.fileExists(atPath: tokenizerURL.path) else {
-                throw ReasonerContractError.missingTokenizer(path: tokenizerURL.path)
-            }
+        if FileManager.default.fileExists(atPath: tokenizerURL.path) {
+            // Present means loadable: a malformed tokenizer.json at the stand-in seam used to fall
+            // back to whitespace counting, which silently changed every measured request.
             tokenizer = try Qwen35Tokenizer(contentsOf: tokenizerURL)
+        } else if suppliedBackend is ScriptedStandInBackend {
+            // Fixture seam only: a stand-in bundle without a tokenizer file still needs a counter.
+            tokenizer = ScriptedFixtureTokenizer()
+        } else {
+            throw ReasonerContractError.missingTokenizer(path: tokenizerURL.path)
         }
         return try Qwen35Bundle(
             manifest: manifest,

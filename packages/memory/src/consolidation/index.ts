@@ -159,6 +159,12 @@ export async function createMemoryConsolidator(options: MemoryConsolidatorOption
   }
   // Rejects a model without a declared, positive, finite capacity before any work happens.
   boundedBudget(options.model);
+  // Cards are bounded in the same tokens the shared budget charges: the assembler exposes the
+  // exact tokenizer it measures with, so the §5.8 card caps cannot drift into a second estimate.
+  const cardCounter = (assembler as { tokenizer?: { count?: (text: string) => number } }).tokenizer;
+  const cardCount = cardCounter !== undefined && typeof cardCounter.count === 'function'
+    ? (text: string): number => cardCounter.count?.(text) ?? 0
+    : undefined;
 
   const state = await loadState(directory, projectId);
   const processed = new Set(state.processedEventIds);
@@ -307,7 +313,7 @@ export async function createMemoryConsolidator(options: MemoryConsolidatorOption
           failedJobs: [...state.coverage.failedJobs, ...failed.filter((id) => !state.coverage.failedJobs.includes(id))],
         };
       }
-      state.cards = buildCards(state);
+      state.cards = buildCards(state, cardCount);
       await saveState(directory, state);
       return { checkpoint: checkpointOf(state), coverage: cloneCoverage(state.coverage) };
     },

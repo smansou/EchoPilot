@@ -97,11 +97,11 @@ public struct ContextAssembler {
 
         func markPartial() { coverage = .partial }
 
-        let system = try trim(request.instruction, to: remaining)
+        var system = try trim(request.instruction, to: remaining)
         if system.truncated { markPartial() }
         remaining -= system.tokens
 
-        let requestSection = try trim(request.request ?? "", to: remaining)
+        var requestSection = try trim(request.request ?? "", to: remaining)
         if requestSection.truncated { markPartial() }
         remaining -= requestSection.tokens
 
@@ -123,6 +123,7 @@ public struct ContextAssembler {
             admittedEvidence.append(EvidenceItem(id: item.id, text: admission.value))
         }
 
+        var admittedImages: [AdmittedImage] = []
         var imageTokensTotal = 0
         for descriptor in request.images {
             let measured = try imageProcessor.imageTokens(width: descriptor.width, height: descriptor.height)
@@ -133,14 +134,21 @@ public struct ContextAssembler {
             }
             remaining -= cost
             imageTokensTotal += cost
+            admittedImages.append(AdmittedImage(
+                id: descriptor.id,
+                width: descriptor.width,
+                height: descriptor.height,
+                tokens: cost
+            ))
         }
 
         var admittedTools: [(name: String, schemaText: String)] = []
         var toolTokens = 0
         for tool in request.tools {
             let schemaText = tool.schema.serialized()
-            let wrapper = tokenizer.count("Tool call wrapper for \(tool.name):")
-            let cost = tokenizer.count(schemaText) + wrapper
+            // Charge exactly the text the prompt below sends: the `Tool <name>: ` wrapper plus the
+            // serialized schema.
+            let cost = tokenizer.count("Tool \(tool.name): ") + tokenizer.count(schemaText)
             if cost > remaining {
                 markPartial()
                 continue
@@ -180,18 +188,77 @@ public struct ContextAssembler {
             }
         }
 
-        var parts: [String] = ["[system]\n\(system.value)", "[request]\n\(requestSection.value)"]
-        if !cards.value.isEmpty { parts.append("[card]\n\(cards.value)") }
-        if !admittedDialogue.isEmpty {
-            parts.append("[dialogue]\n" + admittedDialogue.map(\.text).joined(separator: "\n"))
+        func renderPrompt() -> String {
+            var parts: [String] = ["[system]\n\(system.value)", "[request]\n\(requestSection.value)"]
+            if !cards.value.isEmpty { parts.append("[card]\n\(cards.value)") }
+            if !admittedDialogue.isEmpty {
+                parts.append("[dialogue]\n" + admittedDialogue.map(\.text).joined(separator: "\n"))
+            }
+            if !admittedEvidence.isEmpty {
+                parts.append("[evidence]\n" + admittedEvidence.map(\.text).joined(separator: "\n"))
+            }
+            if !admittedImages.isEmpty {
+                parts.append("[images]\n" + admittedImages.map { "Image \($0.id) \($0.width)x\($0.height)" }
+                    .joined(separator: "\n"))
+            }
+            if !admittedTools.isEmpty {
+                parts.append("[tools]\n" + admittedTools.map { "Tool \($0.name): \($0.schemaText)" }.joined(separator: "\n"))
+            }
+            return parts.joined(separator: "\n\n")
         }
-        if !admittedEvidence.isEmpty {
-            parts.append("[evidence]\n" + admittedEvidence.map(\.text).joined(separator: "\n"))
+
+        /// Measure what is actually sent: `reserve` is the exact tokenizer's count of the assembled
+        /// prompt minus its counted content sections, so headers and separators can never be
+        /// smuggled past the ceiling uncharged.
+        func measure() -> (prompt: String, reserve: Int, inputTokens: Int) {
+            let prompt = renderPrompt()
+            let bodyTokens = system.tokens
+                + requestSection.tokens
+                + cards.tokens
+                + dialogueTokens
+                + evidenceTokens
+                + toolTokens
+            let reserve = max(0, tokenizer.count(prompt) - bodyTokens)
+            return (prompt, reserve, bodyTokens + imageTokensTotal + reserve)
         }
-        if !admittedTools.isEmpty {
-            parts.append("[tools]\n" + admittedTools.map { "Tool \($0.name): \($0.schemaText)" }.joined(separator: "\n"))
+
+        var fitted = measure()
+        // An unusual tokenizer or an image-heavy request never pushes the prompt past B: drop the
+        // least-grounded admitted parts until the exact measurement plus the transmitted images fits.
+        while fitted.inputTokens > budget.input {
+            markPartial()
+            if let dropped = admittedDialogue.popLast() {
+                dialogueTokens -= tokenizer.count(dropped.text)
+                fitted = measure()
+                continue
+            }
+            if let dropped = admittedTools.popLast() {
+                toolTokens -= tokenizer.count("Tool \(dropped.name): ") + tokenizer.count(dropped.schemaText)
+                fitted = measure()
+                continue
+            }
+            if let dropped = admittedImages.popLast() {
+                imageTokensTotal -= dropped.tokens
+                fitted = measure()
+                continue
+            }
+            if let dropped = admittedEvidence.popLast() {
+                evidenceTokens -= tokenizer.count(dropped.text)
+                fitted = measure()
+                continue
+            }
+            if requestSection.tokens > 0 {
+                requestSection = (value: "", tokens: 0, truncated: true)
+                fitted = measure()
+                continue
+            }
+            if system.tokens > 0 {
+                system = (value: "", tokens: 0, truncated: true)
+                fitted = measure()
+                continue
+            }
+            break
         }
-        let prompt = parts.joined(separator: "\n\n")
 
         let accounting = ContextAccounting(
             system: system.tokens,
@@ -201,7 +268,7 @@ public struct ContextAssembler {
             evidence: evidenceTokens,
             images: imageTokensTotal,
             tools: toolTokens,
-            reserve: BoundedBudget.formatReserveTokens,
+            reserve: fitted.reserve,
             output: budget.outputReservation
         )
         let inputTokens = accounting.total - accounting.output
@@ -217,7 +284,8 @@ public struct ContextAssembler {
             totalTokens: totalTokens,
             accounting: accounting,
             evidenceIds: admittedEvidence.map(\.id),
-            prompt: prompt,
+            images: admittedImages,
+            prompt: fitted.prompt,
             coverage: coverage
         )
     }
