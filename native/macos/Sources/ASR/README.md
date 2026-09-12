@@ -23,7 +23,12 @@ Rules that match `packages/voice` one-for-one:
   `status()` while late packets are dropped instead of being transcribed or committed.
 - Mute and host failure bump the pipeline epoch: a transcription that is already in flight when the
   user mutes (or when the host fails) is cancelled and invalidated, so its late result can never be
-  applied or emitted as a final transcript.
+  applied or emitted as a final transcript. The epoch check, the planner apply and the append to the
+  committed transcript are one critical section (`VoiceTracerBridge.applyEngineResult`), so a mute
+  or failure can never land between "the result is still current" and "the result is committed".
+- The capture path and mute share one critical section too: a packet that raced the mute is either
+  cleared with the ring or dropped by the capture guard, so `queuedFrames` is 0 once `mute()`
+  resolves and no window reopens on the audio the widget already stopped showing.
 - Endpoint commits can carry empty text when the engine is certain the utterance is over; the
   widget keeps them in order and drops the empty strings when rendering.
 
@@ -56,12 +61,17 @@ opens, so the widget never hangs on a broken install.
 
 `Tests/V01PipelineTests.swift` is the native pipeline regression: exactly-once packet delivery
 through `MicrophoneGraph` + `VoiceTracerBridge`, one 400 ms window that holds each packet once,
-mute and an ordinary capture release settling while audio keeps flowing, and the 15 s window bound
-for an oversized packet. It also covers the visible failure states: mic denial (through the graph's
+15 s of speech plus trailing silence committing local text whose word timestamps are rebased from
+the engine's window onto the utterance, mute and an ordinary capture release settling while audio
+keeps flowing, and the 15 s window bound for an oversized packet. It also covers the visible
+failure states: mic denial (through the graph's
 permission override seam), device removal, lock and helper crash each keep their error code,
 message and `closed` input visible, drop the pending audio, stop opening new ASR windows, and still
 settle on `close()`. Two more cases hold the mute/failure race: a gated transcriber that answers
-only *after* `mute()` (or after a host failure) must not commit a final transcript. The suite also
+only *after* `mute()` (or after a host failure) must not commit a final transcript, a result whose
+epoch was invalidated is rejected at the single commit boundary even though the planner owned its
+window up to the reset, and packets still being delivered while `mute()` runs leave no queued input
+behind. The suite also
 asserts the production wiring itself: `WhisperKitSmallEN.isBackendLinked` is true and
 `registerProductionBackends()` registers a Silero backend, while a pack folder without the Silero
 model fails closed in `VoiceSessionBootstrap.makeLocalSession(_:)`. It never asks for microphone

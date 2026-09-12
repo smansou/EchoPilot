@@ -191,13 +191,27 @@ public final class VoiceTracerBridge: @unchecked Sendable {
         // Capture callbacks must never block on the ASR consumer; the ring absorbs stalls. Once
         // the session is muted or a host failure is visible, late packets are dropped instead of
         // being transcribed after the widget stopped showing them.
-        guard stateQueue.sync(execute: { running && !muted && !failed }) else { return }
-        host.pcmChannel.enqueue(packet)
+        //
+        // The "still accepting audio" check and the enqueue are one critical section shared with
+        // `mute()` / the failure handler: a packet that raced the mute can therefore neither land
+        // in the ring after it was cleared nor reopen the window the mute just reset.
+        let accepted = stateQueue.sync { () -> Bool in
+            guard running, !muted, !failed else { return false }
+            host.pcmChannel.enqueue(packet)
+            return true
+        }
+        guard accepted else { return }
         signal.yield(())
     }
 
+    /// True while the session consumes audio: false before `start()`, after `mute()`, after
+    /// `close()` and after a visible host failure. Always read under `stateQueue`.
+    private var isPipelineActive: Bool {
+        stateQueue.sync { running && !muted && !failed }
+    }
+
     private func drainAndProcess() async {
-        while running, !muted, !failed {
+        while isPipelineActive {
             var batch: [PCMPacket] = []
             var discontinuity = false
             host.pcmChannel.setConsumer(
@@ -205,7 +219,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
                 onDiscontinuity: { discontinuity = true }
             )
             host.pcmChannel.drain()
-            if failed || muted { return }
+            guard isPipelineActive else { return }
             if discontinuity {
                 stateQueue.sync { planner.markDiscontinuity() }
                 setInput("listening")
@@ -218,7 +232,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     }
 
     private func process(_ packet: PCMPacket) async {
-        guard !failed, !muted else { return }
+        guard isPipelineActive else { return }
         let vadState = vad.process(pcm: packet.pcm, sampleRate: packet.sampleRate)
         if vadState.isSpeech, status().input == "listening" {
             setInput("speech_candidate")
@@ -241,65 +255,105 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     }
 
     private func run(window: ASRWindow, sealed: Bool, endpoint: Bool) async {
+        guard isPipelineActive else { return }
         let epoch = stateQueue.sync { pipelineEpoch }
         let transcription = Task { [transcriber] in try await transcriber.transcribe(window) }
         stateQueue.sync { inFlightTranscription = transcription }
         do {
             let result = try await transcription.value
             // Mute, close or a host failure may have landed while the engine was running: the
-            // pending window is gone, so its late result must not be applied or emitted.
-            guard isPipelineCurrent(epoch) else { return }
-            stateQueue.sync { inFlightTranscription = nil }
-            let outcome = stateQueue.sync {
-                planner.apply(
-                    result: ASRWindowResult(text: result.text, words: result.words, endpoint: result.endpoint || endpoint),
-                    window: window,
-                    sealed: sealed
-                )
-            }
-            apply(outcome)
+            // pending window is gone, so its late result must not be applied or emitted. The check
+            // and the apply share one critical section, so the reset can never land between them.
+            applyEngineResult(
+                epoch: epoch,
+                result: ASRWindowResult(
+                    text: result.text,
+                    words: result.words,
+                    endpoint: result.endpoint || endpoint
+                ),
+                window: window,
+                sealed: sealed
+            )
         } catch {
-            guard isPipelineCurrent(epoch) else { return }
-            stateQueue.sync { inFlightTranscription = nil }
-            stateQueue.sync { planner.markDiscontinuity() }
+            let handled = stateQueue.sync { () -> Bool in
+                guard pipelineEpoch == epoch, running, !muted, !failed else { return false }
+                inFlightTranscription = nil
+                planner.markDiscontinuity()
+                return true
+            }
+            guard handled else { return }
             setInput("listening")
         }
     }
 
-    /// True while the session still runs on the pipeline generation `epoch` captured when the
-    /// engine call started: it is false after mute, close or a visible host failure.
-    private func isPipelineCurrent(_ epoch: Int) -> Bool {
-        stateQueue.sync { pipelineEpoch == epoch && running && !muted && !failed }
-    }
+    /// The session's single commit boundary: the epoch check, the planner apply and the append to
+    /// `committed` all happen inside one `stateQueue` critical section. A mute, `close()` or a
+    /// visible host failure can therefore never land between "the result is still current" and
+    /// "the result is committed": a transcription that answers after the pipeline moved on is
+    /// dropped, never appended to the widget transcript and never emitted.
+    ///
+    /// Returns the update that was emitted, or `nil` when the result belonged to a stale epoch.
+    @discardableResult
+    func applyEngineResult(
+        epoch: Int,
+        result: ASRWindowResult,
+        window: ASRWindow,
+        sealed: Bool
+    ) -> VoiceTranscriptUpdate? {
+        enum Applied {
+            case stale
+            case update(VoiceTranscriptUpdate, nextInput: String?)
+            case quiet
+        }
 
-    private func apply(_ outcome: ASRPlannerOutcome) {
-        switch outcome {
-        case let .committed(commit):
-            commitAndEmit(commit)
-            setInput("utterance_open")
-        case let .ended(commit):
-            commitAndEmit(commit)
-            setInput("listening")
-        case let .displayOnly(text, words):
-            emit(VoiceTranscriptUpdate(
-                phase: "partial",
-                utteranceId: stateQueue.sync { planner.currentUtteranceId } ?? "utterance-unknown",
-                text: text,
-                words: words
-            ))
-        case .unchanged:
-            break
+        let applied: Applied = stateQueue.sync {
+            guard pipelineEpoch == epoch, running, !muted, !failed else { return .stale }
+            inFlightTranscription = nil
+            switch planner.apply(result: result, window: window, sealed: sealed) {
+            case let .committed(commit):
+                committed.append(commit)
+                return .update(Self.finalUpdate(for: commit), nextInput: "utterance_open")
+            case let .ended(commit):
+                committed.append(commit)
+                return .update(Self.finalUpdate(for: commit), nextInput: "listening")
+            case let .displayOnly(text, words):
+                return .update(
+                    VoiceTranscriptUpdate(
+                        phase: "partial",
+                        utteranceId: planner.currentUtteranceId ?? "utterance-unknown",
+                        text: text,
+                        words: words
+                    ),
+                    nextInput: nil
+                )
+            case .unchanged:
+                return .quiet
+            }
+        }
+
+        switch applied {
+        case .stale, .quiet:
+            return nil
+        case let .update(update, nextInput):
+            if let nextInput { setInput(nextInput) }
+            emit(update)
+            return update
         }
     }
 
-    private func commitAndEmit(_ commit: ASRCommit) {
-        stateQueue.sync { committed.append(commit) }
-        emit(VoiceTranscriptUpdate(
+    private static func finalUpdate(for commit: ASRCommit) -> VoiceTranscriptUpdate {
+        VoiceTranscriptUpdate(
             phase: "final",
             utteranceId: commit.utteranceId,
             text: commit.text,
             words: commit.words
-        ))
+        )
+    }
+
+    /// The pipeline generation a result must carry to be accepted by `applyEngineResult`. `mute()`,
+    /// `close()` and every visible host failure bump it, which invalidates anything in flight.
+    var currentPipelineEpoch: Int {
+        stateQueue.sync { pipelineEpoch }
     }
 
     private func emit(_ update: VoiceTranscriptUpdate) {

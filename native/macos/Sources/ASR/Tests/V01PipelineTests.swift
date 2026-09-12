@@ -43,6 +43,15 @@ final class V01PipelineTests: XCTestCase {
         return samples
     }
 
+    /// One native packet on the monotonic clock the tap uses.
+    private func packet(sequence: UInt64, samples: [Int16]) -> PCMPacket {
+        PCMPacket(
+            sequence: sequence,
+            monotonicNs: sequence &* PCMPacket.packetDurationNs,
+            pcm: pcmData(samples)
+        )
+    }
+
     /// Pushes 20 ms packets through one captured frame listener, exactly like a tap that is still
     /// delivering audio after mute or after a host failure.
     private func sendPackets(
@@ -78,6 +87,33 @@ final class V01PipelineTests: XCTestCase {
         func transcribe(_ window: ASRWindow) async throws -> ASRWindowResult {
             record(window)
             return ASRWindowResult(text: "", words: [], endpoint: false)
+        }
+    }
+
+    /// Engine stand-in that answers the way the local pack does: it reports words whose times are
+    /// relative to the window it was handed, and it records every window it ran on.
+    private final class ScriptedTranscriber: LocalTranscriber, @unchecked Sendable {
+        private let lock = NSLock()
+        private var recorded: [ASRWindow] = []
+
+        var windows: [ASRWindow] {
+            lock.lock()
+            defer { lock.unlock() }
+            return recorded
+        }
+
+        func transcribe(_ window: ASRWindow) async throws -> ASRWindowResult {
+            lock.lock()
+            recorded.append(window)
+            lock.unlock()
+            return ASRWindowResult(
+                text: "alpha beta",
+                words: [
+                    ASRWordTimestamp(text: "alpha", startMs: 50, endMs: 250),
+                    ASRWordTimestamp(text: "beta", startMs: 500, endMs: 700),
+                ],
+                endpoint: false
+            )
         }
     }
 
@@ -254,6 +290,101 @@ final class V01PipelineTests: XCTestCase {
         XCTAssertEqual(host.pcmChannel.status().discontinuityCount, 0, "exactly-once delivery drops no audio")
     }
 
+    // MARK: - 2b. A full 15-second utterance comes back as committed local text
+
+    /// Drives 15 s of speech plus the trailing silence through the same tap → packetizer → bounded
+    /// ring → Silero VAD → planner → bridge path the helper runs, with a local engine stand-in that
+    /// reports words the way the pack does: times relative to the window it was handed. The
+    /// committed transcript must carry the utterance text and the rebased word timestamps, the
+    /// sealed window must sit on the 15 s bound, and nothing may be dropped — the audio stays on
+    /// this machine and every engine call happens in-process.
+    func testFifteenSecondUtteranceCommitsLocalTextWithTimestamps() async throws {
+        let host = MicrophoneGraph(maxQueuedFrames: 64)
+        var configuration = SileroVADConfiguration()
+        configuration.allowEnergyFallback = true
+        let transcriber = ScriptedTranscriber()
+        let bridge = VoiceTracerBridge(
+            host: host,
+            vad: try SileroVAD(configuration: configuration),
+            transcriber: transcriber
+        )
+        bridge.beginSessionForTesting()
+        host.attachFrameListenerForTesting(bridge.frameListenerForTesting())
+        addTeardownBlock { await bridge.close() }
+
+        let listener = bridge.frameListenerForTesting()
+        let speech = [Int16](repeating: 8_000, count: PCMPacket.samplesPerPacket)
+        let silence = silentSamples(packetCount: 1)
+        var sequence: UInt64 = 0
+        // 750 × 20 ms = a 15-second utterance. The speech keeps Silero's utterance open; the ring
+        // is drained every 5 packets so the bounded transport never overflows in the test.
+        for index in 0..<750 {
+            listener(packet(sequence: sequence, samples: speech))
+            sequence += 1
+            if index % 5 == 4 {
+                await waitUntil { host.pcmChannel.status().queuedFrames == 0 }
+            }
+        }
+        // 1.2 s of trailing silence: the endpoint fires after 450 ms and closes the utterance.
+        for _ in 0..<60 {
+            listener(packet(sequence: sequence, samples: silence))
+            sequence += 1
+            await waitUntil { host.pcmChannel.status().queuedFrames == 0 }
+        }
+        await waitUntil { bridge.status().input == "listening" && !bridge.transcript().isEmpty }
+
+        let status = bridge.status()
+        XCTAssertNil(status.error, "a healthy local session stays error-free")
+        XCTAssertEqual(status.input, "listening", "the endpoint closed the utterance")
+        XCTAssertEqual(status.queuedFrames, 0, "the bounded ring drains back to empty")
+        XCTAssertEqual(status.discontinuityCount, 0, "no audio is dropped while the ring is drained")
+
+        let windows = transcriber.windows
+        XCTAssertFalse(windows.isEmpty, "the local engine ran on the captured audio")
+        XCTAssertTrue(
+            windows.allSatisfy { $0.durationMs <= 15_000.0 },
+            "no ASR window may exceed the 15 s bound"
+        )
+        XCTAssertTrue(
+            windows.contains { $0.durationMs >= 14_980.0 },
+            "the utterance was sealed on the 15 s bound, not cut short"
+        )
+
+        let committed = bridge.transcript()
+        guard let first = committed.first else {
+            return XCTFail("a 15-second utterance must commit local text")
+        }
+        XCTAssertEqual(first.text, "alpha beta", "the stable prefix is committed verbatim")
+        XCTAssertEqual(
+            first.words,
+            [
+                ASRWordTimestamp(text: "alpha", startMs: 50, endMs: 250),
+                ASRWordTimestamp(text: "beta", startMs: 500, endMs: 700),
+            ],
+            "committed text carries the word timestamps"
+        )
+        // Timestamps are relative to the start of *their* utterance: within the 15-second utterance
+        // the seal commit comes first and the roll-over commit advances past 13 s, which only holds
+        // if the window-relative engine times were rebased onto the utterance timeline.
+        let utterance = committed.filter { $0.utteranceId == first.utteranceId }
+        XCTAssertGreaterThanOrEqual(
+            utterance.count,
+            2,
+            "the 15 s seal committed, and the roll-over kept committing afterwards"
+        )
+        let startTimes = utterance.flatMap(\.words).map(\.startMs)
+        XCTAssertEqual(startTimes, startTimes.sorted(), "committed word times advance with the audio")
+        XCTAssertGreaterThan(
+            startTimes.last ?? 0,
+            13_000,
+            "word times are relative to the utterance, not to the window that heard them"
+        )
+        XCTAssertTrue(
+            committed.flatMap(\.words).allSatisfy { $0.startMs >= 0 && $0.endMs >= $0.startMs },
+            "every committed word carries a sane utterance-relative timestamp"
+        )
+    }
+
     // MARK: - 3. Mute settles and clears pending input
 
     func testMuteSettlesAndClearsPendingAudio() async throws {
@@ -292,6 +423,21 @@ final class V01PipelineTests: XCTestCase {
             bridge.transcript().isEmpty,
             "mute discards the open utterance instead of finalizing it"
         )
+    }
+
+    // MARK: - 3b. The transport ring stays bounded while the consumer stalls
+
+    /// A stalled ASR consumer must never grow the transport: the ring drops the oldest packets,
+    /// counts one discontinuity for the gap and keeps `queuedFrames` at its configured maximum.
+    func testBoundedRingNeverGrowsPastItsLimitWhileTheConsumerStalls() {
+        let channel = BoundedPCMChannel(maxQueuedFrames: 8)
+        for sequence in 0..<30 {
+            channel.enqueue(packet(sequence: UInt64(sequence), samples: silentSamples(packetCount: 1)))
+        }
+        let status = channel.status()
+        XCTAssertEqual(status.queuedFrames, 8, "a stalled consumer never grows the ring past its bound")
+        XCTAssertEqual(status.droppedFrames, 22, "overflow drops the oldest audio")
+        XCTAssertEqual(status.discontinuityCount, 1, "one overflow burst counts one discontinuity")
     }
 
     // MARK: - 4. Releasing capture never deadlocks the audio tap
@@ -583,6 +729,126 @@ final class V01PipelineTests: XCTestCase {
             recorder.all.contains { $0.phase == "final" },
             "no final transcript is emitted after a host failure"
         )
+    }
+
+    /// The commit boundary is one critical section: the epoch check, the planner apply and the
+    /// append to `committed` cannot be split by a mute. A result that answers after the mute is
+    /// rejected even though the planner owned its window right up to the reset.
+    func testStaleEpochResultIsRejectedAtTheCommitBoundary() async throws {
+        let host = MicrophoneGraph(maxQueuedFrames: 64)
+        var configuration = SileroVADConfiguration()
+        configuration.allowEnergyFallback = true
+        let transcriber = RecordingTranscriber()
+        let bridge = VoiceTracerBridge(
+            host: host,
+            vad: try SileroVAD(configuration: configuration),
+            transcriber: transcriber
+        )
+        bridge.beginSessionForTesting()
+        host.attachFrameListenerForTesting(bridge.frameListenerForTesting())
+        addTeardownBlock { await bridge.close() }
+
+        let recorder = TranscriptRecorder()
+        let unsubscribe = bridge.subscribe { recorder.record($0) }
+        addTeardownBlock { unsubscribe() }
+
+        host.deliverForTesting(samples: silentSamples(packetCount: 25), startNs: 0)
+        await waitUntil { !transcriber.windows.isEmpty }
+        guard let window = transcriber.windows.first else {
+            return XCTFail("the pipeline cut no window to invalidate")
+        }
+        let epoch = bridge.currentPipelineEpoch
+
+        // Control: on the live epoch the very same window still commits, so the boundary is a
+        // guard against stale work and not a blanket refusal.
+        XCTAssertNotNil(
+            bridge.applyEngineResult(
+                epoch: epoch,
+                result: ASRWindowResult(
+                    text: "early",
+                    words: [ASRWordTimestamp(text: "early", startMs: 0, endMs: 120)],
+                    endpoint: true
+                ),
+                window: window,
+                sealed: true
+            ),
+            "a result from the live epoch still commits"
+        )
+        XCTAssertEqual(bridge.transcript().count, 1, "the live result reached the transcript")
+
+        await bridge.mute()
+        XCTAssertEqual(bridge.status().input, "muted", "mute stays visible")
+        let finalsBefore = recorder.all.filter { $0.phase == "final" }.count
+
+        let stale = bridge.applyEngineResult(
+            epoch: epoch,
+            result: ASRWindowResult(
+                text: "late words",
+                words: [ASRWordTimestamp(text: "late", startMs: 0, endMs: 120)],
+                endpoint: true
+            ),
+            window: window,
+            sealed: true
+        )
+        XCTAssertNil(stale, "a result from the muted epoch is rejected at the commit boundary")
+        XCTAssertEqual(bridge.transcript().count, 1, "mute keeps pending input out of the transcript")
+        XCTAssertEqual(
+            recorder.all.filter { $0.phase == "final" }.count,
+            finalsBefore,
+            "the invalidated result is never emitted as a final update"
+        )
+    }
+
+    /// Mute and the capture path share one critical section: audio the tap keeps delivering while
+    /// the mute runs can neither stay in the ring nor reopen a window afterwards.
+    func testPacketsRacingMuteLeaveNoQueuedInput() async throws {
+        let host = MicrophoneGraph(maxQueuedFrames: 64)
+        let (bridge, _) = try makeBridge(host: host)
+        addTeardownBlock { await bridge.close() }
+        let listener = bridge.frameListenerForTesting()
+        let pcm = pcmData(silentSamples(packetCount: 1))
+
+        let pumping = Flag()
+        pumping.set(true)
+        let tapQueue = DispatchQueue(label: "v01.test.mute-race", attributes: .concurrent)
+        tapQueue.async {
+            var sequence: UInt64 = 0
+            while pumping.isSet {
+                listener(PCMPacket(
+                    sequence: sequence,
+                    monotonicNs: sequence &* PCMPacket.packetDurationNs,
+                    pcm: pcm
+                ))
+                sequence += 1
+            }
+        }
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        await bridge.mute()
+        pumping.set(false)
+        await Task.yield()
+
+        XCTAssertEqual(
+            bridge.status().input,
+            "muted",
+            "mute stays visible while the tap keeps delivering audio"
+        )
+        XCTAssertEqual(
+            host.pcmChannel.status().queuedFrames,
+            0,
+            "packets that raced the mute are dropped, never left in the ring"
+        )
+        XCTAssertTrue(bridge.transcript().isEmpty, "the raced utterance is never committed")
+
+        // Audio that arrives after the mute settled keeps being dropped too.
+        sendPackets(25, through: listener, startingAt: 100_000)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(
+            host.pcmChannel.status().queuedFrames,
+            0,
+            "audio delivered after the mute stays out of the ring"
+        )
+        XCTAssertTrue(bridge.transcript().isEmpty, "audio delivered after the mute is never committed")
     }
 
     // MARK: - 9. The production path links WhisperKit and registers the Silero runtime
