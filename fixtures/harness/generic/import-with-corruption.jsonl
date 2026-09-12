@@ -1,0 +1,6 @@
+{"kind":"session_state","seq":1,"text":"session started"}
+{"kind":"user_utterance","seq":2,"text":"please summarize the café build log ✅"}
+{"kind":"tool_completed","seq":3,"text":"truncated
+{"kind":"agent_message","seq":4,"text":"handled 3 events"}
+{"kind":"approval_requested","seq":5,"requestId":"imported-approval-1","text":"Approve network access? (y/n)"}
+{"kind":"tool_completed","seq":6,"text":"never finished"}

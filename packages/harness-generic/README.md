@@ -1,0 +1,36 @@
+# packages/harness-generic — H03
+
+Existing JSONL or plain-text log → bounded parser → normalized timeline preview.
+
+## Import adapters (`createGenericLogAdapter`)
+
+Read-only. `format: 'jsonl' | 'text'`; the source is one generation of one file exposing
+`identity()`, `size()`, and bounded `read(offset, maxBytes)`.
+
+- Streams through a small working set: 64 KiB read requests, one line buffered at a time, and an
+  over-long line (1 MiB cap) is discarded as a display-only gap instead of being buffered.
+- Emits §5.3-shaped records with `trust: 'imported'` and a cursor
+  `{ sourceId, generation, offset }` that is the commit point after the last returned event.
+- `preview({ from })` resumes at the committed byte offset of the same source identity; a changed
+  `identity()` advances `generation` and emits a `source_rotated` gap without re-emitting the old
+  generation.
+- Partial UTF-8 is reassembled across reads; a malformed JSON line and an unterminated trailing line
+  become `malformed_json` / `incomplete_line` gaps that leave adjacent events intact.
+- Display text is ANSI-normalized (`\r\n` is a line ending, CSI/OSC sequences are stripped, lone
+  `\r` redraws collapse to the final frame).
+- Imported content is data, never authority: `send()` is always `unsupported`, unstructured lines
+  are `confidence: 'low'`, and approval-shaped records become `kind: 'unsupported'` with
+  `unsupportedKind` preserved — never `approval_requested`.
+
+## Managed PTY (`createManagedPtyAdapter`)
+
+The opt-in wrapper for a child this application started because the user selected it. Observation is
+unconditional; `send()` writes once, newline-terminated, to that child only. Output lines are
+low-confidence imported text and are never auto-classified: `approvalResponse` is `false` and no
+output can create an approval path. Existing arbitrary terminals remain observation-only.
+
+## Capability descriptor
+
+`observe, send, interrupt, resume, approvalResponse, toolResults, artifactDiffs, format,
+formatVersion`. Import adapters report `observe: true`, `resume: true`, `send: false`,
+`approvalResponse: false`; the managed PTY reports `send: true` and `approvalResponse: false`.
