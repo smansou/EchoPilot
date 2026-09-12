@@ -52,9 +52,7 @@ function digest(text){return createHash('sha256').update(text).digest('hex');}
 function integratedTicket(line){const match=line.match(/^([0-9a-f]+)\tfeat\(([A-Z]\d+)\):/);return match?{commit:match[1],id:match[2]}:undefined;}
 function routeFor(record,role){
  const model=process.env[`LOOP_${role.toUpperCase()}_MODEL`]??DEFAULT_MODEL;
- const normal=role==='review'?'max':'high';
- const effort=(record.substantiveFailures??0)>0?'max':normal;
- return {model,effort:process.env[`LOOP_${role.toUpperCase()}_EFFORT`]??effort};
+ return {model,effort:process.env[`LOOP_${role.toUpperCase()}_EFFORT`]??'max'};
 }
 
 function transientFailure(issue){return /timed? out|stalled|rate.?limit|quota|temporar|network|connection failed|failed to send|could not resolve host|operation not permitted|ECONN|EAI_AGAIN|overload|unavailable|cmux-grid|agent surface|surface is not a terminal/i.test(issue);}

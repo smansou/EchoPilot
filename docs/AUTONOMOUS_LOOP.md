@@ -57,6 +57,7 @@ The normal terminal mode is direct subprocess execution. Set `LOOP_TERMINALS=cmu
 - `LOOP_MODEL`: default model for test, implementation, and review roles; defaults to `deepseek-flash`.
 - `LOOP_TEST_MODEL`, `LOOP_WORKER_MODEL`, `LOOP_REVIEW_MODEL`: optional per-role overrides.
 - `LOOP_TEST_EFFORT`, `LOOP_WORKER_EFFORT`, `LOOP_REVIEW_EFFORT`: optional reasoning-effort overrides.
+- Every role defaults to `max` reasoning effort for DeepSeek V4.1 Flash.
 - `LOOP_MAX_AGENTS`: maximum simultaneous ticket workers; `0` means uncapped.
 - `LOOP_MAX_TRANSIENT_FAILURES`: infrastructure retries before blocking; default `3`.
 - `LOOP_MAX_SUBSTANTIVE_FAILURES`: failed implementation/review attempts before blocking; default `3`.
