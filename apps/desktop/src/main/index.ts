@@ -40,8 +40,13 @@ function publish() {
 function shellSnapshot() {
   const state = coordinator.getState();
   const status = requireShell().status();
+  // The signed helper reports *permission*; the coordinator owns the live mute state. Showing the
+  // coordinator's view keeps the widget honest when a helper reconnect re-reports permissions.
+  const microphone = status.microphone === 'denied' || status.microphone === 'unknown'
+    ? status.microphone
+    : state.muted ? 'muted' : 'granted';
   return {
-    status: { ...status, targetSession: status.targetSession ?? state.event?.sessionId ?? null },
+    status: { ...status, microphone, targetSession: status.targetSession ?? state.event?.sessionId ?? null },
     hotkeys: {
       registered: requireShell().hotkeys.registered.map(hotkey => hotkey.accelerator),
       conflicts: requireShell().hotkeys.conflicts.map(conflict => ({
@@ -73,7 +78,9 @@ function toggleWidget() {
  */
 function ensureForegroundSafe(window: BrowserWindow) {
   if (process.platform !== 'darwin') return;
-  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // `skipTransformProcessType` keeps the app's normal activation policy (dock + menu bar + a
+  // focusable Mission Control window) while the widget follows every Space and full-screen Space.
+  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
   window.setAlwaysOnTop(true, 'floating');
 }
 function createWindow(view: 'widget' | 'dashboard') {
@@ -81,6 +88,10 @@ function createWindow(view: 'widget' | 'dashboard') {
   const window = new BrowserWindow({
     width:isWidget ? 390 : 1040, height:isWidget ? 420 : 780, minWidth:isWidget ? 360 : 760,
     minHeight:isWidget ? 360 : 600, show:false, alwaysOnTop:isWidget,
+    // Foreground-safe widget: it never becomes the key window, so opening or clicking it cannot
+    // pull focus from the app the user is working in. `acceptFirstMouse` keeps the first click
+    // landing on the Mute/Stop buttons even though EchoPilot stays in the background.
+    focusable:!isWidget, acceptFirstMouse:isWidget,
     title:isWidget ? 'EchoPilot' : 'EchoPilot · Mission Control', backgroundColor:'#10171d',
     autoHideMenuBar:true, skipTaskbar:isWidget,
     webPreferences:{preload:resolve(__dirname,'../preload/index.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,webviewTag:false},
@@ -119,6 +130,9 @@ async function ready() {
     onRecoverable: reason => { console.warn(`EchoPilot recoverable: ${reason}`); },
     onAction: action => {
       switch (action) {
+        // Mute and stop arrive from hotkeys, the tray, and the widget; drive the real coordinator
+        // so the session state — not just the widget chrome — is what the user sees change.
+        case 'mute-microphone': coordinator.setMuted(!coordinator.getState().muted); publish(); break;
         case 'replay': coordinator.replay(); publish(); break;
         case 'toggle-conversation': toggleWidget(); break;
         case 'open-mission-control': openDashboard(); break;

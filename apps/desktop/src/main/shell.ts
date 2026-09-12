@@ -70,6 +70,20 @@ export const HOTKEY_DEFAULTS: ReadonlyArray<Hotkey> = Object.freeze([
 
 export const WIDGET_FALLBACK_CONTROLS: ReadonlyArray<WidgetControl> = Object.freeze(['mute', 'stop']);
 
+const HOTKEY_ACTION_LABELS: Record<HotkeyAction, string> = Object.freeze({
+  'toggle-conversation': 'Toggle conversation',
+  'hold-dictation': 'Hold to dictate',
+  'mute-microphone': 'Mute microphone',
+  'stop-speech': 'Stop speech',
+  replay: 'Replay latest',
+  'open-mission-control': 'Open Mission Control',
+});
+
+/** Human-readable name shared by the tray menu and the widget conflict list. */
+export function hotkeyActionLabel(action: HotkeyAction): string {
+  return HOTKEY_ACTION_LABELS[action] ?? action;
+}
+
 /** Wire protocol revision the signed helper must echo alongside the per-launch token. */
 export const NATIVE_PROTOCOL_VERSION = 1 as const;
 
@@ -132,17 +146,19 @@ export function createShell(options: CreateShellOptions): Shell {
   }
 
   function invoke(action: HotkeyAction): WidgetStatus {
+    // Every surface (global shortcut, tray item, widget control) runs this one path, so the host
+    // app can drive the real coordinator — not just widget chrome — from a single place.
+    try {
+      options.onAction?.(action);
+    } catch {
+      // The host app handles UI-affecting actions; failures stay local to that surface.
+    }
     switch (action) {
       case 'mute-microphone':
         return publish({ ...current, microphone: current.microphone === 'muted' ? 'granted' : 'muted' });
       case 'stop-speech':
         return publish({ ...current, output: current.output === 'stopped' ? 'ready' : 'stopped' });
       default:
-        try {
-          options.onAction?.(action);
-        } catch {
-          // The host app handles UI-affecting actions; failures stay local to that surface.
-        }
         return current;
     }
   }
@@ -164,10 +180,17 @@ export function createShell(options: CreateShellOptions): Shell {
       acceleratorByAction.set(hotkey.action, hotkey.accelerator);
       continue;
     }
+    // The reason is shown verbatim by the tray and the widget, so it must stand alone and must
+    // only point at controls that actually replace this shortcut.
+    const fallback = hotkey.action === 'mute-microphone'
+      ? 'use the widget Mute control or the menu-bar menu instead'
+      : hotkey.action === 'stop-speech'
+        ? 'use the widget Stop control or the menu-bar menu instead'
+        : 'use the menu-bar menu instead';
     conflicts.push({
       ...hotkey,
-      reason: `${hotkey.accelerator} is already claimed by macOS or another app; `
-        + `use the widget ${hotkey.action === 'mute-microphone' ? 'Mute' : 'Stop'} control instead.`,
+      reason: `${hotkeyActionLabel(hotkey.action)} (${hotkey.accelerator}) is already claimed by `
+        + `macOS or another app; ${fallback}.`,
     });
   }
 

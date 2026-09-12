@@ -40,7 +40,7 @@ export type NativeHost = Readonly<{
 
 type HelperCommand = Readonly<{ command: string; args: ReadonlyArray<string>; description: string }>;
 
-function resolveHelperCommand(token: string, env: NodeJS.ProcessEnv): HelperCommand | null {
+function resolveHelperCommand(env: NodeJS.ProcessEnv): HelperCommand | null {
   // The packaged app is bundled as CJS (where __dirname exists); tsx-driven dev checks are ESM.
   const moduleDir = typeof __dirname === 'string' ? __dirname : process.cwd();
   const candidates: string[] = [];
@@ -56,12 +56,12 @@ function resolveHelperCommand(token: string, env: NodeJS.ProcessEnv): HelperComm
       // TypeScript developers without Xcode: run the fake host through tsx.
       return {
         command: process.execPath,
-        args: ['--import', 'tsx', candidate, `--token=${token}`],
+        args: ['--import', 'tsx', candidate],
         description: candidate,
       };
     }
-    // A signed binary helper is launched directly; the token travels on argv only.
-    return { command: candidate, args: [`--token=${token}`], description: candidate };
+    // A signed binary helper is launched directly.
+    return { command: candidate, args: [], description: candidate };
   }
   return null;
 }
@@ -87,7 +87,7 @@ export function createNativeHost(options: NativeHostOptions): NativeHost {
   const baseDelay = options.restartDelayMs ?? 500;
   const maxDelay = options.maxRestartDelayMs ?? 5_000;
   const log = options.log ?? (() => {});
-  const helper = resolveHelperCommand(token, env);
+  const helper = resolveHelperCommand(env);
   const mode: NativeHostMode = helper ? 'helper' : 'simulator';
 
   let child: ChildProcess | null = null;
@@ -125,8 +125,10 @@ export function createNativeHost(options: NativeHostOptions): NativeHost {
   }
 
   function handleExit(code: number | null, signal: NodeJS.Signals | null): void {
+    const wasRunning = child;
     child = null;
-    if (stopping || disposed) return;
+    // `error` and `exit` can both fire for a single failed spawn; only the first is a disconnect.
+    if (stopping || disposed || !wasRunning) return;
     shell.nativeHostDisconnected(
       `Native helper exited (${signal ?? `code ${String(code)}`}); reconnecting.`,
     );
@@ -145,7 +147,12 @@ export function createNativeHost(options: NativeHostOptions): NativeHost {
     }
     stopping = false;
     buffer = '';
-    const spawned = spawn(helper.command, [...helper.args], { stdio: ['pipe', 'pipe', 'pipe'], env });
+    // The per-launch token travels through the environment rather than argv: argv is readable by
+    // any local process (`ps`), the environment of a child we spawn is not.
+    const spawned = spawn(helper.command, [...helper.args], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...env, ECHOPILOT_NATIVE_TOKEN: token },
+    });
     child = spawned;
     spawned.stdout?.setEncoding('utf8');
     spawned.stdout?.on('data', (chunk: string) => {

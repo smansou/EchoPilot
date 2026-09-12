@@ -37,9 +37,9 @@ export function WidgetStatusPanel({ snapshot, busy, onControl }: {
       {conflicts.length > 0 && (
         <ul className="shell-conflicts">
           {conflicts.map((conflict) => (
-            <li key={conflict.accelerator}>
-              <strong>{conflict.accelerator}</strong> is unavailable — use the {conflict.action === 'mute-microphone' ? 'Mute' : 'Stop'} control below.
-            </li>
+            // The main process owns the conflict text so the widget never claims a control that
+            // does not actually replace the conflicting shortcut.
+            <li key={`${conflict.action}:${conflict.accelerator}`}>{conflict.reason}</li>
           ))}
         </ul>
       )}

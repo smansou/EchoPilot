@@ -28,6 +28,20 @@ export type ShellSnapshot = Readonly<{
 export type WidgetControl = 'mute' | 'stop';
 
 const HELPER_STATES = new Set(['connected', 'disconnected']);
+/** Mirrors `shell.ts`: the widget renders only states the main process can actually produce. */
+const ENUM_STATES: Record<'microphone' | 'capture' | 'output' | 'provider', ReadonlySet<string>> = {
+  microphone: new Set(['granted', 'denied', 'unknown', 'muted']),
+  capture: new Set(['granted', 'denied', 'unknown']),
+  output: new Set(['ready', 'speaking', 'stopped', 'unknown']),
+  provider: new Set(['local', 'cloud', 'unknown']),
+};
+
+function enumerated(value: unknown, field: 'microphone' | 'capture' | 'output' | 'provider'): string {
+  if (typeof value !== 'string' || !ENUM_STATES[field].has(value)) {
+    throw new TypeError(`Invalid ${field} in shell snapshot`);
+  }
+  return value;
+}
 
 function shortString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.trim().length === 0 || value.length > 128) {
@@ -65,11 +79,11 @@ export function parseShellSnapshot(value: unknown): ShellSnapshot {
   if (targetSession !== null && typeof targetSession !== 'string') throw new TypeError('Invalid target session');
   return {
     status: {
-      microphone: shortString(statusInput.microphone, 'microphone'),
-      capture: shortString(statusInput.capture, 'capture'),
-      output: shortString(statusInput.output, 'output'),
+      microphone: enumerated(statusInput.microphone, 'microphone'),
+      capture: enumerated(statusInput.capture, 'capture'),
+      output: enumerated(statusInput.output, 'output'),
       targetSession: targetSession === null ? null : targetSession.slice(0, 128),
-      provider: shortString(statusInput.provider, 'provider'),
+      provider: enumerated(statusInput.provider, 'provider'),
       helper: helper as WidgetStatus['helper'],
     },
     hotkeys: {

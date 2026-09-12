@@ -4,7 +4,7 @@
  */
 import { Menu, nativeImage, Tray as ElectronTray } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
-import { WIDGET_FALLBACK_CONTROLS, type Shell, type WidgetStatus } from './shell';
+import { WIDGET_FALLBACK_CONTROLS, hotkeyActionLabel, type Shell, type WidgetStatus } from './shell';
 
 /** 16x16 macOS template icon (monochrome mic glyph); template images adopt the menu bar tone. */
 const TRAY_ICON_PNG = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKElEQVR4nGNgGOzgPxRTpJlsQ0YNoIIBDNS0nSyDqOYFigDFBtAeAAAMsifZQLmmGAAAAABJRU5ErkJggg==';
@@ -65,7 +65,7 @@ export function createShellTray(options: TrayOptions): ShellTray {
         : {
           label: `${conflicts.length} shortcut conflict${conflicts.length === 1 ? '' : 's'}`,
           submenu: conflicts.map((conflict) => ({
-            label: `${conflict.accelerator} — ${conflict.action}`,
+            label: `${conflict.accelerator} — ${hotkeyActionLabel(conflict.action)}`,
             enabled: false,
           })),
         },
