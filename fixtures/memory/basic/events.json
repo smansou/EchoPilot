@@ -1,0 +1,227 @@
+{
+  "contractVersion": 1,
+  "fixtureId": "memory-basic",
+  "consent": "synthetic",
+  "note": "Synthetic normalized 5.3 events for the M01 tracer bullet. No real user data. The two canary tokens below are deliberate known plaintext: they must be searchable through the read API and must never appear in plaintext inside the encrypted store directory.",
+  "profileId": "profile-basic",
+  "canaries": {
+    "project-alpha": "echopilotm01canaryalpha7c1f9a",
+    "project-beta": "echopilotm01canarybeta3d2e8b"
+  },
+  "events": [
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-alpha-user-001",
+      "sourceId": "source-alpha",
+      "sourceEventId": "alpha-0001",
+      "sourceSequence": 1,
+      "ingestSequence": 1,
+      "occurredAt": "2026-09-10T09:00:00.000Z",
+      "observedAt": "2026-09-10T09:00:00.500Z",
+      "scope": {
+        "profileId": "profile-basic",
+        "projectId": "project-alpha",
+        "worktreeId": "worktree-alpha-main",
+        "sessionId": "session-alpha-1",
+        "sensitivity": "normal"
+      },
+      "kind": "user_utterance",
+      "payloadRef": "fixture://alpha/user-001",
+      "contentHash": "sha256:alpha-0001",
+      "trust": "user_explicit"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-alpha-tool-start-002",
+      "sourceId": "source-alpha",
+      "sourceEventId": "alpha-0002",
+      "sourceSequence": 2,
+      "ingestSequence": 2,
+      "occurredAt": "2026-09-10T09:01:00.000Z",
+      "observedAt": "2026-09-10T09:01:00.500Z",
+      "scope": {
+        "profileId": "profile-basic",
+        "projectId": "project-alpha",
+        "worktreeId": "worktree-alpha-main",
+        "sessionId": "session-alpha-1",
+        "sensitivity": "normal"
+      },
+      "kind": "tool_started",
+      "payloadRef": "fixture://alpha/tool-start-002",
+      "contentHash": "sha256:alpha-0002",
+      "trust": "tool_observed"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-alpha-tool-complete-003",
+      "sourceId": "source-alpha",
+      "sourceEventId": "alpha-0003",
+      "sourceSequence": 3,
+      "ingestSequence": 3,
+      "occurredAt": "2026-09-10T09:01:30.000Z",
+      "observedAt": "2026-09-10T09:01:30.500Z",
+      "scope": {
+        "profileId": "profile-basic",
+        "projectId": "project-alpha",
+        "worktreeId": "worktree-alpha-main",
+        "sessionId": "session-alpha-1",
+        "sensitivity": "normal"
+      },
+      "kind": "tool_completed",
+      "payloadRef": "fixture://alpha/tool-complete-003",
+      "contentHash": "sha256:alpha-0003",
+      "trust": "tool_observed"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-alpha-agent-claim-004",
+      "sourceId": "source-alpha",
+      "sourceEventId": "alpha-0004",
+      "sourceSequence": 4,
+      "ingestSequence": 4,
+      "occurredAt": "2026-09-10T09:02:00.000Z",
+      "observedAt": "2026-09-10T09:02:00.500Z",
+      "scope": {
+        "profileId": "profile-basic",
+        "projectId": "project-alpha",
+        "worktreeId": "worktree-alpha-main",
+        "sessionId": "session-alpha-1",
+        "sensitivity": "normal"
+      },
+      "kind": "agent_message",
+      "payloadRef": "fixture://alpha/agent-claim-004",
+      "contentHash": "sha256:alpha-0004",
+      "trust": "agent_reported"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-alpha-decision-005",
+      "sourceId": "source-alpha",
+      "sourceEventId": "alpha-0005",
+      "sourceSequence": 5,
+      "ingestSequence": 5,
+      "occurredAt": "2026-09-10T09:03:00.000Z",
+      "observedAt": "2026-09-10T09:03:00.500Z",
+      "scope": {
+        "profileId": "profile-basic",
+        "projectId": "project-alpha",
+        "worktreeId": "worktree-alpha-main",
+        "sessionId": "session-alpha-1",
+        "sensitivity": "normal"
+      },
+      "kind": "decision",
+      "payloadRef": "fixture://alpha/decision-005",
+      "contentHash": "sha256:alpha-0005",
+      "trust": "user_explicit"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-beta-tool-start-001",
+      "sourceId": "source-beta",
+      "sourceEventId": "beta-0001",
+      "sourceSequence": 1,
+      "ingestSequence": 1,
+      "occurredAt": "2026-09-10T09:01:05.000Z",
+      "observedAt": "2026-09-10T09:01:05.500Z",
+      "scope": {
+        "profileId": "profile-basic",
+        "projectId": "project-beta",
+        "worktreeId": "worktree-beta-main",
+        "sessionId": "session-beta-1",
+        "sensitivity": "normal"
+      },
+      "kind": "tool_started",
+      "payloadRef": "fixture://beta/tool-start-001",
+      "contentHash": "sha256:beta-0001",
+      "trust": "tool_observed"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-beta-tool-complete-002",
+      "sourceId": "source-beta",
+      "sourceEventId": "beta-0002",
+      "sourceSequence": 2,
+      "ingestSequence": 2,
+      "occurredAt": "2026-09-10T09:01:10.000Z",
+      "observedAt": "2026-09-10T09:01:10.500Z",
+      "scope": {
+        "profileId": "profile-basic",
+        "projectId": "project-beta",
+        "worktreeId": "worktree-beta-main",
+        "sessionId": "session-beta-1",
+        "sensitivity": "normal"
+      },
+      "kind": "tool_completed",
+      "payloadRef": "fixture://beta/tool-complete-002",
+      "contentHash": "sha256:beta-0002",
+      "trust": "tool_observed"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-beta-decision-003",
+      "sourceId": "source-beta",
+      "sourceEventId": "beta-0003",
+      "sourceSequence": 3,
+      "ingestSequence": 3,
+      "occurredAt": "2026-09-10T09:04:00.000Z",
+      "observedAt": "2026-09-10T09:04:00.500Z",
+      "scope": {
+        "profileId": "profile-basic",
+        "projectId": "project-beta",
+        "worktreeId": "worktree-beta-main",
+        "sessionId": "session-beta-1",
+        "sensitivity": "normal"
+      },
+      "kind": "decision",
+      "payloadRef": "fixture://beta/decision-003",
+      "contentHash": "sha256:beta-0003",
+      "trust": "user_explicit"
+    }
+  ],
+  "payloads": {
+    "fixture://alpha/user-001": {
+      "text": "Memory must be encrypted at rest before any accepted record is stored."
+    },
+    "fixture://alpha/tool-start-002": {
+      "tool": "shell",
+      "command": "pnpm test",
+      "taskId": "task-alpha-tests",
+      "title": "Run memory acceptance tests"
+    },
+    "fixture://alpha/tool-complete-003": {
+      "tool": "shell",
+      "command": "pnpm test",
+      "taskId": "task-alpha-tests",
+      "exitCode": 1,
+      "receiptId": "receipt-alpha-1",
+      "output": "1 failing: store rollback"
+    },
+    "fixture://alpha/agent-claim-004": {
+      "text": "All memory acceptance tests passed successfully."
+    },
+    "fixture://alpha/decision-005": {
+      "question": "Should the memory store encrypt every accepted record before it reaches disk?",
+      "choice": "Yes - records go through the encrypted store; canary echopilotm01canaryalpha7c1f9a marks this decision text.",
+      "rationale": "The encryption gate must hold before any sensitive record lands on disk.",
+      "decidingActor": "user"
+    },
+    "fixture://beta/tool-start-001": {
+      "tool": "shell",
+      "command": "pnpm lint",
+      "taskId": "task-beta-lint",
+      "title": "Lint project beta"
+    },
+    "fixture://beta/tool-complete-002": {
+      "tool": "shell",
+      "command": "pnpm lint",
+      "taskId": "task-beta-lint",
+      "exitCode": 0,
+      "receiptId": "receipt-beta-1"
+    },
+    "fixture://beta/decision-003": {
+      "question": "Should project beta timelines stay isolated from project alpha?",
+      "choice": "Yes - beta keeps its own records; canary echopilotm01canarybeta3d2e8b stays inside project-beta.",
+      "decidingActor": "user"
+    }
+  }
+}
