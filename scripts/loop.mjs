@@ -49,6 +49,15 @@ function overlaps(a,b){return a===b||a.startsWith(b+'/')||b.startsWith(a+'/');}
 function conflict(a,b){return a.block===b.block||ticketPaths(a).some(x=>ticketPaths(b).some(y=>overlaps(cleanPath(x),cleanPath(y))));}
 function ticketPaths(ticket){return [...ticket.files,...(extraPaths[ticket.id]??[])];}
 function digest(text){return createHash('sha256').update(text).digest('hex');}
+function parseStructuredResult(text){
+ const trimmed=text.trim();
+ try{return JSON.parse(trimmed);}catch{}
+ const fenced=trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+ if(fenced)try{return JSON.parse(fenced[1].trim());}catch{}
+ const start=trimmed.indexOf('{'),end=trimmed.lastIndexOf('}');
+ if(start>=0&&end>start)try{return JSON.parse(trimmed.slice(start,end+1));}catch{}
+ throw new Error(`Agent returned no valid structured result (${trimmed.slice(0,80).replace(/\s+/g,' ')})`);
+}
 function integratedTicket(line){const match=line.match(/^([0-9a-f]+)\tfeat\(([A-Z]\d+)\):/);return match?{commit:match[1],id:match[2]}:undefined;}
 function routeFor(record,role){
  const model=process.env[`LOOP_${role.toUpperCase()}_MODEL`]??DEFAULT_MODEL;
@@ -231,9 +240,10 @@ async function publishStatus(){
 async function agentCall(ticket,record,role,cwd,prompt,dir){
  const route=routeFor(record,role);await update(ticket.id,{model:route.model,effort:route.effort,detail:`${role} · starting`});
  await mkdir(dir,{recursive:true});
+ const structuredPrompt=`${prompt}\n\nYour final response must be only one raw JSON object matching the supplied output schema. Do not wrap it in Markdown fences and do not place prose before or after it.`;
  const schemaPath=join(dir,`${role}-schema.json`),resultPath=join(dir,`${role}-result.json`),logPath=join(dir,`${role}.log`),promptPath=join(dir,`${role}-prompt.txt`),exitPath=join(dir,`${role}.exit`),jobPath=join(dir,`${role}-job.json`);
  await writeFile(schemaPath,JSON.stringify(schema[role]),{mode:0o600});
- await writeFile(promptPath,prompt,{mode:0o600});
+ await writeFile(promptPath,structuredPrompt,{mode:0o600});
  await writeFile(resultPath,'',{mode:0o600});
  await rm(exitPath,{force:true});
  const args=['exec','-c','approval_policy="never"','-s',role==='review'?'read-only':'workspace-write','-C',cwd,'-m',route.model,'-c',`model_reasoning_effort=${JSON.stringify(route.effort)}`,'--ephemeral','--json','--output-schema',schemaPath,'-o',resultPath,'-'];
@@ -243,14 +253,14 @@ async function agentCall(ticket,record,role,cwd,prompt,dir){
   const surface=await ticketSurface(ticket,cwd,`node ${quote(CMUX_RUNNER)} ${quote(jobPath)}`,`${ticket.id} · ${role}`);
   run=await waitForSurface(surface,{exitPath,logPath,ticketId:ticket.id,role});
  }else{
-  run=await processRun(AGENT_BIN,args,{cwd,input:prompt,timeout:CALL_MS,env:AGENT_CODEX_HOME?{CODEX_HOME:AGENT_CODEX_HOME}:{},onLine:line=>{try{const event=JSON.parse(line);if(event.type)void update(ticket.id,{detail:`${role} · ${event.type}`});}catch{}}});
+  run=await processRun(AGENT_BIN,args,{cwd,input:structuredPrompt,timeout:CALL_MS,env:AGENT_CODEX_HOME?{CODEX_HOME:AGENT_CODEX_HOME}:{},onLine:line=>{try{const event=JSON.parse(line);if(event.type)void update(ticket.id,{detail:`${role} · ${event.type}`});}catch{}}});
   await writeFile(logPath,run.err+'\n'+run.out,{mode:0o600});
  }
  if(run.code!==0||run.timedOut){
   if(useCmux)await appendFile(logPath,`\n${run.err??''}\n`);
   throw new Error(run.timedOut?run.err||`${role} stalled or timed out`:((run.err??'').slice(-1500)||`${role} failed`));
  }
- const value=JSON.parse(await readFile(resultPath,'utf8'));return {value,route,logPath};
+ const value=parseStructuredResult(await readFile(resultPath,'utf8'));return {value,route,logPath};
 }
 
 function validTestCommand(command){return Array.isArray(command)&&command.length>0&&command.length<12&&command.every(x=>typeof x==='string'&&x.length<300)&&['pnpm','node','swift'].includes(command[0]);}
@@ -336,6 +346,6 @@ async function retryBlocked(tickets,ids){
  for(const ticket of selected){const record=state.tickets[ticket.id];record.status='ready';record.phase=record.testHashes?'implement':'test';record.substantiveFailures=0;record.transientFailures=0;record.retryAt=0;record.detail='requeued after infrastructure interruption';await save({at:new Date().toISOString(),ticketId:ticket.id,message:'manually requeued; retained candidate and test evidence'});}
  console.log(`Requeued ${selected.map(ticket=>ticket.id).join(', ')}; no candidate files were discarded`);
 }
-async function selfTest(){const a={id:'A',deps:[],block:'A',files:['packages/a/']},b={id:'B',deps:[],block:'B',files:['packages/b/']},c={id:'C',deps:[],block:'C',files:['packages/a/x/']};state={tickets:{A:{status:'ready'},B:{status:'ready'},C:{status:'ready'}}};const recognized=integratedTicket('a5b57cdace8026f4a31a7f7b5f51fbc23acb0731\tfeat(F01): complete shared contracts');if(conflict(a,b)||!conflict(a,c)||!testFile('x/a.test.ts')||allowed('../x',['x/'])||readyBatch([a,b,c],new Map()).map(x=>x.id).join(',')!=='A,B'||recognized?.id!=='F01'||recognized.commit!=='a5b57cdace8026f4a31a7f7b5f51fbc23acb0731'||integratedTicket('abc\ttest(F01): red baseline'))throw new Error('self-test failed');console.log('loop self-test passed');}
+async function selfTest(){const a={id:'A',deps:[],block:'A',files:['packages/a/']},b={id:'B',deps:[],block:'B',files:['packages/b/']},c={id:'C',deps:[],block:'C',files:['packages/a/x/']};state={tickets:{A:{status:'ready'},B:{status:'ready'},C:{status:'ready'}}};const recognized=integratedTicket('a5b57cdace8026f4a31a7f7b5f51fbc23acb0731\tfeat(F01): complete shared contracts');const fenced=parseStructuredResult('```json\n{"ok":true}\n```');if(conflict(a,b)||!conflict(a,c)||!testFile('x/a.test.ts')||allowed('../x',['x/'])||readyBatch([a,b,c],new Map()).map(x=>x.id).join(',')!=='A,B'||recognized?.id!=='F01'||recognized.commit!=='a5b57cdace8026f4a31a7f7b5f51fbc23acb0731'||integratedTicket('abc\ttest(F01): red baseline')||fenced.ok!==true)throw new Error('self-test failed');console.log('loop self-test passed');}
 async function main(){if(process.argv.includes('--self-test'))return selfTest();const tickets=JSON.parse(await readFile(join(root,'BACKLOG.json'),'utf8')).tickets;if(process.argv.includes('--dry-run')){console.table(tickets.map(t=>({id:t.id,deps:t.deps.join(','),...routeFor({substantiveFailures:0},'worker')})));return;}const available=await processRun(AGENT_BIN,['--version'],{timeout:15_000});if(available.code!==0)throw new Error(`Agent CLI is unavailable: ${AGENT_BIN}`);await initialize(tickets);if(process.argv.includes('--initialize-only')){const done=Object.values(state.tickets).filter(record=>record.status==='done');console.log(`Initialized ${tickets.length} tickets: ${done.length} done, ${tickets.length-done.length} remaining`);for(const record of done)console.log(`${record.id} ${record.commit}`);return;}const retryIndex=process.argv.indexOf('--retry-blocked');if(retryIndex>=0){await retryBlocked(tickets,process.argv.slice(retryIndex+1));return;}const server=serve();console.log(`EchoPilot lean loop: http://127.0.0.1:${PORT}`);process.on('SIGINT',()=>{stopping=true;server.close();});process.on('SIGTERM',()=>{stopping=true;server.close();});await loop(tickets);server.close();}
 main().catch(error=>{console.error(error);process.exitCode=1;});
