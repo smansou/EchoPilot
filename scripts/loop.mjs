@@ -22,7 +22,7 @@ const MAX_ACTIVE=Math.max(0,Number.parseInt(process.env.LOOP_MAX_AGENTS??'0',10)
 const MAX_TRANSIENT_FAILURES=Math.max(1,Number.parseInt(process.env.LOOP_MAX_TRANSIENT_FAILURES??'3',10)||3);
 const MAX_SUBSTANTIVE_FAILURES=Math.max(1,Number.parseInt(process.env.LOOP_MAX_SUBSTANTIVE_FAILURES??'3',10)||3);
 const forbidden=['.git','.github','.loop','.runner','.agents','.codex','scripts/loop.mjs','backlog.json'];
-const extraPaths={F02:['apps/desktop/src/renderer/main.tsx','apps/desktop/src/renderer/styles.css'],S01:['apps/desktop/src/main/index.ts','native/macos/Package.swift']};
+const extraPaths={F02:['apps/desktop/src/renderer/main.tsx','apps/desktop/src/renderer/styles.css'],S01:['apps/desktop/src/main/index.ts','native/macos/Package.swift','pnpm-lock.yaml']};
 const checks=[['pnpm','typecheck'],['pnpm','test'],['pnpm','build']];
 let state;
 let integration=Promise.resolve();
@@ -57,7 +57,7 @@ function routeFor(record,role){
  return {model,effort:process.env[`LOOP_${role.toUpperCase()}_EFFORT`]??effort};
 }
 
-function transientFailure(issue){return /timed? out|stalled|rate.?limit|quota|temporar|network|ECONN|EAI_AGAIN|overload|unavailable|cmux-grid|agent surface|surface is not a terminal/i.test(issue);}
+function transientFailure(issue){return /timed? out|stalled|rate.?limit|quota|temporar|network|connection failed|failed to send|could not resolve host|operation not permitted|ECONN|EAI_AGAIN|overload|unavailable|cmux-grid|agent surface|surface is not a terminal/i.test(issue);}
 function retryDelay(failures){return Math.min(60_000,5_000*(2**Math.max(0,failures-1)));}
 async function recordFailure(ticket,record,error,phase){
  const issue=String(error?.message??error).slice(0,4000);const transient=transientFailure(issue);
