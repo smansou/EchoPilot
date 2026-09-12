@@ -19,6 +19,7 @@
     "smoke": "node scripts/smoke.mjs",
     "loop": "node scripts/loop.mjs",
     "loop:init": "node scripts/loop.mjs --initialize-only",
+    "loop:retry": "node scripts/loop.mjs --retry-blocked",
     "loop:dry": "node scripts/loop.mjs --dry-run",
     "loop:self-test": "node scripts/loop.mjs --self-test"
   },

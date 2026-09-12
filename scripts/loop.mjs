@@ -56,7 +56,7 @@ function routeFor(record,role){
  return {model,effort:process.env[`LOOP_${role.toUpperCase()}_EFFORT`]??effort};
 }
 
-function transientFailure(issue){return /timed? out|stalled|rate.?limit|quota|temporar|network|ECONN|EAI_AGAIN|overload|unavailable/i.test(issue);}
+function transientFailure(issue){return /timed? out|stalled|rate.?limit|quota|temporar|network|ECONN|EAI_AGAIN|overload|unavailable|cmux-grid|agent surface|surface is not a terminal/i.test(issue);}
 function retryDelay(failures){return Math.min(60_000,5_000*(2**Math.max(0,failures-1)));}
 async function recordFailure(ticket,record,error,phase){
  const issue=String(error?.message??error).slice(0,4000);const transient=transientFailure(issue);
@@ -124,7 +124,7 @@ async function worktree(ticket){
 const CMUX_BIN=process.env.CMUX_BIN??'cmux';
 const CMUX_GRID=join(root,'scripts','cmux-grid.mjs');
 const CMUX_RUNNER=join(root,'scripts','loop-agent-call.mjs');
-const TERMINALS=(process.env.LOOP_TERMINALS??'auto').toLowerCase();
+const TERMINALS=(process.env.LOOP_TERMINALS??'direct').toLowerCase();
 const CMUX_WORKSPACE=process.env.CMUX_WORKSPACE_ID??'';
 const CMUX_SUPERVISOR=process.env.CMUX_SUPERVISOR_SURFACE??process.env.CMUX_SURFACE_ID??'';
 const useCmux=TERMINALS==='cmux'||(TERMINALS==='auto'&&Boolean(CMUX_WORKSPACE&&CMUX_SUPERVISOR));
@@ -330,6 +330,13 @@ async function loop(tickets){
  }
  state.running=false;await save();await stopAgents();
 }
+async function retryBlocked(tickets,ids){
+ const wanted=new Set(ids.filter(id=>id&&id!=='--'));
+ const selected=tickets.filter(ticket=>(!wanted.size||wanted.has(ticket.id))&&state.tickets[ticket.id]?.status==='blocked');
+ if(!selected.length)throw new Error(`No blocked tickets matched${wanted.size?` ${[...wanted].join(', ')}`:''}`);
+ for(const ticket of selected){const record=state.tickets[ticket.id];record.status='ready';record.phase=record.testHashes?'implement':'test';record.substantiveFailures=0;record.transientFailures=0;record.retryAt=0;record.detail='requeued after infrastructure interruption';await save({at:new Date().toISOString(),ticketId:ticket.id,message:'manually requeued; retained candidate and test evidence'});}
+ console.log(`Requeued ${selected.map(ticket=>ticket.id).join(', ')}; no candidate files were discarded`);
+}
 async function selfTest(){const a={id:'A',deps:[],block:'A',files:['packages/a/']},b={id:'B',deps:[],block:'B',files:['packages/b/']},c={id:'C',deps:[],block:'C',files:['packages/a/x/']};state={tickets:{A:{status:'ready'},B:{status:'ready'},C:{status:'ready'}}};const recognized=integratedTicket('a5b57cdace8026f4a31a7f7b5f51fbc23acb0731\tfeat(F01): complete shared contracts');if(conflict(a,b)||!conflict(a,c)||!testFile('x/a.test.ts')||allowed('../x',['x/'])||readyBatch([a,b,c],new Map()).map(x=>x.id).join(',')!=='A,B'||recognized?.id!=='F01'||recognized.commit!=='a5b57cdace8026f4a31a7f7b5f51fbc23acb0731'||integratedTicket('abc\ttest(F01): red baseline'))throw new Error('self-test failed');console.log('loop self-test passed');}
-async function main(){if(process.argv.includes('--self-test'))return selfTest();const tickets=JSON.parse(await readFile(join(root,'BACKLOG.json'),'utf8')).tickets;if(process.argv.includes('--dry-run')){console.table(tickets.map(t=>({id:t.id,deps:t.deps.join(','),...routeFor({substantiveFailures:0},'worker')})));return;}const available=await processRun(AGENT_BIN,['--version'],{timeout:15_000});if(available.code!==0)throw new Error(`Agent CLI is unavailable: ${AGENT_BIN}`);await initialize(tickets);if(process.argv.includes('--initialize-only')){const done=Object.values(state.tickets).filter(record=>record.status==='done');console.log(`Initialized ${tickets.length} tickets: ${done.length} done, ${tickets.length-done.length} remaining`);for(const record of done)console.log(`${record.id} ${record.commit}`);return;}const server=serve();console.log(`EchoPilot lean loop: http://127.0.0.1:${PORT}`);process.on('SIGINT',()=>{stopping=true;server.close();});process.on('SIGTERM',()=>{stopping=true;server.close();});await loop(tickets);server.close();}
+async function main(){if(process.argv.includes('--self-test'))return selfTest();const tickets=JSON.parse(await readFile(join(root,'BACKLOG.json'),'utf8')).tickets;if(process.argv.includes('--dry-run')){console.table(tickets.map(t=>({id:t.id,deps:t.deps.join(','),...routeFor({substantiveFailures:0},'worker')})));return;}const available=await processRun(AGENT_BIN,['--version'],{timeout:15_000});if(available.code!==0)throw new Error(`Agent CLI is unavailable: ${AGENT_BIN}`);await initialize(tickets);if(process.argv.includes('--initialize-only')){const done=Object.values(state.tickets).filter(record=>record.status==='done');console.log(`Initialized ${tickets.length} tickets: ${done.length} done, ${tickets.length-done.length} remaining`);for(const record of done)console.log(`${record.id} ${record.commit}`);return;}const retryIndex=process.argv.indexOf('--retry-blocked');if(retryIndex>=0){await retryBlocked(tickets,process.argv.slice(retryIndex+1));return;}const server=serve();console.log(`EchoPilot lean loop: http://127.0.0.1:${PORT}`);process.on('SIGINT',()=>{stopping=true;server.close();});process.on('SIGTERM',()=>{stopping=true;server.close();});await loop(tickets);server.close();}
 main().catch(error=>{console.error(error);process.exitCode=1;});

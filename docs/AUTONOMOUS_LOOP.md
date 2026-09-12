@@ -27,6 +27,14 @@ LOOP_MODEL=deepseek-flash LOOP_MAX_AGENTS=10 pnpm loop
 
 Open `http://127.0.0.1:4318` for read-only status. Stop with Ctrl-C; the next run recovers tickets that were active when the process stopped.
 
+If a ticket is blocked after an infrastructure interruption, requeue only the affected tickets while preserving their worktrees and test evidence:
+
+```sh
+pnpm loop:retry -- F02 Q01 S01
+```
+
+The normal terminal mode is direct subprocess execution. Set `LOOP_TERMINALS=cmux` only when an on-screen cmux workspace and supervisor surface are intentionally available.
+
 `LOOP_MAX_AGENTS=0` removes the policy cap. The dependency graph and declared file ownership still prevent conflicting tickets from running together. Full checks and merges are serialized. Start with 10 and lower it only if API throttling, memory pressure, or local installation contention reduces throughput.
 
 ## Useful controls
