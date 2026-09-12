@@ -14,18 +14,19 @@ The project is implemented from `BACKLOG.json` by `scripts/loop.mjs`. Do not giv
 
 3. If `pnpm` is missing and Node was installed through nvm, run `corepack enable` and `corepack prepare pnpm@11.19.0 --activate`.
 4. If `codex` is missing, install the CLI with `npm install -g @openai/codex`. With nvm's standard shell setup, no additional PATH line is needed; open a new Terminal afterward.
-5. Keep the desktop app's normal `~/.codex` configuration unchanged. Create an isolated home for DeepSeek workers and run DeepSeek's installer against that temporary home:
+5. Keep the desktop app's normal `~/.codex` configuration unchanged. Run DeepSeek's installer with its supported `CODEX_HOME` override so it writes an isolated worker configuration:
 
    ```sh
-   mkdir -p "$HOME/.deepseek-worker/.codex"
-   HOME="$HOME/.deepseek-worker" bash <(curl -fsSL https://cdn.deepseek.com/api-docs/codex-deepseek-setup-en.sh)
+   DEEPSEEK_WORKER_CONFIG="$HOME/.codex-deepseek-worker"
+   mkdir -p "$DEEPSEEK_WORKER_CONFIG"
+   CODEX_HOME="$DEEPSEEK_WORKER_CONFIG" bash <(curl -fsSL https://cdn.deepseek.com/api-docs/codex-deepseek-setup-en.sh)
    ```
 
-   Choose `deepseek-flash`. This writes only under `~/.deepseek-worker/.codex`, so it does not replace the desktop app's OpenAI provider configuration.
+   Choose `deepseek-flash`. This writes only under `~/.codex-deepseek-worker`, so it does not replace the desktop app's OpenAI provider configuration.
 6. Verify the isolated worker configuration without changing the desktop app:
 
    ```sh
-   CODEX_HOME="$HOME/.deepseek-worker/.codex" codex exec -m deepseek-flash "Reply with ready"
+   CODEX_HOME="$HOME/.codex-deepseek-worker" codex exec -m deepseek-flash "Reply with ready"
    ```
 
    The header must report `provider: deepseek`.
@@ -36,7 +37,7 @@ The project is implemented from `BACKLOG.json` by `scripts/loop.mjs`. Do not giv
 ## Run
 
 ```sh
-LOOP_CODEX_HOME="$HOME/.deepseek-worker/.codex" LOOP_MODEL=deepseek-flash LOOP_MAX_AGENTS=10 pnpm loop
+LOOP_CODEX_HOME="$HOME/.codex-deepseek-worker" LOOP_MODEL=deepseek-flash LOOP_MAX_AGENTS=10 pnpm loop
 ```
 
 Open `http://127.0.0.1:4318` for read-only status. Stop with Ctrl-C; the next run recovers tickets that were active when the process stopped.
