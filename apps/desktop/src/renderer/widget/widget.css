@@ -1,0 +1,17 @@
+.shell-panel{margin:14px 0 4px;padding:13px 14px;border:1px solid #2f2c3c;background:#191823;border-radius:12px}
+.shell-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 14px;margin:0}
+.shell-grid dt{font-size:9px;letter-spacing:1.1px;text-transform:uppercase;color:#8f8aa4}
+.shell-grid dd{margin:3px 0 0;font-size:12px;color:#ded9ec;overflow-wrap:anywhere}
+.shell-grid dd[data-state='granted'],.shell-grid dd[data-state='ready']{color:#a8e6bd}
+.shell-grid dd[data-state='denied']{color:#ffb7c4}
+.shell-grid dd[data-state='disconnected'],.shell-grid dd[data-state='stopped']{color:#ffc98a}
+.shell-grid dd[data-state='muted']{color:#e7c98a}
+.shell-note{font-size:10px;line-height:1.6;color:#ffc98a;margin-top:10px}
+.shell-conflicts{list-style:none;margin:10px 0 0;padding:0;font-size:10px;line-height:1.6;color:#ffc0cb}
+.shell-conflicts li+li{margin-top:5px}
+.shell-conflicts strong{font-weight:600}
+.shell-controls{display:flex;gap:7px;margin-top:12px;-webkit-app-region:no-drag}
+.shell-controls button{min-height:32px;padding:7px 11px;border-radius:8px;border:1px solid #4a4157;background:#2c2736;color:#eee6ff;font-size:11px}
+.shell-controls button:hover:not(:disabled){background:#3a3247}
+.shell-controls button:disabled{opacity:.5}
+.dashboard .shell-panel{max-width:640px}

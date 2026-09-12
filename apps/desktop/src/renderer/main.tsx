@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { State as CompanionState, Command, CompanionAPI as Bridge } from '../../../../packages/contracts/src/index';
+import { sendShellControl, useShellSnapshot, type ShellSnapshot, type WidgetControl } from './widget/shell-status';
+import { WidgetStatusPanel } from './widget/WidgetStatusPanel';
 import './styles.css';
+import './widget/widget.css';
 
 const bridge = (window as unknown as { echo?: Bridge }).echo;
 const isDashboard = new URLSearchParams(window.location.search).get('view') === 'dashboard';
@@ -22,6 +25,10 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [replayCount, setReplayCount] = useState(0);
+  const polledShell = useShellSnapshot();
+  const [actionShell, setActionShell] = useState<ShellSnapshot | null>(null);
+  const [shellBusy, setShellBusy] = useState(false);
+  const shell = actionShell ?? polledShell;
 
   useEffect(() => {
     if (!bridge) {
@@ -57,6 +64,19 @@ function App() {
     finally { setBusy(false); }
   }
 
+  // Foreground-safe shell controls travel over the same-origin shell-action route, so they work
+  // even when the preload bridge or a conflicting global shortcut is unavailable.
+  async function shellControl(control: WidgetControl) {
+    if (shellBusy) return;
+    setShellBusy(true);
+    try {
+      setActionShell(await sendShellControl(control));
+      window.setTimeout(() => setActionShell(null), 2_000);
+    }
+    catch { setError('That control did not complete. Try again, or use the menu bar.'); }
+    finally { setShellBusy(false); }
+  }
+
   const controls = (
     <div className="controls" aria-label="Companion controls">
       <button className={`control ${state.muted ? 'selected' : ''}`} aria-label={state.muted ? 'Unmute companion output' : 'Mute companion output'} aria-pressed={state.muted} disabled={!ready || busy} onClick={() => void command({ type: 'set-muted', muted: !state.muted })} title={state.muted ? 'Unmute output' : 'Mute output'}><Icon name="mute" /><span>{state.muted ? 'Unmute' : 'Mute'}</span></button>
@@ -72,11 +92,13 @@ function App() {
         <section className="dashboard-heading"><p className="eyebrow">YOUR COMPANION, AT A GLANCE</p><h1>Mission Control</h1><p>A small presence. A clearer view of your work.</p></section>
         <section className="status-card"><div className={`orb ${state.muted ? 'muted' : ''}`} aria-hidden="true"><span /></div><div><p className="eyebrow">COMPANION OUTPUT</p><h2>{!ready ? 'Connecting' : state.muted ? 'Muted' : 'Ready'}</h2><p>Local demo session</p></div>{controls}</section>
         <section className="event-card" aria-labelledby="latest-event"><div className="section-label"><h2 id="latest-event">Latest event</h2><span className="pill">Synthetic</span></div><p className="event-text" aria-live="polite">{state.event?.text ?? 'Waiting for the first demo event.'}</p>{state.event && <div className="event-meta"><span>Session · {state.event.sessionId}</span><time dateTime={state.event.createdAt}>{new Date(state.event.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>}</section>
+        <WidgetStatusPanel snapshot={shell} busy={shellBusy} onControl={(control) => void shellControl(control)} />
         <aside className="demo-note"><span className="note-dot" /><div><strong>This is the first working slice.</strong><p>Events are simulated. No microphone, screen capture, real agent connection, or synthesized voice is active. Replay re-delivers the latest event.</p></div></aside>
         <footer>EchoPilot <span>·</span> Local desktop prototype</footer>
       </> : <>
         <section className="widget-status"><div className={`orb ${state.muted ? 'muted' : ''}`} aria-hidden="true"><span /></div><div><h1>{!ready ? 'Connecting…' : state.muted ? 'Output muted' : 'Alongside you'}</h1><p>Synthetic session · no microphone</p></div></section>
         <p className="widget-event" aria-live="polite">{state.event?.text ?? 'Waiting for the first demo event.'}</p>
+        <WidgetStatusPanel snapshot={shell} busy={shellBusy} onControl={(control) => void shellControl(control)} />
         {controls}
         <p className="widget-note">Demo events only · replay re-delivers text</p>
       </>}
