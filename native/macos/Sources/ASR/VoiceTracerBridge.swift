@@ -1,4 +1,5 @@
 import Foundation
+import Audio
 
 public struct VoiceErrorState: Sendable, Equatable {
     public let code: String

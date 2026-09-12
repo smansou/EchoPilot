@@ -22,9 +22,19 @@ a visible state instead of hanging.
 `removeTap`/`engine.stop()`: those calls wait for an in-flight tap block, and a tap block takes the
 state lock, so holding it across the release would deadlock mute, lock and device-removal stops.
 
-`Tests/main.swift` is the native pipeline regression (exactly-once packet delivery through
-`MicrophoneGraph` + `VoiceTracerBridge`, bounded windows); it is test-only and stays out of the
-helper target.
+## Build and test without Xcode
+
+`Package.swift` in this directory builds this module on its own; the root `native/macos/Package.swift`
+keeps building only the signed `echopilot-secrets` helper.
+
+```sh
+swift build --package-path native/macos/Sources/Audio
+```
+
+The native pipeline regression (exactly-once packet delivery, bounded windows, mute/release
+settling while audio flows) spans this module and `ASR`, so it lives in the ASR package's XCTest
+target: `swift test --package-path native/macos/Sources/ASR`. Each package keeps its `.build`
+scratch directory ignored, so the checked-out tree stays clean after a gate run.
 
 The deterministic acceptance path drives `packages/voice` through the fake host contract; this
 module is what the signed helper feeds into in the app.

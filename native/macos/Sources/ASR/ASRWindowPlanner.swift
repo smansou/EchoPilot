@@ -1,4 +1,5 @@
 import Foundation
+import Audio
 
 /// One ASR window: `startMs` and every word time inside it are window-relative milliseconds.
 public struct ASRWindow: Sendable, Equatable {

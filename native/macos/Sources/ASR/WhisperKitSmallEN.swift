@@ -1,4 +1,5 @@
 import Foundation
+import Audio
 
 #if canImport(WhisperKit)
 import WhisperKit

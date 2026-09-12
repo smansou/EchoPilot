@@ -1,4 +1,5 @@
 import Foundation
+import Audio
 
 /// The bundled Silero VAD model, injected by the helper's packaging step (ONNX Runtime / CoreML).
 public protocol SileroVADModel: AnyObject {

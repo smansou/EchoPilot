@@ -20,3 +20,21 @@ Rules that match `packages/voice` one-for-one:
 
 The transcriber and the VAD are injected, so a signed build links the real WhisperKit small.en pack
 and the Silero ONNX/CoreML backend while development harnesses can run the deterministic stand-ins.
+
+## Build and test without Xcode
+
+`Package.swift` in this directory builds this module on its own and depends on the `Audio` package
+next to it (packets and the bounded ring come from there); the root `native/macos/Package.swift`
+keeps building only the signed `echopilot-secrets` helper.
+
+```sh
+swift build --package-path native/macos/Sources/ASR
+swift test --package-path native/macos/Sources/ASR
+```
+
+`Tests/V01PipelineTests.swift` is the native pipeline regression: exactly-once packet delivery
+through `MicrophoneGraph` + `VoiceTracerBridge`, one 400 ms window that holds each packet once,
+mute and an ordinary capture release settling while audio keeps flowing, and the 15 s window bound
+for an oversized packet. It never asks for microphone permission or opens a device, so it runs
+headless. Each package keeps its `.build` scratch directory ignored, so the checked-out tree stays
+clean after a gate run.
