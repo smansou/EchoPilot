@@ -30,3 +30,11 @@ Rules:
 Native counterpart: `native/macos/Sources/Audio/` (microphone graph, bounded PCM channel, device
 enumeration, permissions) and `native/macos/Sources/ASR/` (Silero VAD, WhisperKit small.en, window
 planner, session bridge).
+
+## Acceptance oracle
+
+The frozen acceptance path is a plain, unprivileged argv —
+`pnpm exec tsx --test packages/voice/test/acceptance.test.ts packages/voice/test/window-bound.test.ts` —
+so it runs under any loop sandbox/approval combination. Nothing in this package or in the native
+Audio/ASR sources spawns a process or reads CLI flags, so no owned file can produce an incompatible
+`codex exec` argument list.

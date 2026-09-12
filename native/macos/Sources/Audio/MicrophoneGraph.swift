@@ -53,6 +53,9 @@ public final class MicrophoneGraph: @unchecked Sendable {
     private var running = false
     private var tapInstalled = false
     private var activeInputUID: String?
+    /// Test/development seam: pins the permission state so the denial path can be exercised
+    /// headlessly. `nil` means "ask the system", which is the only value the app ever uses.
+    private var permissionOverride: MicrophonePermission?
     private var deviceObserver: AudioDeviceObserver?
     private var notificationTokens: [NSObjectProtocol] = []
 
@@ -63,7 +66,7 @@ public final class MicrophoneGraph: @unchecked Sendable {
     public var pcmChannel: BoundedPCMChannel { channel }
 
     public func permission() -> MicrophonePermission {
-        MicrophonePermissionProbe.current()
+        stateQueue.sync { permissionOverride } ?? MicrophonePermissionProbe.current()
     }
 
     public func enumerateInputDevices() throws -> [AudioInputDevice] {
@@ -78,7 +81,7 @@ public final class MicrophoneGraph: @unchecked Sendable {
     /// explicitly as part of this active session before anything is opened.
     public func startCapture(onFrame: @escaping FrameListener) async throws {
         stateQueue.sync { frameListener = onFrame }
-        switch MicrophonePermissionProbe.current() {
+        switch permission() {
         case .denied:
             emit(.permissionDenied)
             throw MicrophoneGraphError.microphoneDenied
@@ -264,6 +267,17 @@ public final class MicrophoneGraph: @unchecked Sendable {
             guard let base = buffer.baseAddress else { return }
             deliver(samples: base, count: buffer.count, startNs: startNs)
         }
+    }
+
+    /// Pins the permission probe result for the headless acceptance path; `nil` restores the real
+    /// system probe.
+    func setPermissionOverrideForTesting(_ value: MicrophonePermission?) {
+        stateQueue.sync { permissionOverride = value }
+    }
+
+    /// Reports a host event exactly like the CoreAudio, lock and helper-crash observers do.
+    func emitForTesting(_ event: AudioHostEvent) {
+        emit(event)
     }
 
     private func observeSystemEvents() {

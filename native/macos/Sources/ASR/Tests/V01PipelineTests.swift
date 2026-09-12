@@ -43,6 +43,22 @@ final class V01PipelineTests: XCTestCase {
         return samples
     }
 
+    /// Pushes 20 ms packets through one captured frame listener, exactly like a tap that is still
+    /// delivering audio after mute or after a host failure.
+    private func sendPackets(
+        _ packetCount: Int,
+        through listener: (PCMPacket) -> Void,
+        startingAt sequence: UInt64 = 0
+    ) {
+        for index in 0..<packetCount {
+            listener(PCMPacket(
+                sequence: sequence + UInt64(index),
+                monotonicNs: UInt64(index) * PCMPacket.packetDurationNs,
+                pcm: pcmData(silentSamples(packetCount: 1))
+            ))
+        }
+    }
+
     private final class RecordingTranscriber: LocalTranscriber, @unchecked Sendable {
         private let lock = NSLock()
         private var recorded: [ASRWindow] = []
@@ -165,10 +181,15 @@ final class V01PipelineTests: XCTestCase {
 
     func testMuteSettlesAndClearsPendingAudio() async throws {
         let host = MicrophoneGraph(maxQueuedFrames: 64)
-        let (bridge, _) = try makeBridge(host: host)
+        host.setPermissionOverrideForTesting(.granted)
+        let (bridge, transcriber) = try makeBridge(host: host)
         addTeardownBlock { await bridge.close() }
 
-        host.deliverForTesting(samples: silentSamples(packetCount: 4), startNs: 0)
+        // Keep the one frame listener the session registered: after mute it must drop late audio.
+        let listener = bridge.frameListenerForTesting()
+        host.deliverForTesting(samples: silentSamples(packetCount: 25), startNs: 0)
+        await waitUntil { !transcriber.windows.isEmpty }
+
         let muteStart = Date()
         await bridge.mute()
         XCTAssertLessThan(
@@ -176,7 +197,24 @@ final class V01PipelineTests: XCTestCase {
             2,
             "mute settles without hanging the widget"
         )
+        let muted = bridge.status()
+        XCTAssertEqual(muted.input, "muted", "mute is visible in the widget state")
+        XCTAssertEqual(muted.microphone, "granted", "mute changes capture, not the OS permission")
+        XCTAssertNil(muted.error, "mute is not an error state")
         XCTAssertEqual(host.pcmChannel.status().queuedFrames, 0, "mute clears pending audio")
+
+        let windowsAtMute = transcriber.windows.count
+        sendPackets(25, through: listener, startingAt: 1_000)
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(
+            transcriber.windows.count,
+            windowsAtMute,
+            "audio delivered after mute must not reach the local ASR"
+        )
+        XCTAssertTrue(
+            bridge.transcript().isEmpty,
+            "mute discards the open utterance instead of finalizing it"
+        )
     }
 
     // MARK: - 4. Releasing capture never deadlocks the audio tap
@@ -242,5 +280,146 @@ final class V01PipelineTests: XCTestCase {
             oversized.pcm.count,
             "no PCM was dropped while splitting the frame"
         )
+    }
+
+    // MARK: - 6. Mic denial, device removal, lock and helper crash stay visible and stop the pipeline
+
+    /// Mic denial: the graph never opens, `start()` settles, and the widget shows `mic_denied`.
+    func testMicrophoneDenialIsVisibleWithoutOpeningCapture() async throws {
+        let host = MicrophoneGraph(maxQueuedFrames: 16)
+        host.setPermissionOverrideForTesting(.denied)
+        var configuration = SileroVADConfiguration()
+        configuration.allowEnergyFallback = true
+        let transcriber = RecordingTranscriber()
+        let bridge = VoiceTracerBridge(
+            host: host,
+            vad: try SileroVAD(configuration: configuration),
+            transcriber: transcriber
+        )
+        addTeardownBlock { await bridge.close() }
+
+        let start = Date()
+        await bridge.start()
+        XCTAssertLessThan(
+            Date().timeIntervalSince(start),
+            2,
+            "a denied microphone settles instead of hanging the widget"
+        )
+
+        let status = bridge.status()
+        XCTAssertEqual(status.microphone, "denied", "the widget shows the permission state")
+        XCTAssertEqual(status.input, "closed", "a denied microphone leaves input closed")
+        XCTAssertEqual(status.error?.code, "mic_denied", "the failure stays visible in status()")
+        XCTAssertFalse(
+            status.error?.message.isEmpty ?? true,
+            "the visible state needs a readable message"
+        )
+        XCTAssertFalse(host.captureActive(), "a denied microphone never opens capture")
+
+        // Let the denial's capture release settle, then push audio like a tap that is still
+        // delivering: a denied session must drop it instead of opening a window or committing text.
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        sendPackets(25, through: bridge.frameListenerForTesting())
+        XCTAssertEqual(
+            bridge.status().queuedFrames,
+            0,
+            "a denied session drops late audio instead of buffering it"
+        )
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertTrue(transcriber.windows.isEmpty, "a denied session must not transcribe audio")
+        XCTAssertTrue(bridge.transcript().isEmpty, "a denied session must not commit text")
+    }
+
+    /// Device removal, lock and helper crash: each event is a visible terminal state, drops the
+    /// pending ring, stops the consumer from opening new ASR windows, and still settles.
+    func testHostFailureEventsAreVisibleAndStopConsumingAudio() async throws {
+        let cases: [(label: String, event: AudioHostEvent, code: String)] = [
+            ("device removal", .deviceRemoved(deviceId: "fixture-mic-2"), "device_removed"),
+            ("lock", .systemLocked, "locked"),
+            ("helper crash", .helperCrash(message: "helper exited"), "helper_crash"),
+            ("permission denial event", .permissionDenied, "mic_denied"),
+        ]
+
+        for testCase in cases {
+            // A ring that fits the pre-failure burst, so the window under test is the failure's
+            // effect and not an overflow discontinuity.
+            let host = MicrophoneGraph(maxQueuedFrames: 64)
+            let (bridge, transcriber) = try makeBridge(host: host)
+            let listener = bridge.frameListenerForTesting()
+
+            // Speech is flowing (a display-only window exists) when the host reports the failure.
+            host.deliverForTesting(samples: silentSamples(packetCount: 25), startNs: 0)
+            await waitUntil { !transcriber.windows.isEmpty }
+            let windowsBeforeFailure = transcriber.windows.count
+
+            host.emitForTesting(testCase.event)
+            await waitUntil { bridge.status().error != nil }
+
+            let status = bridge.status()
+            XCTAssertEqual(status.error?.code, testCase.code, "\(testCase.label): visible error code")
+            XCTAssertFalse(
+                status.error?.message.isEmpty ?? true,
+                "\(testCase.label): the visible state needs a readable message"
+            )
+            XCTAssertEqual(status.input, "closed", "\(testCase.label): the stream is closed")
+            XCTAssertEqual(
+                status.queuedFrames,
+                0,
+                "\(testCase.label): the failure drops pending audio instead of buffering it"
+            )
+
+            sendPackets(25, through: listener, startingAt: 1_000)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            XCTAssertEqual(
+                transcriber.windows.count,
+                windowsBeforeFailure,
+                "\(testCase.label): a failed session must not open new ASR windows"
+            )
+            XCTAssertTrue(
+                bridge.transcript().isEmpty,
+                "\(testCase.label): a failed session must not commit text"
+            )
+
+            let closeStart = Date()
+            await bridge.close()
+            XCTAssertLessThan(
+                Date().timeIntervalSince(closeStart),
+                2,
+                "\(testCase.label): close settles without hanging the widget"
+            )
+            XCTAssertEqual(
+                bridge.status().error?.code,
+                testCase.code,
+                "\(testCase.label): the failure stays visible after close"
+            )
+        }
+    }
+
+    // MARK: - 7. The local model pack is English-only and never reaches the network
+
+    func testLocalTranscriberIsOfflineAndFailsClosed() throws {
+        XCTAssertEqual(WhisperModelPack.englishSmall.language, "en")
+        XCTAssertFalse(WhisperModelPack.englishSmall.isMultilingual)
+        XCTAssertEqual(WhisperModelPack.englishSmall.sampleRate, PCMPacket.sampleRate)
+        XCTAssertEqual(WhisperModelPack.englishSmall.maxWindowMs, 15_000)
+
+        let missingPack = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("v01-missing-model-pack-\(UUID().uuidString)")
+
+        var networked = WhisperKitSmallEN.Configuration(modelDirectory: missingPack)
+        networked.allowsNetwork = true
+        XCTAssertThrowsError(try WhisperKitSmallEN(configuration: networked)) { error in
+            guard case ASRError.networkDisabled = error else {
+                return XCTFail("local mode must refuse a networked transcriber, got \(error)")
+            }
+        }
+
+        var offline = WhisperKitSmallEN.Configuration(modelDirectory: missingPack)
+        offline.allowsNetwork = false
+        XCTAssertThrowsError(try WhisperKitSmallEN(configuration: offline)) { error in
+            guard case ASRError.modelPackMissing = error else {
+                return XCTFail("a missing model pack must fail closed, got \(error)")
+            }
+        }
     }
 }

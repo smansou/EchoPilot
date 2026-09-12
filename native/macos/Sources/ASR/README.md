@@ -15,6 +15,9 @@ Rules that match `packages/voice` one-for-one:
   prefix is never re-committed (overlap words are filtered by their end timestamp).
 - A discontinuity (dropped audio from the bounded ring) discards the open window instead of
   splicing non-contiguous audio; the dropped count stays visible in `status()`.
+- A host failure (denial, device removal, lock, helper crash) is terminal for the session: it
+  clears the ring, releases capture, resets the planner, and keeps the error visible in
+  `status()` while late packets are dropped instead of being transcribed or committed.
 - Endpoint commits can carry empty text when the engine is certain the utterance is over; the
   widget keeps them in order and drops the empty strings when rendering.
 
@@ -35,6 +38,9 @@ swift test --package-path native/macos/Sources/ASR
 `Tests/V01PipelineTests.swift` is the native pipeline regression: exactly-once packet delivery
 through `MicrophoneGraph` + `VoiceTracerBridge`, one 400 ms window that holds each packet once,
 mute and an ordinary capture release settling while audio keeps flowing, and the 15 s window bound
-for an oversized packet. It never asks for microphone permission or opens a device, so it runs
-headless. Each package keeps its `.build` scratch directory ignored, so the checked-out tree stays
-clean after a gate run.
+for an oversized packet. It also covers the visible failure states: mic denial (through the graph's
+permission override seam), device removal, lock and helper crash each keep their error code,
+message and `closed` input visible, drop the pending audio, stop opening new ASR windows, and still
+settle on `close()`. It never asks for microphone permission or opens a device, so it runs headless.
+Each package keeps its `.build` scratch directory ignored, so the checked-out tree stays clean after
+a gate run.

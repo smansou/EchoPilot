@@ -17,7 +17,10 @@ the ring's capacity and the ASR window/endpoint timing match real audio time.
 
 Failure path: denial, device removal (CoreAudio listener), screen lock (distributed notification)
 and helper crash (`reportHelperCrash`) all emit a host event, release capture, and leave the widget
-a visible state instead of hanging.
+a visible state instead of hanging. The session bridge treats such an event as terminal for that
+session: it clears the ring and drops later packets, so nothing is transcribed after the widget
+showed the failure. `setPermissionOverrideForTesting` and `emitForTesting` let the headless
+regression exercise the denial and event paths without prompting for a microphone.
 `stopCapture()` flips the capture flags under the state lock and then releases it before
 `removeTap`/`engine.stop()`: those calls wait for an in-flight tap block, and a tap block takes the
 state lock, so holding it across the release would deadlock mute, lock and device-removal stops.

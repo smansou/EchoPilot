@@ -60,6 +60,9 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     private var unsubscribeHost: (() -> Void)?
     private var running = false
     private var muted = false
+    /// A visible host failure (denial, device removal, lock, helper crash) is terminal for the
+    /// session: the widget keeps the error state and the pipeline stops consuming audio.
+    private var failed = false
 
     public init(
         host: MicrophoneGraph,
@@ -81,6 +84,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     }
 
     public func start() async {
+        guard !failed else { return }
         beginSession()
         do {
             try await host.startCapture(onFrame: frameListener())
@@ -123,9 +127,11 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     public func mute() async {
         stateQueue.sync {
             muted = true
-            input = "muted"
             planner.reset()
             host.pcmChannel.clear()
+            // Mute is a capture guarantee, not an error: a healthy session shows `muted`, while a
+            // session that already surfaced a host failure keeps that error state visible.
+            if error == nil { input = "muted" }
         }
         await host.stopCapture()
     }
@@ -168,14 +174,16 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     }
 
     private func blockingEnqueue(_ packet: PCMPacket) {
-        // Capture callbacks must never block on the ASR consumer; the ring absorbs stalls.
-        guard running else { return }
+        // Capture callbacks must never block on the ASR consumer; the ring absorbs stalls. Once
+        // the session is muted or a host failure is visible, late packets are dropped instead of
+        // being transcribed after the widget stopped showing them.
+        guard stateQueue.sync(execute: { running && !muted && !failed }) else { return }
         host.pcmChannel.enqueue(packet)
         signal.yield(())
     }
 
     private func drainAndProcess() async {
-        while running, !muted {
+        while running, !muted, !failed {
             var batch: [PCMPacket] = []
             var discontinuity = false
             host.pcmChannel.setConsumer(
@@ -183,6 +191,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
                 onDiscontinuity: { discontinuity = true }
             )
             host.pcmChannel.drain()
+            if failed || muted { return }
             if discontinuity {
                 planner.markDiscontinuity()
                 setInput("listening")
@@ -195,6 +204,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     }
 
     private func process(_ packet: PCMPacket) async {
+        guard !failed, !muted else { return }
         let vadState = vad.process(pcm: packet.pcm, sampleRate: packet.sampleRate)
         if vadState.isSpeech, status().input == "listening" {
             setInput("speech_candidate")
@@ -280,9 +290,11 @@ public final class VoiceTracerBridge: @unchecked Sendable {
             mapped = VoiceErrorState(code: "helper_crash", message: message)
         }
         stateQueue.sync {
+            failed = true
             error = mapped
             input = "closed"
             planner.reset()
+            host.pcmChannel.clear()
         }
         Task { await host.stopCapture() }
     }
@@ -302,8 +314,10 @@ public final class VoiceTracerBridge: @unchecked Sendable {
             message = String(describing: failure)
         }
         stateQueue.sync {
+            failed = true
             error = VoiceErrorState(code: code, message: message)
             input = "closed"
+            host.pcmChannel.clear()
         }
     }
 }
