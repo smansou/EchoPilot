@@ -4,15 +4,12 @@ Managed Codex app-server harness adapter (ticket H01, IMPLEMENTATION_PLAN.md §5
 Codex app-server child of this project's choosing, drives it over stdio, and normalizes what the
 server reports into v1 contract `EventEnvelope`s.
 
-### Module layout (why there is no package.json here)
+### Module layout
 
-Like `apps/desktop`, this is a source-only workspace module rather than a pnpm workspace project:
-the root `tsconfig.json` typechecks `packages/**/*.ts`, the tests run on the repository's `tsx`
-toolchain, and `node scripts/generate-protocol.mjs` works without a manifest. Adding a manifest
-would introduce a new workspace importer in `pnpm-lock.yaml`, and H01 deliberately owns only
-`packages/harness-codex/`, `fixtures/harness/codex/`, and the desktop session view — never the
-shared lockfile. The shared contracts are imported by relative path, exactly as the frozen
-acceptance test does.
+This is a pnpm workspace project: `package.json` records the `@echopilot/contracts` workspace
+dependency, mirrored by the `packages/harness-codex` importer in the shared `pnpm-lock.yaml`. The
+root `tsconfig.json` typechecks `packages/**/*.ts`, the tests run on the repository's `tsx`
+toolchain, and `node scripts/generate-protocol.mjs` works alongside the manifest.
 
 ## Provenance — generated schemas, pinned version
 

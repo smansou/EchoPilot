@@ -48,6 +48,12 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/harness-codex:
+    dependencies:
+      '@echopilot/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/security: {}
 
 packages:
