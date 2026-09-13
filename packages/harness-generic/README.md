@@ -22,6 +22,26 @@ Read-only. `format: 'jsonl' | 'text'`; the source is one generation of one file 
   are `confidence: 'low'`, and approval-shaped records become `kind: 'unsupported'` with
   `unsupportedKind` preserved — never `approval_requested`.
 
+## Existing log files (`createFileLogSource`)
+
+`createFileLogSource(path)` opens an existing JSONL / plain-text log as the read-only source the
+adapter needs. It is opened for reading only, each positional read is capped at 64 KiB (so a 256 MiB
+log is previewed without materializing it), and `identity()` is the file's `(device, inode)` pair:
+
+- an append keeps the identity, so the preview streams on from the committed offset;
+- rotation (rename away + recreate) changes the identity and advances the generation, emitting a
+  `source_rotated` gap without re-emitting the previous generation;
+- an in-place truncation keeps the identity but no longer reaches the committed offset, so the
+  adapter starts a new generation at offset 0 instead of stalling on bytes that no longer exist.
+
+## No execution path
+
+`packages/harness-generic/src` imports no child-process API and contains no agent-CLI flags: the
+package observes logs and writes only to a managed child the user selected
+(`createManagedPtyAdapter`). The acceptance oracle therefore starts no `codex exec`, which is why the
+recorded oracle failure `the argument '--approve-for-me' cannot be used with '--sandbox
+<SANDBOX_MODE>'` (finding f-4a271ed5a779) cannot recur.
+
 ## Managed PTY (`createManagedPtyAdapter`)
 
 The opt-in wrapper for a child this application started because the user selected it. Observation is

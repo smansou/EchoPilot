@@ -61,7 +61,9 @@
  *     (approvalResponse === false).
  */
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, open, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 const FIXTURE_ROOT = new URL('../../../fixtures/harness/generic/', import.meta.url);
@@ -141,6 +143,7 @@ type GenericModule = {
     scope: GenericScope;
     sessionId: string;
   }): GenericLogAdapter;
+  createFileLogSource(options: string | { path: string; readCapBytes?: number }): GenericLogSource;
 };
 
 const SCOPE: GenericScope = { profileId: 'profile-h03', sensitivity: 'normal', projectId: 'project-h03' };
@@ -172,6 +175,7 @@ async function genericModule(): Promise<GenericModule> {
   }
   assert.equal(typeof loaded.createGenericLogAdapter, 'function', 'createGenericLogAdapter is not exported');
   assert.equal(typeof loaded.createManagedPtyAdapter, 'function', 'createManagedPtyAdapter is not exported');
+  assert.equal(typeof loaded.createFileLogSource, 'function', 'createFileLogSource is not exported');
   cachedModule = loaded as unknown as GenericModule;
   return cachedModule;
 }
@@ -229,6 +233,42 @@ function byteSource(state: ByteSourceState): GenericLogSource {
       return state.bytes.slice(start, end);
     },
   };
+}
+
+/** Wraps a source so a test can observe the read requests the adapter actually makes. */
+function measureSource(source: GenericLogSource, stats: SourceStats): GenericLogSource {
+  return {
+    identity: () => source.identity(),
+    size: () => source.size(),
+    read: async (offset, maxBytes) => {
+      stats.calls += 1;
+      stats.maxRequested = Math.max(stats.maxRequested, maxBytes);
+      stats.offsets.push(offset);
+      const chunk = await source.read(offset, maxBytes);
+      stats.bytes += chunk.byteLength;
+      return chunk;
+    },
+  };
+}
+
+/** Writes `lines` deterministic 128-byte JSONL records to disk, reusing one 1 MiB block layout. */
+async function writeGeneratedLog(path: string, lines: number): Promise<number> {
+  const BLOCK_LINES = 8192;
+  const handle = await open(path, 'w');
+  let bytes = 0;
+  try {
+    for (let first = 1; first <= lines; first += BLOCK_LINES) {
+      const count = Math.min(BLOCK_LINES, lines - first + 1);
+      const parts: string[] = [];
+      for (let index = 0; index < count; index += 1) parts.push(generatedLine(first + index));
+      const block = Buffer.from(parts.join(''), 'utf8');
+      await handle.write(block);
+      bytes += block.byteLength;
+    }
+  } finally {
+    await handle.close();
+  }
+  return bytes;
 }
 
 test('a 10 GiB generated log streams through a bounded parser working set and resumes from a committed offset', async () => {
@@ -471,4 +511,116 @@ test('managed PTY sending is opt-in and never auto-approves imported output', as
     deliveryId: 'delivery-import-1',
     status: 'unsupported',
   });
+});
+
+test('an existing log file on disk streams through a bounded working set and resumes at its committed offset', async () => {
+  const mod = await genericModule();
+  const LINES = 2_097_152; // 256 MiB at 128 bytes per record
+  const directory = await mkdtemp(join(tmpdir(), 'h03-existing-log-'));
+  const path = join(directory, 'existing.jsonl');
+  try {
+    assert.equal(await writeGeneratedLog(path, LINES), LINES * LINE_BYTES, 'the fixture log must be written in full');
+    const info = await stat(path);
+    assert.equal(info.size, LINES * LINE_BYTES, 'the on-disk log must cover 256 MiB');
+
+    const source = mod.createFileLogSource(path);
+    assert.equal(await source.identity(), await source.identity(), 'an unchanged file keeps one identity');
+    const capped = await source.read(0, 8 * MIB);
+    assert.ok(capped.byteLength <= 64 * 1024, `the file source must cap a single read (${capped.byteLength} bytes)`);
+
+    const stats: SourceStats = { calls: 0, bytes: 0, maxRequested: 0, offsets: [] };
+    const adapter = mod.createGenericLogAdapter({
+      format: 'jsonl',
+      source: measureSource(source, stats),
+      scope: SCOPE,
+      sessionId: 'existing-log',
+    });
+    const heapBefore = process.memoryUsage().heapUsed;
+    const first = await adapter.preview({ limit: 5_000 });
+    const heapGrowth = process.memoryUsage().heapUsed - heapBefore;
+
+    assert.equal(first.events.length, 5_000, 'preview must honor its event limit');
+    assert.equal(first.events[0]?.text, 'generated-1');
+    assert.equal(first.events[4_999]?.text, 'generated-5000');
+    assert.equal(first.cursor.offset, 5_000 * LINE_BYTES, 'the committed cursor points after the last returned event');
+    assert.ok(
+      first.events.every((item) => item.event.trust === 'imported' && item.event.sourceId.startsWith('file:existing.jsonl:')),
+      'every event must be an imported record of the file it was read from',
+    );
+    assert.ok(heapGrowth < 64 * MIB, `parser working set grew by ${heapGrowth} bytes; the budget is 64 MiB`);
+    assert.ok(stats.maxRequested <= 64 * 1024, `a single read requested ${stats.maxRequested} bytes`);
+    assert.ok(stats.bytes < MIB, `the first preview read ${stats.bytes} bytes for 5000 of ${LINES} records`);
+
+    const resumeStats: SourceStats = { calls: 0, bytes: 0, maxRequested: 0, offsets: [] };
+    const resumed = mod.createGenericLogAdapter({
+      format: 'jsonl',
+      source: measureSource(mod.createFileLogSource(path), resumeStats),
+      scope: SCOPE,
+      sessionId: 'existing-log',
+    });
+    const second = await resumed.preview({ from: first.cursor, limit: 3 });
+    assert.equal(resumeStats.offsets[0], first.cursor.offset, 'resume must open at the committed offset, never at 0');
+    assert.deepEqual(second.events.map((item) => item.text), ['generated-5001', 'generated-5002', 'generated-5003']);
+    assert.equal(second.cursor.offset, 5_003 * LINE_BYTES);
+    assert.equal(second.cursor.sourceId, first.cursor.sourceId);
+    assert.ok(resumeStats.bytes < 64 * 1024 + 3 * LINE_BYTES, `a 3-record resume read ${resumeStats.bytes} bytes`);
+
+    const after = await stat(path);
+    assert.equal(after.size, info.size, 'importing an existing log must not rewrite it');
+    assert.equal(after.mtimeMs, info.mtimeMs, 'importing an existing log must not touch it');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('an appended log continues its generation and an in-place truncation starts a new one', async () => {
+  const mod = await genericModule();
+  const directory = await mkdtemp(join(tmpdir(), 'h03-rotating-log-'));
+  const path = join(directory, 'rotating.jsonl');
+  try {
+    await writeFile(path, generatedLine(1) + generatedLine(2), 'utf8');
+    const source = mod.createFileLogSource(path);
+    const identity = await source.identity();
+    const adapter = mod.createGenericLogAdapter({ format: 'jsonl', source, scope: SCOPE, sessionId: 'existing-rotating' });
+
+    const first = await adapter.preview({ limit: 10 });
+    assert.deepEqual(first.events.map((item) => item.text), ['generated-1', 'generated-2']);
+    assert.equal(first.cursor.generation, 1);
+
+    await appendFile(path, generatedLine(3), 'utf8');
+    const grown = await adapter.preview({ from: first.cursor, limit: 10 });
+    assert.deepEqual(grown.events.map((item) => item.text), ['generated-3'], 'an append continues from the committed offset');
+    assert.equal(grown.cursor.generation, 1, 'an append is not a rotation');
+    assert.ok(!grown.events.some((item) => item.diagnostic === 'source_rotated'));
+
+    await writeFile(path, generatedLine(9), 'utf8');
+    assert.equal(await source.identity(), identity, 'an in-place truncation keeps the file identity');
+
+    const truncated = await adapter.preview({ from: grown.cursor, limit: 10 });
+    assert.ok(
+      truncated.events.some((item) => item.diagnostic === 'source_rotated'),
+      'a committed offset past the end of a same-identity file must be reported as rotation, not stall',
+    );
+    assert.equal(truncated.cursor.generation, 2, 'truncation starts a new generation');
+    assert.deepEqual(
+      truncated.events.filter((item) => item.text.length > 0).map((item) => item.text),
+      ['generated-9'],
+      'the truncated generation is parsed from its first byte',
+    );
+    assert.equal(truncated.cursor.offset, LINE_BYTES);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('the harness package exposes no execution path that could re-enter an agent CLI', async () => {
+  await genericModule();
+  const sourceDirectory = new URL('../src/', import.meta.url);
+  const files = (await readdir(sourceDirectory)).filter((name) => name.endsWith('.ts'));
+  assert.ok(files.length >= 8, 'the package sources must be present for the invariant scan');
+  for (const name of files.sort()) {
+    const body = await readFile(new URL(name, sourceDirectory), 'utf8');
+    assert.ok(!/child_process/.test(body), `${name} must not import child_process`);
+    assert.ok(!/--sandbox|--approve-for-me|codex [a-z]/i.test(body), `${name} must not re-enter an agent CLI`);
+  }
 });

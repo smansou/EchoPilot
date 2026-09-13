@@ -10,6 +10,10 @@
  * createManagedPtyAdapter is the opt-in escape hatch for tools without structured output. Sending is
  * available only to a user-selected managed child; nothing observed in its output is ever
  * auto-approved, and existing arbitrary terminals stay observation-only.
+ *
+ * createFileLogSource opens an existing JSONL / plain-text log as a bounded, read-only source:
+ * positional reads capped at 64 KiB, a (device, inode) identity so rotation advances the
+ * generation, and no write path at all.
  */
 export type {
   GenericCapabilityDescriptor,
@@ -32,6 +36,12 @@ export type {
 
 export { normalizeDisplayText } from './ansi.js';
 export { GENERIC_FORMAT_VERSION, GENERIC_SCHEMA_VERSION } from './envelope.js';
+export {
+  DEFAULT_FILE_READ_CAP_BYTES,
+  FileLogSource,
+  createFileLogSource,
+  type FileLogSourceOptions,
+} from './file-source.js';
 export { DEFAULT_PREVIEW_LIMIT } from './limits.js';
 export { MAX_LINE_BYTES, READ_CHUNK_BYTES } from './scanner.js';
 

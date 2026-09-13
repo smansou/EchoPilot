@@ -137,7 +137,15 @@ export class ImportLogAdapter implements GenericLogAdapter {
       }
       if (from.sourceId === identity) {
         this.generation = Math.max(1, Math.trunc(from.generation));
-        this.scanner = new BoundedLineScanner(this.source, Math.max(0, Math.trunc(from.offset)));
+        const offset = Math.max(0, Math.trunc(from.offset));
+        if (await this.truncatedAt(offset)) {
+          // The committed offset is past the end of a same-identity file, so the log was truncated
+          // in place (copytruncate-style rotation). Start a new generation instead of stalling.
+          this.generation = Math.max(this.generation + 1, Math.trunc(from.generation) + 1);
+          this.scanner = new BoundedLineScanner(this.source, 0);
+          return this.rotationEvent();
+        }
+        this.scanner = new BoundedLineScanner(this.source, offset);
         return undefined;
       }
       this.generation = Math.max(1, Math.trunc(from.generation) + 1);
@@ -157,12 +165,35 @@ export class ImportLogAdapter implements GenericLogAdapter {
       return this.rotationEvent();
     }
 
+    if (await this.truncatedAt(this.scanner.offset)) {
+      this.generation = from === undefined
+        ? this.generation + 1
+        : Math.max(this.generation + 1, Math.trunc(from.generation) + 1);
+      this.lineOrdinal = 0;
+      this.lastPartialStart = undefined;
+      this.scanner = new BoundedLineScanner(this.source, 0);
+      return this.rotationEvent();
+    }
+
     if (from !== undefined && from.sourceId === identity && Math.trunc(from.generation) === this.generation) {
       const offset = Math.max(0, Math.trunc(from.offset));
       if (offset !== this.scanner.offset) this.scanner = new BoundedLineScanner(this.source, offset);
     }
     this.scanner.refresh();
     return undefined;
+  }
+
+  /**
+   * True when the source no longer reaches `offset`, i.e. the file was truncated in place under the
+   * same identity. A source that cannot report a size is never treated as truncated.
+   */
+  private async truncatedAt(offset: number): Promise<boolean> {
+    if (offset <= 0) return false;
+    try {
+      return (await this.source.size()) < offset;
+    } catch {
+      return false;
+    }
   }
 
   private consumeLine(scan: Extract<LineScan, { type: 'line' }>): GenericPreviewEvent | undefined {
