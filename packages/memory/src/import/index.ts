@@ -28,6 +28,7 @@ import { mkdir } from 'node:fs/promises';
 import { GENERIC_FORMAT_VERSION } from '../../../harness-generic/src/envelope.js';
 import { DEFAULT_PREVIEW_LIMIT, normalizePreviewLimit } from '../../../harness-generic/src/limits.js';
 import { BoundedLineScanner, READ_CHUNK_BYTES } from '../../../harness-generic/src/scanner.js';
+import type { LineScan } from '../../../harness-generic/src/scanner.js';
 import type {
   GenericCapabilityDescriptor,
   GenericFormat,
@@ -38,7 +39,7 @@ import type {
 import type { MemoryConsolidator } from '../consolidation/index.js';
 import { ImportCheckpointStore, type ImportCheckpoint } from '../jobs/index.js';
 import type { MemoryStore, NormalizedBatch } from '../store/index.js';
-import { endsWithNewline, readSpan, readTailLines, splitCompleteLines } from './reader.js';
+import { readTailLines } from './reader.js';
 import { buildEmission, oversizedRecord, parseLine, type LineSpan, type ParsedRecord } from './records.js';
 
 /** One committed batch covers at most one §5.8 64 KiB read buffer. */
@@ -93,6 +94,30 @@ function abortError(): Error {
   const error = new Error('the memory import was aborted before the source was fully processed');
   error.name = 'AbortError';
   return error;
+}
+
+/**
+ * Maps one bounded scanner result to the span and record both the forward pass and the pending-span
+ * repair commit. An `oversized` scan is display-only: its raw bytes are never materialized (the
+ * scanner dropped them after MAX_LINE_BYTES) and it is never parsed, so a multi-gigabyte line stays
+ * a gap with empty raw bytes and empty payload on every pass.
+ */
+function scannedRecord(
+  scan: LineScan,
+  format: GenericFormat,
+  lineOrdinal: number,
+): { span: LineSpan; record: ParsedRecord | undefined } {
+  if (scan.type === 'oversized') {
+    return {
+      span: { start: scan.start, end: scan.end, bytes: new Uint8Array(0) },
+      record: oversizedRecord(format, lineOrdinal),
+    };
+  }
+  if (scan.type !== 'line') {
+    throw new Error(`cannot map a '${scan.type}' scan to an imported record`);
+  }
+  const span: LineSpan = { start: scan.start, end: scan.end, bytes: scan.bytes };
+  return { span, record: parseLine(span, format, lineOrdinal) };
 }
 
 /**
@@ -164,22 +189,31 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
    * Repair of a span that was handed to the store but never promoted. Re-ingesting it is safe in
    * both crash windows: records the store already committed come back as duplicates, records it
    * never committed are inserted, and only then is the checkpoint promoted past them.
+   *
+   * The repair re-scans the pending span through the same bounded `BoundedLineScanner` the forward
+   * pass used, so an over-long line inside the span is classified exactly as the forward pass
+   * classified it (a display-only gap with empty raw bytes) instead of being re-read whole and
+   * parsed as an ordinary record: a 10 GiB source with a multi-gigabyte line resumes inside the
+   * §5.8 64 KiB working set, and the repaired events are identical to the committed ones.
    */
   const repairPending = async (): Promise<void> => {
     const from = checkpoint.committedOffset;
     const to = checkpoint.pendingOffset;
     if (to === null || to <= from) return;
-    const bytes = await readSpan(source, from, to);
-    if (bytes === undefined || !endsWithNewline(bytes)) {
-      throw new Error(`memory import cannot re-read its pending checkpoint span [${from}, ${to})`);
-    }
+    const scanner = new BoundedLineScanner(source, from);
     const emissions: GenericPreviewEvent[] = [];
     const payloads: Record<string, unknown> = {};
     let ordinal = 0;
     let ingestSequence = 0;
-    for (const span of splitCompleteLines(bytes, from)) {
+    while (scanner.offset < to) {
+      const scan = await scanner.next();
+      if (scan.type === 'eof' || scan.type === 'partial' || scan.end > to) {
+        // The pending checkpoint is not a whole number of complete lines: refuse instead of
+        // committing a span the forward pass never described.
+        throw new Error(`memory import cannot re-read its pending checkpoint span [${from}, ${to})`);
+      }
       ordinal += 1;
-      const record: ParsedRecord | undefined = parseLine(span, format, ordinal);
+      const { span, record } = scannedRecord(scan, format, ordinal);
       if (record === undefined) continue;
       ingestSequence += 1;
       const emission = buildEmission(record, {
@@ -191,6 +225,9 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
       });
       emissions.push(emission);
       payloads[emission.event.payloadRef] = record.payload;
+    }
+    if (scanner.offset !== to) {
+      throw new Error(`memory import cannot re-read its pending checkpoint span [${from}, ${to})`);
     }
     await ingestEmissions(emissions, payloads);
     checkpoint = { ...checkpoint, committedOffset: to, pendingOffset: null };
@@ -272,12 +309,7 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
         const scan = await scanner.next();
         if (scan.type === 'eof' || scan.type === 'partial') break;
         ordinal += 1;
-        const span: LineSpan = scan.type === 'oversized'
-          ? { start: scan.start, end: scan.end, bytes: new Uint8Array(0) }
-          : { start: scan.start, end: scan.end, bytes: scan.bytes };
-        const record: ParsedRecord | undefined = scan.type === 'oversized'
-          ? oversizedRecord(format, ordinal)
-          : parseLine(span, format, ordinal);
+        const { span, record } = scannedRecord(scan, format, ordinal);
         if (record !== undefined) {
           ingestSequence += 1;
           const emission = buildEmission(record, {

@@ -1,9 +1,11 @@
 /**
  * Bounded byte readers for the M03 cold-start importer.
  *
- * Every read request stays inside the §5.8 64 KiB buffer, and neither helper ever materializes the
- * whole source: the forward reader fills a fixed-size span (a repair window of at most one batch),
- * the tail reader walks backwards in 64 KiB steps until it has the newest `limit` records.
+ * Every read request stays inside the §5.8 64 KiB buffer and no helper ever materializes a whole
+ * source or a whole span: the tail reader walks backwards in 64 KiB steps until it has the newest
+ * `limit` records. Forward scanning — including the pending-span repair — goes through the H03
+ * `BoundedLineScanner`, which classifies an over-long line as a display-only gap without ever
+ * buffering it past `MAX_LINE_BYTES`.
  */
 import { concatChunks } from '../../../harness-generic/src/bytes.js';
 import { READ_CHUNK_BYTES } from '../../../harness-generic/src/scanner.js';
@@ -18,54 +20,14 @@ const NEWLINE = 0x0a;
 const MAX_TAIL_SCAN_BYTES = 16 * 1024 * 1024;
 
 /**
- * Reads exactly `[from, to)` with bounded positional reads. Returns `undefined` when the source
- * ends early, so callers can refuse instead of parsing a half-recovered span.
- */
-export async function readSpan(
-  source: GenericLogSource,
-  from: number,
-  to: number,
-): Promise<Uint8Array | undefined> {
-  if (to <= from) return new Uint8Array(0);
-  const chunks: Uint8Array[] = [];
-  let offset = from;
-  while (offset < to) {
-    const wanted = Math.min(to - offset, READ_CHUNK_BYTES);
-    const chunk = await source.read(offset, wanted);
-    if (chunk.byteLength === 0) return undefined;
-    const bounded = chunk.byteLength > wanted ? chunk.subarray(0, wanted) : chunk;
-    chunks.push(bounded);
-    offset += bounded.byteLength;
-  }
-  return concatChunks(chunks);
-}
-
-/** Splits a byte buffer into newline-terminated lines; the unterminated tail is dropped. */
-export function splitCompleteLines(bytes: Uint8Array, base: number): LineSpan[] {
-  const lines: LineSpan[] = [];
-  let start = 0;
-  for (let index = 0; index < bytes.byteLength; index += 1) {
-    if (bytes[index] !== NEWLINE) continue;
-    lines.push({
-      start: base + start,
-      end: base + index + 1,
-      bytes: bytes.subarray(start, index),
-    });
-    start = index + 1;
-  }
-  return lines;
-}
-
-/** True when the span ends on a line boundary (its last byte terminates a line). */
-export function endsWithNewline(bytes: Uint8Array): boolean {
-  return bytes.byteLength > 0 && bytes[bytes.byteLength - 1] === NEWLINE;
-}
-
-/**
  * Tail-first line reader: walks backwards from the end of the source in 64 KiB steps and returns
  * the newest `limit` non-blank complete lines, oldest first. A trailing unterminated line is never a
  * record (the forward scanner treats it as `partial` too), and the leading bytes of the file are
  * only a record when they are newline-terminated.
+ *
+ * Blank lines are not records, so the backward walk keeps reading older windows until `limit`
+ * non-blank lines are reconstructed (or the source, the file start, or the scan cap is reached): a
+ * blank line among the newest lines never shrinks the preview below the requested record count.
  */
 export async function readTailLines(
   source: GenericLogSource,
@@ -73,15 +35,38 @@ export async function readTailLines(
   limit: number,
 ): Promise<LineSpan[]> {
   if (limit <= 0 || totalBytes <= 0) return [];
-  // Newline positions of the newest `limit + 1` line ends, descending. The extra position bounds
-  // the start of the oldest returned record; without it the oldest start is the file start (0).
-  // The read windows are kept (newest first) so a selected line's bytes need no second read.
+  // Newline positions of the complete line ends read so far, descending. A line is only
+  // reconstructible once both its own terminator and the terminator before it (or the file start)
+  // have been read: the oldest newline collected so far only bounds the start of the next line and
+  // is never returned by itself. The read windows are kept (newest first) so a selected line's bytes
+  // need no second read.
   const windows: Array<{ base: number; bytes: Uint8Array }> = [];
   const newlines: number[] = [];
+  const lines: LineSpan[] = [];
   let regionEnd = totalBytes;
   let scanned = 0;
+  /** True once the walk has read the whole prefix of the source (byte 0 included). */
+  let reachedStart = false;
+  /** Index of the newest newline that has not been turned into a candidate line yet. */
+  let next = 0;
 
-  while (regionEnd > 0 && newlines.length <= limit && scanned < MAX_TAIL_SCAN_BYTES) {
+  /** Resolves the newest candidate lines, skipping blank ones, until `limit` records are collected. */
+  const collect = (): void => {
+    while (lines.length < limit && next < newlines.length) {
+      const end = newlines[next];
+      if (end === undefined) break;
+      const previous = newlines[next + 1];
+      const start = previous !== undefined ? previous + 1 : reachedStart ? 0 : undefined;
+      if (start === undefined) break; // this line's first byte has not been read yet
+      next += 1;
+      const bytes = sliceWindowBytes(windows, start, end);
+      if (bytes === undefined) continue;
+      if (isBlankLine(bytes)) continue; // blank lines are not records: keep walking for older ones
+      lines.push({ start, end: end + 1, bytes });
+    }
+  };
+
+  while (lines.length < limit && regionEnd > 0 && scanned < MAX_TAIL_SCAN_BYTES) {
     const start = Math.max(0, regionEnd - READ_CHUNK_BYTES);
     const wanted = regionEnd - start;
     const chunk = await source.read(start, wanted);
@@ -94,21 +79,10 @@ export async function readTailLines(
     }
     if (bounded.byteLength < wanted) break; // the source ended; only whole records are returned below
     regionEnd = start;
+    if (regionEnd === 0) reachedStart = true;
+    collect();
   }
-  if (newlines.length > limit) newlines.length = limit + 1;
-
-  const lines: LineSpan[] = [];
-  const count = Math.min(limit, newlines.length);
-  for (let index = 0; index < count; index += 1) {
-    const newline = newlines[index];
-    if (newline === undefined) break;
-    const next = newlines[index + 1];
-    const start = next === undefined ? 0 : next + 1;
-    const end = newline + 1;
-    const bytes = sliceWindowBytes(windows, start, end - 1);
-    if (bytes === undefined || isBlankLine(bytes)) continue;
-    lines.push({ start, end, bytes });
-  }
+  collect();
   lines.reverse();
   return lines;
 }
