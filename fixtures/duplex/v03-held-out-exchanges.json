@@ -1,0 +1,95 @@
+{
+  "id": "v03-held-out-exchanges",
+  "version": 1,
+  "consent": "synthetic",
+  "description": "Held-out overlapping-speech subset for the V03 duplex acceptance oracle. No user audio is stored: each exchange is synthetic evidence in the shape the native VAD/ASR/prosody pipeline reports while narration is audible. The oracle expands this spec into exactly 200 exchanges (25 repetitions of the 8-exchange pattern below), alternates the speaker/headphones routes, and never passes a ground-truth label to the controller.",
+  "referenceConditions": "Section 4.4 warm reference run: macOS 15+, M4/24 GB, internal microphone and speakers (route 'speaker') or wired headphones (route 'headphones'), cached models, no cold starts mixed in.",
+  "totalExchanges": 200,
+  "routes": ["speaker", "headphones"],
+  "pattern": ["backchannel", "backchannel", "interruption", "backchannel", "uncertain", "backchannel", "explicit_stop", "interruption"],
+  "onset": { "baseMs": 620, "stepMs": 40, "cycle": 5 },
+  "prosody": { "energyDb": [-43, -29], "voicedRatio": [0.3, 0.72], "pitchSpanSemitones": [1.2, 4.6] },
+  "classificationPolicy": [
+    "explicit_stop: the transcript is a local stop phrase ('stop speaking', 'be quiet'). The spotter path reports it about 120 ms after onset so the 200 ms silence budget stays reachable.",
+    "backchannel: a brief acknowledgment while no confirmation is pending and no new request follows (Section 5.5 step 3).",
+    "uncertain: low-confidence, empty or truncated evidence; pause/flush and commit the utterance (Section 5.5 step 4).",
+    "interruption: everything else - negated or corrective speech, an answer while a confirmation is pending, or speech that continues into a new request."
+  ],
+  "classes": [
+    {
+      "label": "backchannel",
+      "count": 100,
+      "evidenceDelayMs": 240,
+      "templates": [
+        { "transcript": "mm-hm", "durationMs": 520, "asrConfidence": 0.96 },
+        { "transcript": "mm hm", "durationMs": 480, "asrConfidence": 0.93 },
+        { "transcript": "uh-huh", "durationMs": 560, "asrConfidence": 0.95 },
+        { "transcript": "mhm", "durationMs": 440, "asrConfidence": 0.92 },
+        { "transcript": "okay", "durationMs": 420, "asrConfidence": 0.94 },
+        { "transcript": "ok", "durationMs": 360, "asrConfidence": 0.91 },
+        { "transcript": "right", "durationMs": 400, "asrConfidence": 0.9 },
+        { "transcript": "yeah", "durationMs": 380, "asrConfidence": 0.93 },
+        { "transcript": "yep", "durationMs": 340, "asrConfidence": 0.88 },
+        { "transcript": "sure", "durationMs": 420, "asrConfidence": 0.86 },
+        { "transcript": "got it", "durationMs": 640, "asrConfidence": 0.9 },
+        { "transcript": "i see", "durationMs": 600, "asrConfidence": 0.87 },
+        { "transcript": "hmm", "durationMs": 520, "asrConfidence": 0.84 },
+        { "transcript": "alright", "durationMs": 700, "asrConfidence": 0.85 },
+        { "transcript": "go on", "durationMs": 560, "asrConfidence": 0.89 },
+        { "transcript": "nice", "durationMs": 480, "asrConfidence": 0.86 }
+      ]
+    },
+    {
+      "label": "explicit_stop",
+      "count": 25,
+      "evidenceDelayMs": 120,
+      "templates": [
+        { "transcript": "stop speaking", "durationMs": 900, "asrConfidence": 0.97 },
+        { "transcript": "stop talking", "durationMs": 880, "asrConfidence": 0.95 },
+        { "transcript": "be quiet", "durationMs": 760, "asrConfidence": 0.93 },
+        { "transcript": "silence", "durationMs": 700, "asrConfidence": 0.92 },
+        { "transcript": "stop the narration", "durationMs": 1100, "asrConfidence": 0.94 },
+        { "transcript": "quiet please", "durationMs": 820, "asrConfidence": 0.91 }
+      ]
+    },
+    {
+      "label": "interruption",
+      "count": 50,
+      "evidenceDelayMs": 300,
+      "templates": [
+        { "transcript": "no", "durationMs": 520, "asrConfidence": 0.94 },
+        { "transcript": "no wait", "durationMs": 640, "asrConfidence": 0.92 },
+        { "transcript": "wait", "durationMs": 480, "asrConfidence": 0.9 },
+        { "transcript": "hold on", "durationMs": 620, "asrConfidence": 0.93 },
+        { "transcript": "not that", "durationMs": 660, "asrConfidence": 0.91 },
+        { "transcript": "stop that", "durationMs": 700, "asrConfidence": 0.92 },
+        { "transcript": "actually no", "durationMs": 780, "asrConfidence": 0.9 },
+        { "transcript": "yes", "durationMs": 620, "asrConfidence": 0.95, "confirmationPending": true },
+        { "transcript": "okay", "durationMs": 580, "asrConfidence": 0.93, "confirmationPending": true },
+        { "transcript": "confirm", "durationMs": 640, "asrConfidence": 0.94, "confirmationPending": true },
+        { "transcript": "yes, confirm the deploy", "durationMs": 1100, "asrConfidence": 0.9, "confirmationPending": true },
+        { "transcript": "wait, rerun that with the other parser", "durationMs": 2400, "asrConfidence": 0.92, "newRequestFollows": true },
+        { "transcript": "hold on, what changed in the parser", "durationMs": 2100, "asrConfidence": 0.9, "newRequestFollows": true },
+        { "transcript": "actually, use luna for the summary", "durationMs": 1800, "asrConfidence": 0.91, "newRequestFollows": true },
+        { "transcript": "can you say that again", "durationMs": 1600, "asrConfidence": 0.89, "newRequestFollows": true },
+        { "transcript": "no, go back to the previous version", "durationMs": 2200, "asrConfidence": 0.9, "newRequestFollows": true }
+      ]
+    },
+    {
+      "label": "uncertain",
+      "count": 25,
+      "evidenceDelayMs": 260,
+      "templates": [
+        { "transcript": "mn hm", "durationMs": 560, "asrConfidence": 0.32 },
+        { "transcript": "mm", "durationMs": 480, "asrConfidence": 0.41 },
+        { "transcript": "kay", "durationMs": 420, "asrConfidence": 0.38 },
+        { "transcript": "", "durationMs": 700, "asrConfidence": 0.0 },
+        { "transcript": "i think we", "durationMs": 1600, "asrConfidence": 0.55 },
+        { "transcript": "the thing is", "durationMs": 1400, "asrConfidence": 0.6 },
+        { "transcript": "so with the", "durationMs": 1500, "asrConfidence": 0.58 },
+        { "transcript": "mm, maybe", "durationMs": 1300, "asrConfidence": 0.68 },
+        { "transcript": "hmm, i don't", "durationMs": 1700, "asrConfidence": 0.62 }
+      ]
+    }
+  ]
+}
