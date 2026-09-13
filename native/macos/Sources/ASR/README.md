@@ -71,7 +71,9 @@ settle on `close()`. Two more cases hold the mute/failure race: a gated transcri
 only *after* `mute()` (or after a host failure) must not commit a final transcript, a result whose
 epoch was invalidated is rejected at the single commit boundary even though the planner owned its
 window up to the reset, and packets still being delivered while `mute()` runs leave no queued input
-behind. The suite also
+behind. Mute is also order-independent: a session muted before `start()` (or after `close()`) never
+opens the microphone graph on a late `start()` and stays visible as `muted` without an error. The
+suite also
 asserts the production wiring itself: `WhisperKitSmallEN.isBackendLinked` is true and
 `registerProductionBackends()` registers a Silero backend, while a pack folder without the Silero
 model fails closed in `VoiceSessionBootstrap.makeLocalSession(_:)`. It never asks for microphone

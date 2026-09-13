@@ -851,6 +851,55 @@ final class V01PipelineTests: XCTestCase {
         XCTAssertTrue(bridge.transcript().isEmpty, "audio delivered after the mute is never committed")
     }
 
+    /// Mute is a capture guarantee that does not depend on the order of the widget's calls: a
+    /// session muted before `start()` must not open the microphone graph when the widget starts it
+    /// later, and a closed session must not be resurrected by a late `start()`. Both cases stay
+    /// visible without an error state and never run the local engine.
+    func testMutedOrClosedSessionNeverOpensCaptureOnLateStart() async throws {
+        let host = MicrophoneGraph(maxQueuedFrames: 16)
+        host.setPermissionOverrideForTesting(.granted)
+        var configuration = SileroVADConfiguration()
+        configuration.allowEnergyFallback = true
+        let transcriber = RecordingTranscriber()
+        let bridge = VoiceTracerBridge(
+            host: host,
+            vad: try SileroVAD(configuration: configuration),
+            transcriber: transcriber
+        )
+        addTeardownBlock { await bridge.close() }
+
+        await bridge.mute()
+        XCTAssertEqual(bridge.status().input, "muted", "mute is visible before the session starts")
+        XCTAssertNil(bridge.status().error, "mute before start is not an error state")
+
+        let startAfterMute = Date()
+        await bridge.start()
+        XCTAssertLessThan(
+            Date().timeIntervalSince(startAfterMute),
+            2,
+            "a late start settles instead of hanging the widget"
+        )
+        XCTAssertFalse(
+            host.captureActive(),
+            "a session muted before start never opens the microphone"
+        )
+        XCTAssertEqual(bridge.status().input, "muted", "the muted state survives a late start")
+        XCTAssertNil(bridge.status().error, "a late start does not turn mute into an error state")
+        XCTAssertEqual(
+            host.pcmChannel.status().queuedFrames,
+            0,
+            "a late start leaves no queued input behind"
+        )
+
+        await bridge.close()
+        await bridge.start()
+        XCTAssertFalse(
+            host.captureActive(),
+            "a closed session is not resurrected by a late start"
+        )
+        XCTAssertTrue(transcriber.windows.isEmpty, "neither late start ran the local engine")
+    }
+
     // MARK: - 9. The production path links WhisperKit and registers the Silero runtime
 
     /// Guards the wiring the reviewer asked for: the built package links WhisperKit small.en and

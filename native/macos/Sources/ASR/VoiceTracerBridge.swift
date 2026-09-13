@@ -60,6 +60,8 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     private var unsubscribeHost: (() -> Void)?
     private var running = false
     private var muted = false
+    /// A closed session is finished: `start()` must never resurrect it and open capture again.
+    private var closed = false
     /// A visible host failure (denial, device removal, lock, helper crash) is terminal for the
     /// session: the widget keeps the error state and the pipeline stops consuming audio.
     private var failed = false
@@ -89,7 +91,11 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     }
 
     public func start() async {
-        guard !failed else { return }
+        // Mute and close are capture guarantees, not just pipeline pauses: a session that was
+        // already muted (or already closed) must never open the microphone graph later, no matter
+        // when the widget sends `start`. The visible state it was given stays the same.
+        let blocked = stateQueue.sync { failed || muted || closed }
+        guard !blocked else { return }
         beginSession()
         do {
             try await host.startCapture(onFrame: frameListener())
@@ -147,6 +153,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
 
     public func close() async {
         stateQueue.sync {
+            closed = true
             running = false
             pipelineEpoch &+= 1
             planner.reset()
