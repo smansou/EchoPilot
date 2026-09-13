@@ -46,7 +46,7 @@ func makeWorker(environment: [String: String]) -> Result<ReasonerWorker, Reasone
 
 let environment = ProcessInfo.processInfo.environment
 if environment["ECHOPILOT_REASONER_SELFTEST"] == "1" {
-    exit(ReasonerSelfTest.run())
+    exit(ReasonerSelfCheck.run())
 }
 let worker: ReasonerWorker
 switch makeWorker(environment: environment) {

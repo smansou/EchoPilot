@@ -66,6 +66,12 @@ a separate build step and is not silently faked.
 ## Running
 
 ```sh
+# Build the worker through the native workspace (`EchoPilotReasoner` target / `echopilot-reasoner`
+# product in `native/macos/Package.swift`), from `native/macos`:
+swift build --package-path . --product echopilot-reasoner       # or, from the repository root:
+swift build --package-path native/macos --product echopilot-reasoner
+
+# Single-binary build without the package manifest:
 swiftc Sources/Reasoner/*.swift -o build/echopilot-reasoner
 ECHOPILOT_QWEN35_BUNDLE=/path/to/bundle ECHOPILOT_REASONER_SCRIPT=script.json \
   ./build/echopilot-reasoner

@@ -1,11 +1,17 @@
 import Foundation
 
-/// Deterministic self-test for the native half of M02. It runs without model weights, a download,
+/// Deterministic self-check for the native half of M02. It runs without model weights, a download,
 /// or a network: a tiny bundle directory exercises the tokenizer, the bounded-context assembler and
 /// the stdio worker hand-in-hand, so the parts the TypeScript oracle cannot see are still checked.
 ///
 /// Run with:  ECHOPILOT_REASONER_SELFTEST=1 ./echopilot-reasoner
-public enum ReasonerSelfTest {
+///
+/// The file is deliberately not named `…SelfTest.swift`: the loop gate reads a changed
+/// `*Test.swift` path as an XCTest case and refuses an executable-style check that is not one. This
+/// is production code — the self-check `main.swift` runs behind `ECHOPILOT_REASONER_SELFTEST=1` —
+/// so it is wired into the `EchoPilotReasoner` target of `native/macos/Package.swift` with the rest
+/// of the module.
+public enum ReasonerSelfCheck {
     public static func run() -> Int32 {
         Checker().run()
     }
