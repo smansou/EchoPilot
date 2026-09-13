@@ -380,6 +380,12 @@ test('partial UTF-8, torn JSON, rotation, and terminal redraws keep adjacent eve
     !after.events.some((item) => item.text === 'first generation'),
     'a rotated source must not re-emit the previous generation',
   );
+  const afterIds = after.events.map((item) => item.event.eventId);
+  assert.equal(
+    new Set(afterIds).size,
+    afterIds.length,
+    `the rotation preview reused an event id: ${afterIds.join(', ')}`,
+  );
 
   const text = mod.createGenericLogAdapter({
     format: 'text',
@@ -403,6 +409,95 @@ test('partial UTF-8, torn JSON, rotation, and terminal redraws keep adjacent eve
     terminal.events.filter((item) => item.text.includes('Downloading')).length,
     1,
     'repeated redraws must collapse to the final frame',
+  );
+});
+
+test('a rotation gap or an incomplete line never reuses the event id of the record it precedes', async () => {
+  const mod = await genericModule();
+
+  // The rotation gap sits at offset 0 of the new generation, exactly where the first record of that
+  // generation starts, so an event id derived from the start offset alone made the two identical and
+  // downstream dedupe would drop the real record.
+  const rotationState: ByteSourceState = {
+    identity: 'identity-a.log',
+    bytes: new Uint8Array(Buffer.from('{"kind":"agent_message","text":"generation one"}\n', 'utf8')),
+    chunk: 24,
+    reads: 0,
+  };
+  const rotating = mod.createGenericLogAdapter({
+    format: 'jsonl',
+    source: byteSource(rotationState),
+    scope: SCOPE,
+    sessionId: 'identity-rotation',
+  });
+  const before = await rotating.preview({ limit: 10 });
+  rotationState.identity = 'identity-b.log';
+  // `seq: 0` is the worst case: the rotation gap's synthesized sequence is 0 as well.
+  rotationState.bytes = new Uint8Array(Buffer.from('{"kind":"agent_message","seq":0,"text":"generation two"}\n', 'utf8'));
+  const after = await rotating.preview({ from: before.cursor, limit: 10 });
+  const rotated = after.events.find((item) => item.diagnostic === 'source_rotated');
+  const first = after.events.find((item) => item.text === 'generation two');
+  assert.ok(rotated, 'rotation must surface a source_rotated gap');
+  assert.ok(first, 'rotation must surface the first record of the new generation');
+  assert.notEqual(
+    rotated.event.eventId,
+    first.event.eventId,
+    'the rotation gap must not reuse the event id of the first record of the new generation',
+  );
+  assert.notEqual(
+    rotated.event.sourceEventId,
+    first.event.sourceEventId,
+    'the rotation gap must not reuse the synthesized source event id of the first record of the new generation',
+  );
+
+  // The same collision would hit an unterminated line at offset 0 and its later completion.
+  const tailState: ByteSourceState = {
+    identity: 'tail.log',
+    bytes: new Uint8Array(Buffer.from('{"kind":"agent_message","seq":1,"text":"completed later"}', 'utf8')),
+    chunk: 9,
+    reads: 0,
+  };
+  const tail = mod.createGenericLogAdapter({
+    format: 'jsonl',
+    source: byteSource(tailState),
+    scope: SCOPE,
+    sessionId: 'identity-tail',
+  });
+  const partial = await tail.preview({ limit: 10 });
+  const gap = partial.events.find((item) => item.diagnostic === 'incomplete_line');
+  assert.ok(gap, 'an unterminated first line must be reported as an incomplete_line gap');
+  assert.equal(partial.cursor.offset, 0, 'the incomplete line must not be counted as consumed');
+
+  const resumed = mod.createGenericLogAdapter({
+    format: 'jsonl',
+    source: byteSource(tailState),
+    scope: SCOPE,
+    sessionId: 'identity-tail',
+  });
+  const stillPartial = await resumed.preview({ from: partial.cursor, limit: 10 });
+  assert.equal(
+    stillPartial.events[0]?.event.eventId,
+    gap.event.eventId,
+    'an unchanged incomplete line keeps one identity, so a resumed preview dedupes to a single gap',
+  );
+  assert.equal(stillPartial.events.length, 1, 'the unchanged incomplete line stays one gap event');
+
+  tailState.bytes = new Uint8Array(Buffer.concat([Buffer.from(tailState.bytes), Buffer.from('\n', 'utf8')]));
+  const completed = await tail.preview({ from: partial.cursor, limit: 10 });
+  assert.deepEqual(completed.events.map((item) => item.text), ['completed later']);
+  assert.notEqual(
+    completed.events[0]?.event.eventId,
+    gap.event.eventId,
+    'the completed line must not reuse the event id of the incomplete-line gap it completes',
+  );
+  assert.notEqual(
+    completed.events[0]?.event.sourceEventId,
+    gap.event.sourceEventId,
+    'the completed line must not reuse the synthesized source event id of the incomplete-line gap',
+  );
+  assert.ok(
+    !completed.events.some((item) => partial.events.some((earlier) => earlier.event.eventId === item.event.eventId)),
+    'the completed tail must not reuse any previously emitted event id',
   );
 });
 

@@ -31,19 +31,45 @@ export type ImportedEventInput = {
 };
 
 /**
- * Builds one imported event. Event ids are derived from (sourceId, generation, start offset), so the
- * same physical line keeps the same identity across resume/commit round-trips.
+ * Event id of one imported emission.
+ *
+ * The identity covers the whole emission — (sourceId, generation, byte span, kind, diagnostic) — not
+ * just the line start: a `source_rotated` gap and an `incomplete_line` gap both start at offset 0 of
+ * the bytes they precede (the first record of a new generation, a line completed later), so deriving
+ * the id from the start offset alone made those distinct events share one id and let downstream
+ * deduplication drop the real record. Every input is a property of the physical bytes, so the same
+ * line keeps the same id across resume/commit round-trips while no two emissions in one generation
+ * collide.
+ */
+function importedEventId(input: ImportedEventInput): string {
+  const identity = [
+    input.sourceId,
+    input.generation,
+    input.startOffset,
+    input.endOffset,
+    input.kind,
+    input.diagnostic ?? '',
+  ].join('\u0000');
+  return `ge_${sha256Hex(identity).slice(0, 24)}`;
+}
+
+/**
+ * Builds one imported event. Event ids are derived from the full emission identity, so the same
+ * physical line keeps the same identity across resume/commit round-trips.
  */
 export function buildImportedEvent(input: ImportedEventInput): GenericPreviewEvent {
   const observedAt = new Date().toISOString();
-  const eventId = input.eventId
-    ?? `ge_${sha256Hex(`${input.sourceId}\u0000${input.generation}\u0000${input.startOffset}`).slice(0, 24)}`;
+  const eventId = input.eventId ?? importedEventId(input);
 
   const event: GenericEnvelope = {
     schemaVersion: GENERIC_SCHEMA_VERSION,
     eventId,
     sourceId: input.sourceId,
-    sourceEventId: input.sourceEventId ?? `${input.sourceId}:${input.generation}:${input.sourceSequence}`,
+    // The synthesized id carries the byte span as well: a gap and the record it precedes share a
+    // sequence (a `source_rotated` gap is sequence 0, a record may declare `seq: 0`), so keying the
+    // id on the sequence alone would let a (sourceId, sourceEventId) replay key drop the record.
+    sourceEventId: input.sourceEventId
+      ?? `${input.sourceId}:${input.generation}:${input.startOffset}-${input.endOffset}:${input.sourceSequence}`,
     sourceSequence: input.sourceSequence,
     ingestSequence: input.ingestSequence,
     occurredAt: input.occurredAt ?? observedAt,

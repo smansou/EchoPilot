@@ -11,6 +11,9 @@ Read-only. `format: 'jsonl' | 'text'`; the source is one generation of one file 
   over-long line (1 MiB cap) is discarded as a display-only gap instead of being buffered.
 - Emits §5.3-shaped records with `trust: 'imported'` and a cursor
   `{ sourceId, generation, offset }` that is the commit point after the last returned event.
+- Every emission gets an `eventId` derived from its full identity (source identity, generation, byte
+  span, kind, diagnostic), so a `source_rotated` gap or an `incomplete_line` gap starting at the
+  same offset as the record it precedes never reuses that record's id.
 - `preview({ from })` resumes at the committed byte offset of the same source identity; a changed
   `identity()` advances `generation` and emits a `source_rotated` gap without re-emitting the old
   generation.
