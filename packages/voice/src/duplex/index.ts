@@ -114,12 +114,18 @@ const AGITATED_PITCH_SPAN_SEMITONES = 8;
 
 /**
  * A long conversation must not grow the controller without bound. Onsets are correlated with their
- * evidence and dropped then; the decision and receipt memories only need to cover a redelivery that
- * follows its original within the same session, so the oldest entries are retired past the limit.
+ * evidence and dropped then; the decision memory only needs to cover a redelivery that follows its
+ * original within the same session, so the oldest decisions are retired past the limit.
+ *
+ * Delivered receipts are different. At-most-once (Section 5.6) is an obligation that never expires:
+ * a routed request may be redelivered after any number of newer requests, so retiring the oldest
+ * receipt would let the redelivery create a second managed-agent instruction. The delivery ledger
+ * therefore keeps one small immutable receipt per distinct routed control request for the lifetime
+ * of the controller. It grows with the interruptions the user actually triggered — a deliberate
+ * user-visible event — never with session length, audio frames or redeliveries.
  */
 const MAX_TRACKED_ONSETS = 64;
 const MAX_REMEMBERED_DECISIONS = 256;
-const MAX_REMEMBERED_RECEIPTS = 512;
 
 /**
  * Section 5.5 step 3: the acknowledgements the dialogue layer treats as backchannels, matched on the
@@ -386,7 +392,8 @@ export function createDuplexController(options: DuplexControllerOptions): Duplex
 
   /**
    * One routed agent-control request. Only this method interrupts managed work, a redelivered
-   * `requestId` is delivered at most once, and the receipt reports only the observed result.
+   * `requestId` is delivered at most once — no matter how many newer requests were delivered in
+   * between — and the receipt reports only the observed result.
    */
   const submitAgentControl = async (request: AgentControlRequest): Promise<AgentControlReceipt> => {
     const delivered = receipts.get(request.requestId);
@@ -408,7 +415,9 @@ export function createDuplexController(options: DuplexControllerOptions): Duplex
         turnId: request.turnId,
         status,
       };
-      rememberBounded(receipts, request.requestId, receipt, MAX_REMEMBERED_RECEIPTS);
+      // Never evicted: the redelivery this receipt answers may arrive after unbounded newer
+      // requests, and forgetting it would send a second interrupt for the same requestId.
+      receipts.set(request.requestId, receipt);
       return receipt;
     };
 

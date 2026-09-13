@@ -30,6 +30,11 @@ narration, which the user can repeat, instead of cancelling a generation that wa
 to stop. A backchannel is only recognized while no confirmation is pending and no new request
 follows, so an answer to a confirmation is never swallowed as an acknowledgement.
 
+Routed agent-control is at-most-once (Section 5.6): `submitAgentControl` keeps the observed receipt
+of every distinct `requestId` for the lifetime of the controller, so a redelivery resolves the same
+receipt — even when it arrives after hundreds of newer routed requests — instead of instructing the
+managed agent twice.
+
 Verified by the frozen oracle `acceptance.test.ts` against `fixtures/duplex/`. Section 4.4 numbers are
 decisions on an injected monotonic clock; acoustic and device latency (AEC, microphone, speaker or
 headphone route) stay subject to the reference-machine qualification run.
