@@ -186,6 +186,101 @@ test('tail-first preview returns the requested newest records across blank lines
   }
 });
 
+test('the tail walk reconstructs the newest records from a source that serves short reads', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm03-short-read-'));
+  const stack = await createStack(root);
+  let importer: MemoryImporter | undefined;
+  try {
+    const records = [1, 2, 3, 4, 5, 6].map((index) => JSON.stringify({
+      id: `short-${String(index).padStart(4, '0')}`,
+      seq: index,
+      kind: 'user_utterance',
+      occurredAt: new Date(Date.parse('2026-09-06T00:00:00.000Z') + index * 1000).toISOString(),
+      text: `Short-read record ${index}.`,
+    }));
+    const path = join(root, 'short-read.jsonl');
+    await writeFile(path, `${records.join('\n')}\n`, 'utf8');
+    // A read cap of seven bytes is far below the requested window: only a repeated-read fill loop can
+    // reconstruct the tail instead of mistaking the short read for the end of the source.
+    const base = createFileLogSource(path);
+    const capped: GenericLogSource = {
+      identity: () => base.identity(),
+      size: () => base.size(),
+      read: (offset: number, maxBytes: number) => base.read(offset, Math.min(maxBytes, 7)),
+    };
+    const totalBytes = await base.size();
+    const lines = await readTailLines(capped, totalBytes, 3);
+    assert.deepEqual(
+      lines.map((line) => Buffer.from(line.bytes).toString('utf8')),
+      records.slice(-3),
+      'the backwards walk keeps filling its window when the source serves fewer bytes than asked',
+    );
+    importer = await importerFor(root, capped, stack);
+    const preview = await importer.preview({ limit: 3 });
+    assert.deepEqual(
+      preview.events.map((event) => event.event.sourceEventId),
+      ['short-0004', 'short-0005', 'short-0006'],
+      'a short-reading source still yields the exact newest records in the preview',
+    );
+    const run = await importer.bootstrap();
+    assert.equal(run.coverage.importedEvents, records.length, 'every record is imported exactly once');
+  } finally {
+    await importer?.close().catch(() => undefined);
+    await stack.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('the tail walk keeps its record count across blank lines that span several read windows', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm03-preview-windows-'));
+  const stack = await createStack(root);
+  let importer: MemoryImporter | undefined;
+  try {
+    // Wide records put consecutive record ends in different 64 KiB windows, and blank lines sit both
+    // between the newest records and at the end of the file: the walk must cross windows and keep
+    // replenishing the scan instead of stopping at the first skipped line (or at `limit + 1` newlines).
+    const records = [1, 2, 3, 4, 5, 6, 7, 8].map((index) => JSON.stringify({
+      id: `window-${String(index).padStart(4, '0')}`,
+      seq: index,
+      kind: 'user_utterance',
+      occurredAt: new Date(Date.parse('2026-09-07T00:00:00.000Z') + index * 1000).toISOString(),
+      text: `Wide preview record ${index}. ${'wide '.repeat(index >= 6 ? 20_000 : 4)}`,
+    }));
+    const lines = records.flatMap((record, index) => (index % 2 === 0 ? [record, ''] : [record, '   ']));
+    const raw = `${lines.join('\n')}\n\n\n`;
+    const path = join(root, 'windowed-blank-lines.jsonl');
+    await writeFile(path, raw, 'utf8');
+    const source = createFileLogSource(path);
+    const totalBytes = await source.size();
+    assert.ok(totalBytes > 4 * READ_CHUNK_BYTES, 'the fixture must span several 64 KiB read windows');
+
+    const expectedNewest = records.slice(-3);
+    const tail = await readTailLines(source, totalBytes, 3);
+    assert.deepEqual(
+      tail.map((line) => Buffer.from(line.bytes).toString('utf8')),
+      expectedNewest,
+      'the backward walk crosses windows and keeps going past blank lines until it has three records',
+    );
+    assert.deepEqual(
+      tail.map((line) => line.end - line.start),
+      expectedNewest.map((line) => Buffer.byteLength(line, 'utf8') + 1),
+      'each returned span covers exactly one complete line, terminator included',
+    );
+
+    importer = await importerFor(root, source, stack);
+    const preview = await importer.preview({ limit: 3 });
+    assert.deepEqual(
+      preview.events.map((event) => event.event.sourceEventId),
+      ['window-0006', 'window-0007', 'window-0008'],
+      'preview returns the newest three records even though blank lines sit among them',
+    );
+  } finally {
+    await importer?.close().catch(() => undefined);
+    await stack.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 const GIANT_LINE_BYTES = 5 * 1024 * 1024;
 const TAIL_RECORD_COUNT = 4;
 

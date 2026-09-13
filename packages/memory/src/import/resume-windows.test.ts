@@ -8,6 +8,13 @@
  *  - a kill between the store commit and the checkpoint promotion (the store is ahead of the
  *    committed offset, so the repair must re-ingest without double-storing).
  * Both windows must resume with zero duplicated observations and exact capsule coverage.
+ *
+ * A third test pins the harder invariant the first two do not: the repaired span must commit
+ * *identical* emissions — event id, fallback source event id, source sequence and ingest sequence —
+ * to the ones the interrupted forward pass would have committed for the same bytes. Records without
+ * their own id/seq derive that identity from the durable line ordinal and ingest sequence, so a
+ * repair that restarted its counters at 1 instead of continuing from the checkpoint would store a
+ * changed observation for every record of a mid-file pending span.
  */
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -17,7 +24,7 @@ import test from 'node:test';
 
 import { createContextAssembler } from '../context/index.js';
 import { createMemoryConsolidator, type MemoryConsolidator } from '../consolidation/index.js';
-import { createMemoryStore, type MemoryStore } from '../store/index.js';
+import { createMemoryStore, type MemoryStore, type NormalizedBatch } from '../store/index.js';
 import { createFileLogSource, type GenericLogSource } from '../../../harness-generic/src/index.js';
 import { createMemoryImporter, type MemoryImporter } from './index.js';
 
@@ -84,15 +91,79 @@ async function writeLog(root: string, count: number): Promise<{ path: string; sp
   return { path, spans };
 }
 
-function importerFor(root: string, source: GenericLogSource, stack: Stack): Promise<MemoryImporter> {
+function importerFor(
+  root: string,
+  source: GenericLogSource,
+  stack: Stack,
+  store: MemoryStore = stack.store,
+): Promise<MemoryImporter> {
   return createMemoryImporter({
     directory: join(root, 'import-state'),
     source,
     format: 'jsonl',
     scope: { profileId: PROFILE_ID, projectId: PROJECT_ID, sessionId: SESSION_ID, sensitivity: 'normal' },
-    store: stack.store,
+    store,
     consolidator: stack.consolidator,
   });
+}
+
+/** Records every ingested batch so a repair can be compared with the forward pass. */
+function recordingStore(inner: MemoryStore): { store: MemoryStore; batches: NormalizedBatch[] } {
+  const batches: NormalizedBatch[] = [];
+  const store = {
+    ingest: async (batch: NormalizedBatch) => {
+      batches.push(batch);
+      return inner.ingest(batch);
+    },
+  } as unknown as MemoryStore;
+  return { store, batches };
+}
+
+type EmissionProjection = {
+  eventId: string;
+  sourceEventId: string;
+  sourceSequence: number;
+  ingestSequence: number;
+  kind: string;
+  contentHash: string;
+};
+
+/** Everything about one emission that is a pure property of the source bytes plus its counters. */
+function projectBatch(batch: NormalizedBatch | undefined): EmissionProjection[] {
+  return (batch?.events ?? []).map((event) => ({
+    eventId: event.eventId,
+    sourceEventId: event.sourceEventId,
+    sourceSequence: event.sourceSequence,
+    ingestSequence: event.ingestSequence,
+    kind: event.kind,
+    contentHash: event.contentHash,
+  }));
+}
+
+/**
+ * A log of records without their own id or seq: the H03 envelope falls back to the byte span plus
+ * the importer's line ordinal, so the durable counters are the record's identity.
+ */
+async function writeAnonymousLog(root: string, count: number): Promise<{ path: string; spans: Array<{ start: number; end: number }> }> {
+  const lines: string[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const label = String(index).padStart(5, '0');
+    lines.push(JSON.stringify({
+      kind: 'user_utterance',
+      occurredAt: new Date(Date.parse('2026-09-01T00:00:00.000Z') + index * 1000).toISOString(),
+      text: `Anonymous resume-window record ${label}: its identity is the byte span and the durable line ordinal.`,
+    }));
+  }
+  const raw = `${lines.join('\n')}\n`;
+  const path = join(root, 'anonymous-log.jsonl');
+  await writeFile(path, raw, 'utf8');
+  let offset = 0;
+  const spans = lines.map((line) => {
+    const span = { start: offset, end: offset + Buffer.byteLength(line, 'utf8') + 1 };
+    offset = span.end;
+    return span;
+  });
+  return { path, spans };
 }
 
 async function capsules(store: MemoryStore): Promise<number> {
@@ -205,5 +276,86 @@ test('a kill between the store commit and the checkpoint promotion re-ingests wi
   } finally {
     await rm(root, { recursive: true, force: true });
     await stack.close();
+  }
+});
+
+test('a mid-file window-A repair commits exactly the emissions the forward pass would have', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm03-repair-parity-'));
+  const forwardRoot = await mkdtemp(join(tmpdir(), 'm03-repair-forward-'));
+  const stack = await createStack(root);
+  const forwardStack = await createStack(forwardRoot);
+  let reopened: MemoryImporter | undefined;
+  let forward: MemoryImporter | undefined;
+  try {
+    const log = await writeAnonymousLog(root, 1200);
+
+    // Forward reference: one clean run over the same bytes records what each batch must contain.
+    const forwardRecording = recordingStore(forwardStack.store);
+    forward = await importerFor(forwardRoot, createFileLogSource(log.path), forwardStack, forwardRecording.store);
+    await forward.bootstrap();
+    assert.ok(forwardRecording.batches.length > 1, 'the log must span several batches');
+
+    // The killed run: the first batch commits, the second store call dies after the pending write.
+    let dyingCalls = 0;
+    const dyingStore = {
+      ingest: async (batch: NormalizedBatch) => {
+        if (dyingCalls === 2) throw new Error('simulated kill after the pending-span write');
+        dyingCalls += 1;
+        return stack.store.ingest(batch);
+      },
+    } as unknown as MemoryStore;
+    const dying = await importerFor(root, createFileLogSource(log.path), stack, dyingStore);
+    await dying.bootstrap().then(
+      () => assert.fail('the simulated kill must surface'),
+      (error: Error) => assert.equal(error.message, 'simulated kill after the pending-span write'),
+    );
+    await dying.close();
+    const state = JSON.parse(await readFile(join(root, 'import-state', 'import-checkpoint.json'), 'utf8')) as {
+      committedOffset: number;
+      pendingOffset: number | null;
+    };
+    assert.ok(state.committedOffset > 0, 'the first batch committed before the kill');
+    assert.ok(
+      state.pendingOffset !== null && state.pendingOffset > state.committedOffset,
+      'the killed run leaves a mid-file pending span',
+    );
+
+    // Reopen: construction repairs the pending span through the same bounded scanner.
+    const repairedRecording = recordingStore(stack.store);
+    reopened = await importerFor(root, createFileLogSource(log.path), stack, repairedRecording.store);
+    const repairedStatus = await reopened.status();
+    assert.equal(repairedStatus.committedOffset, state.pendingOffset, 'the repair promotes the pending span');
+    assert.equal(repairedRecording.batches.length, 1, 'the repair re-ingests exactly the pending span as one batch');
+    const repairedBatch = repairedRecording.batches[0];
+    assert.ok(repairedBatch !== undefined && repairedBatch.events.length > 0, 'the pending span carries records');
+
+    // Match the forward batch by the byte span its payloadRef encodes (not by a counter-dependent id).
+    const pendingRef = repairedBatch.events[0]?.payloadRef;
+    const forwardBatch = forwardRecording.batches.find((batch) => batch.events[0]?.payloadRef === pendingRef);
+    assert.ok(
+      forwardBatch !== undefined,
+      `the forward pass has a batch for the pending span ${String(pendingRef)}`,
+    );
+    assert.deepEqual(
+      projectBatch(repairedBatch),
+      projectBatch(forwardBatch),
+      'the repair commits the exact events the forward pass committed for the same bytes',
+    );
+    assert.ok(
+      (repairedBatch.events[0]?.sourceSequence ?? 0) > 1,
+      'the repaired span continues the durable line ordinal instead of restarting at 1',
+    );
+
+    const resumed = await reopened.bootstrap();
+    assert.equal(resumed.coverage.duplicates, 0, 'the repair is not charged to the resumed run');
+    assert.equal(resumed.coverage.complete, true, 'the resumed run reaches the end of the source');
+    assert.equal(await capsules(stack.store), log.spans.length, 'every record is stored exactly once');
+  } finally {
+    await reopened?.close().catch(() => undefined);
+    await forward?.close().catch(() => undefined);
+    await stack.close();
+    await forwardStack.close();
+    await rm(root, { recursive: true, force: true });
+    await rm(forwardRoot, { recursive: true, force: true });
   }
 });

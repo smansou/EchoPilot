@@ -34,6 +34,19 @@ export interface ImportCheckpoint {
   committedOffset: number;
   /** Offset after the last record handed to the store but not yet promoted; null when idle. */
   pendingOffset: number | null;
+  /**
+   * Physical lines scanned in this generation up to `committedOffset`. The pending-span repair (and
+   * a resumed run) continues from this counter instead of restarting at 1, so the repaired records
+   * carry exactly the line ordinal — and therefore the `sourceSequence` / synthesized
+   * `sourceEventId` fallback — the forward pass would have committed for those bytes.
+   */
+  lineOrdinal: number;
+  /**
+   * Records emitted in this generation up to `committedOffset`, for the same reason: a repair
+   * commits the pending span with the ingest sequence the interrupted run had reached, so capsule
+   * observation ordering is unchanged by a kill/resume.
+   */
+  ingestSequence: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -45,6 +58,15 @@ function offset(value: unknown, label: string): number {
     throw new Error(`import checkpoint is corrupt: ${label} is not a non-negative integer`);
   }
   return value;
+}
+
+/**
+ * Counter fields are additive to the durable format: a checkpoint written before they existed (or a
+ * hand-repaired one) loads with zero counters, which reproduces the older per-run numbering instead
+ * of refusing to resume.
+ */
+function counter(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
 /**
@@ -92,7 +114,15 @@ export class ImportCheckpointStore {
         throw new Error(`import checkpoint at ${this.path} is corrupt: pendingOffset is behind committedOffset`);
       }
     }
-    return { version: IMPORT_CHECKPOINT_VERSION, sourceId, generation, committedOffset, pendingOffset };
+    return {
+      version: IMPORT_CHECKPOINT_VERSION,
+      sourceId,
+      generation,
+      committedOffset,
+      pendingOffset,
+      lineOrdinal: counter(parsed.lineOrdinal),
+      ingestSequence: counter(parsed.ingestSequence),
+    };
   }
 
   /** Atomic write: a crash mid-save can never leave a half-written checkpoint behind. */

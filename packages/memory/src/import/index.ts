@@ -164,7 +164,15 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const checkpointStore = new ImportCheckpointStore(directory);
   let checkpoint: ImportCheckpoint = await checkpointStore.load()
-    ?? { version: 1, sourceId: '', generation: 0, committedOffset: 0, pendingOffset: null };
+    ?? {
+      version: 1,
+      sourceId: '',
+      generation: 0,
+      committedOffset: 0,
+      pendingOffset: null,
+      lineOrdinal: 0,
+      ingestSequence: 0,
+    };
   let closed = false;
 
   const coverageOf = (totalBytes: number, importedEvents: number, duplicates: number): ImportCoverage => ({
@@ -195,6 +203,12 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
    * classified it (a display-only gap with empty raw bytes) instead of being re-read whole and
    * parsed as an ordinary record: a 10 GiB source with a multi-gigabyte line resumes inside the
    * §5.8 64 KiB working set, and the repaired events are identical to the committed ones.
+   *
+   * Identical includes the counters: the scan continues the durable line ordinal and ingest
+   * sequence at `committedOffset`, so a repair that lands mid-file still emits the
+   * `sourceSequence`/`sourceEventId` fallback and the ingest sequence of the run that wrote the
+   * pending span — a gap inside the span keeps the byte span *and* the ordinal the forward pass
+   * would have committed for it.
    */
   const repairPending = async (): Promise<void> => {
     const from = checkpoint.committedOffset;
@@ -203,8 +217,8 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
     const scanner = new BoundedLineScanner(source, from);
     const emissions: GenericPreviewEvent[] = [];
     const payloads: Record<string, unknown> = {};
-    let ordinal = 0;
-    let ingestSequence = 0;
+    let ordinal = checkpoint.lineOrdinal;
+    let ingestSequence = checkpoint.ingestSequence;
     while (scanner.offset < to) {
       const scan = await scanner.next();
       if (scan.type === 'eof' || scan.type === 'partial' || scan.end > to) {
@@ -230,7 +244,13 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
       throw new Error(`memory import cannot re-read its pending checkpoint span [${from}, ${to})`);
     }
     await ingestEmissions(emissions, payloads);
-    checkpoint = { ...checkpoint, committedOffset: to, pendingOffset: null };
+    checkpoint = {
+      ...checkpoint,
+      committedOffset: to,
+      pendingOffset: null,
+      lineOrdinal: ordinal,
+      ingestSequence,
+    };
     await checkpointStore.save(checkpoint);
   };
 
@@ -257,12 +277,22 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
         generation: checkpoint.generation + 1,
         committedOffset: 0,
         pendingOffset: null,
+        lineOrdinal: 0,
+        ingestSequence: 0,
       };
       await checkpointStore.save(checkpoint);
       return totalBytes;
     }
     if (checkpoint.sourceId.length === 0) {
-      checkpoint = { version: 1, sourceId: identity, generation: 1, committedOffset: 0, pendingOffset: null };
+      checkpoint = {
+        version: 1,
+        sourceId: identity,
+        generation: 1,
+        committedOffset: 0,
+        pendingOffset: null,
+        lineOrdinal: 0,
+        ingestSequence: 0,
+      };
       return totalBytes;
     }
     await repairPending();
@@ -279,8 +309,8 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
 
       let inserted = 0;
       let duplicates = 0;
-      let ingestSequence = 0;
-      let ordinal = 0;
+      let ingestSequence = checkpoint.ingestSequence;
+      let ordinal = checkpoint.lineOrdinal;
       const emissions: GenericPreviewEvent[] = [];
       const payloads: Record<string, unknown> = {};
       const scanner = new BoundedLineScanner(source, checkpoint.committedOffset);
@@ -300,7 +330,13 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
           for (const key of Object.keys(payloads)) delete payloads[key];
         }
         // Step 3: promote the commit point past the durably stored records.
-        checkpoint = { ...checkpoint, committedOffset: pendingOffset, pendingOffset: null };
+        checkpoint = {
+          ...checkpoint,
+          committedOffset: pendingOffset,
+          pendingOffset: null,
+          lineOrdinal: ordinal,
+          ingestSequence,
+        };
         await checkpointStore.save(checkpoint);
       };
 
@@ -346,7 +382,12 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
       const identity = await source.identity();
       const totalBytes = await source.size();
       const rotated = identity !== checkpoint.sourceId;
-      const lines = await readTailLines(source, totalBytes, limit);
+      // The tail walk counts *records*, not merely non-blank lines: a line the forward pass would
+      // skip (whitespace-only, or display text that normalizes to nothing) must not consume one of
+      // the requested newest records, or the preview silently returns fewer than `limit` events.
+      const isPreviewedRecord = (bytes: Uint8Array): boolean =>
+        parseLine({ start: 0, end: bytes.byteLength, bytes }, format, 0) !== undefined;
+      const lines = await readTailLines(source, totalBytes, limit, isPreviewedRecord);
       const events: GenericPreviewEvent[] = [];
       let ordinal = 0;
       let ingestSequence = 0;
