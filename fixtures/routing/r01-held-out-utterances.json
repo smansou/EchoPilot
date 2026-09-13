@@ -1,0 +1,162 @@
+{
+  "id": "r01-held-out-utterances",
+  "version": 1,
+  "ticket": "R01",
+  "consent": "synthetic",
+  "description": "Held-out addressee-routing corpus for the R01 acceptance oracle (IMPLEMENTATION_PLAN.md section 5.6). Every utterance is synthetic text; no user audio is stored. The oracle expands dispatch templates x session names x task clauses into exactly 300 explicit-addressee utterances, then appends the clarification, companion-default, and unsafe (partial ASR / ambient acknowledgment) cases. Ground-truth labels are never passed to the router: the oracle only compares the returned RouteDecision against them.",
+  "referenceConditions": "Plan section 5.6 precedence rules (explicit prefixes, companion default, clarification, pending-answer binding) and the section 5.7 auto-dispatch threshold: calibrated probability >= 0.95 and the >= 99% held-out precision gate.",
+  "sessions": [
+    { "sessionId": "codex-parser", "harness": "codex", "label": "Codex: parser", "projectId": "atlas", "active": true },
+    { "sessionId": "codex-tests", "harness": "codex", "label": "Codex: tests", "projectId": "atlas", "active": true },
+    { "sessionId": "claude-docs", "harness": "claude", "label": "Claude: docs", "projectId": "atlas", "active": true },
+    { "sessionId": "claude-review", "harness": "claude", "label": "Claude: review", "projectId": "atlas", "active": true }
+  ],
+  "dispatch": {
+    "templates": [
+      "tell {name} to {task}",
+      "ask {name} to {task}",
+      "could you tell {name} to {task}",
+      "please ask {name} to {task}",
+      "i need you to tell {name} to {task}"
+    ],
+    "names": [
+      { "text": "codex parser", "sessionId": "codex-parser" },
+      { "text": "codex tests", "sessionId": "codex-tests" },
+      { "text": "claude docs", "sessionId": "claude-docs" },
+      { "text": "claude review", "sessionId": "claude-review" },
+      { "text": "the codex parser session", "sessionId": "codex-parser" },
+      { "text": "the claude review session", "sessionId": "claude-review" }
+    ],
+    "tasks": [
+      "add a regression test",
+      "rerun the failing parser test",
+      "fix the flaky migration test",
+      "update the changelog",
+      "review the migration diff",
+      "summarize the failing build",
+      "commit the parser fix",
+      "run the full test suite",
+      "document the retry policy",
+      "bump the lockfile"
+    ],
+    "expectedCount": 300
+  },
+  "clarification": {
+    "expectedCount": 14,
+    "cases": [
+      { "key": "two-codex-no-name", "text": "tell codex to add a regression test", "asrConfidence": 0.98 },
+      { "key": "two-codex-no-name-rerun", "text": "tell codex to rerun the failing parser test", "asrConfidence": 0.97 },
+      { "key": "two-codex-no-name-changelog", "text": "ask codex to update the changelog", "asrConfidence": 0.96 },
+      { "key": "two-claude-no-name", "text": "tell claude to review the migration diff", "asrConfidence": 0.97 },
+      { "key": "two-claude-no-name-summarize", "text": "ask claude to summarize the failing build", "asrConfidence": 0.95 },
+      { "key": "two-codex-session-generic", "text": "tell the codex session to commit the parser fix", "asrConfidence": 0.96 },
+      { "key": "two-codex-other-session", "text": "tell the other codex to run the full test suite", "asrConfidence": 0.94 },
+      { "key": "no-session-named", "text": "tell the session to add a regression test", "asrConfidence": 0.93 },
+      { "key": "pronoun-only-destination", "text": "tell it to add a regression test", "asrConfidence": 0.95 },
+      { "key": "generic-agent", "text": "ask the agent to fix the flaky migration test", "asrConfidence": 0.94 },
+      { "key": "dangling-referent", "text": "send that to codex", "asrConfidence": 0.92 },
+      { "key": "two-named-codex-sessions", "text": "tell codex parser and codex tests to run the full test suite", "asrConfidence": 0.96 },
+      { "key": "both-codex-sessions", "text": "tell both codex sessions to rerun the failing test", "asrConfidence": 0.95 },
+      { "key": "coding-agent-nickname", "text": "message the coding agent to add a regression test", "asrConfidence": 0.93 }
+    ]
+  },
+  "companion": {
+    "expectedCount": 12,
+    "cases": [
+      { "key": "what-happened", "text": "what happened in the last session?", "asrConfidence": 0.98 },
+      { "key": "retry-decision", "text": "what did we decide about the retry policy?", "asrConfidence": 0.97 },
+      { "key": "why-parser-failed", "text": "why did the parser tests fail?", "asrConfidence": 0.97 },
+      { "key": "summarize-last-failure", "text": "summarize the last failure", "asrConfidence": 0.96 },
+      { "key": "echo-what-changed", "text": "echo, what changed in the parser?", "asrConfidence": 0.97 },
+      { "key": "migration-status", "text": "what is the status of the migration?", "asrConfidence": 0.96 },
+      { "key": "did-tests-pass", "text": "did the tests pass?", "asrConfidence": 0.97 },
+      { "key": "what-did-codex-do", "text": "what did codex do?", "asrConfidence": 0.96 },
+      { "key": "did-codex-finish", "text": "did codex finish the migration?", "asrConfidence": 0.95 },
+      { "key": "active-session-count", "text": "how many sessions are active?", "asrConfidence": 0.96 },
+      { "key": "exit-code", "text": "what was the exit code?", "asrConfidence": 0.97 },
+      { "key": "what-we-tried-first", "text": "remind me what we tried first", "asrConfidence": 0.95 }
+    ]
+  },
+  "unsafe": {
+    "expectedCount": 13,
+    "cases": [
+      { "key": "partial-regress", "reason": "partial_asr", "text": "tell codex parser to add a regress", "asrConfidence": 0.44, "partial": true },
+      { "key": "partial-name", "reason": "partial_asr", "text": "tell codex par", "asrConfidence": 0.38, "partial": true },
+      { "key": "partial-no-task", "reason": "partial_asr", "text": "tell codex parser to", "asrConfidence": 0.51, "partial": true },
+      { "key": "partial-changelog", "reason": "partial_asr", "text": "tell claude docs to update the change", "asrConfidence": 0.47, "partial": true },
+      { "key": "partial-rerun", "reason": "partial_asr", "text": "tell codex parser to rerun the fail", "asrConfidence": 0.58, "partial": true },
+      { "key": "partial-flaky", "reason": "partial_asr", "text": "ask codex tests to fix the flaky migration tes", "asrConfidence": 0.62, "partial": true },
+      { "key": "partial-but-complete-text", "reason": "partial_asr", "text": "tell codex parser to add a regression test", "asrConfidence": 0.93, "partial": true },
+      { "key": "ambient-yes", "reason": "ambient_acknowledgment", "text": "yes", "asrConfidence": 0.91, "partial": false },
+      { "key": "ambient-yeah", "reason": "ambient_acknowledgment", "text": "yeah", "asrConfidence": 0.93, "partial": false },
+      { "key": "ambient-okay", "reason": "ambient_acknowledgment", "text": "okay", "asrConfidence": 0.95, "partial": false },
+      { "key": "ambient-mm-hm", "reason": "ambient_acknowledgment", "text": "mm-hm", "asrConfidence": 0.88, "partial": false },
+      { "key": "ambient-go-ahead", "reason": "ambient_acknowledgment", "text": "go ahead", "asrConfidence": 0.9, "partial": false },
+      { "key": "ambient-do-it", "reason": "ambient_acknowledgment", "text": "do it", "asrConfidence": 0.86, "partial": false }
+    ]
+  },
+  "dialogueScenario": {
+    "description": "AC1 two-turn dialogue: a companion question followed by a named-agent instruction with exactly one active Codex session, so 'Tell Codex' uniquely names codex-parser. The memory double answers from memoryEvidence and returns summary; the oracle only requires the spoken answer to cite returned evidence and restate some of the summary content.",
+    "scope": { "profileId": "r01-profile", "projectId": "atlas", "sensitivity": "normal" },
+    "sessions": [
+      { "sessionId": "codex-parser", "harness": "codex", "label": "Codex: parser", "projectId": "atlas", "active": true },
+      { "sessionId": "claude-docs", "harness": "claude", "label": "Claude: docs", "projectId": "atlas", "active": true }
+    ],
+    "memorySummary": "Codex: parser ran the parser test suite in atlas: 3 of 42 parser tests failed with exit code 1, and the retry policy remains unverified.",
+    "memoryEvidence": [
+      {
+        "schemaVersion": 1,
+        "eventId": "r01-event-001",
+        "sourceId": "codex-parser",
+        "sourceEventId": "turn-41-item-07",
+        "sourceSequence": 7,
+        "ingestSequence": 12,
+        "occurredAt": "2026-09-13T09:14:05.000Z",
+        "observedAt": "2026-09-13T09:14:05.250Z",
+        "scope": { "profileId": "r01-profile", "projectId": "atlas", "sessionId": "codex-parser", "sensitivity": "normal" },
+        "kind": "tool_completed",
+        "payloadRef": "fixture://r01/event-001",
+        "contentHash": "r01-hash-001",
+        "trust": "tool_observed"
+      },
+      {
+        "schemaVersion": 1,
+        "eventId": "r01-event-002",
+        "sourceId": "codex-parser",
+        "sourceEventId": "turn-41-item-08",
+        "sourceSequence": 8,
+        "ingestSequence": 13,
+        "occurredAt": "2026-09-13T09:14:06.000Z",
+        "observedAt": "2026-09-13T09:14:06.250Z",
+        "scope": { "profileId": "r01-profile", "projectId": "atlas", "sessionId": "codex-parser", "sensitivity": "normal" },
+        "kind": "agent_message",
+        "payloadRef": "fixture://r01/event-002",
+        "contentHash": "r01-hash-002",
+        "trust": "agent_reported"
+      },
+      {
+        "schemaVersion": 1,
+        "eventId": "r01-event-003",
+        "sourceId": "codex-parser",
+        "sourceEventId": "turn-41-item-09",
+        "sourceSequence": 9,
+        "ingestSequence": 14,
+        "occurredAt": "2026-09-13T09:14:07.000Z",
+        "observedAt": "2026-09-13T09:14:07.250Z",
+        "scope": { "profileId": "r01-profile", "projectId": "atlas", "sessionId": "codex-parser", "sensitivity": "normal" },
+        "kind": "decision",
+        "payloadRef": "fixture://r01/event-003",
+        "contentHash": "r01-hash-003",
+        "trust": "user_explicit"
+      }
+    ],
+    "question": { "utteranceId": "r01-u1", "text": "What happened in the last session?", "asrConfidence": 0.97 },
+    "instruction": {
+      "utteranceId": "r01-u2",
+      "text": "Tell Codex to add a regression test",
+      "asrConfidence": 0.98,
+      "expectedTargetSessionId": "codex-parser",
+      "expectedInstruction": "add a regression test"
+    }
+  }
+}
