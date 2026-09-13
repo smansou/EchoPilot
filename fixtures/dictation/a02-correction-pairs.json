@@ -1,0 +1,569 @@
+{
+  "schemaVersion": 1,
+  "ticket": "A02",
+  "description": "Synthetic paired-correction fixture for the A02 dictation path (speech + screenshot + project glossary -> evidence-backed correction -> insertion). Every transcript, screen reference, glossary entry, and evidence id is invented. The pairs make the evidence dependency explicit: the with-evidence variant admits the technical token in a permitted evidence text, while the without-evidence variant keeps the same raw transcript and the same deterministic model rule but admits no evidence, so the corrected text must fall back to the raw transcript.",
+  "projectId": "atlas",
+  "model": { "modelId": "qwen3.5-4b-instruct", "contextCapacity": 32768 },
+  "defaultModelLatencyMs": 120,
+  "excludedBundleIds": [
+    "com.1password.1password",
+    "com.echopilot.widget"
+  ],
+  "surface": {
+    "bundleId": "com.microsoft.VSCode",
+    "pid": 42001,
+    "windowId": 3301,
+    "displayId": 1,
+    "elementFingerprint": "vscode:42001:3301:0",
+    "role": "AXTextArea",
+    "bounds": { "x": 120, "y": 80, "width": 1200, "height": 800 },
+    "pixelScale": 2
+  },
+  "glossary": {
+    "sqlite": {
+      "term": "SQLite",
+      "variants": ["sequel lite", "sequel-lite"],
+      "scope": "project",
+      "userConfirmed": true,
+      "positiveExamples": ["deploy the SQLite migration"]
+    },
+    "jasonPerson": {
+      "term": "Jason",
+      "variants": ["Jason"],
+      "scope": "project",
+      "userConfirmed": true,
+      "positiveExamples": ["tell Jason the deploy is blocked"]
+    }
+  },
+  "cases": [
+    {
+      "key": "json-response-with-screenshot",
+      "pair": "json-response",
+      "variant": "with-screenshot",
+      "evidenceSource": "screenshot",
+      "mode": "technical_cleanup",
+      "rawTranscript": "serialize the Jason response",
+      "screenshot": { "ref": "artifact://a02/synthetic-editor@2x.png", "width": 1440, "height": 900 },
+      "selectedText": null,
+      "axValues": ["src/payload.ts"],
+      "ocrTexts": ["const body = JSON.parse(payload);"],
+      "glossaryTerms": [],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "Jason",
+          "to": "JSON",
+          "basis": "evidence",
+          "acousticReason": null,
+          "confidence": 0.93,
+          "requiresPromptText": ["JSON.parse(payload)"]
+        }
+      ],
+      "expect": {
+        "text": "serialize the JSON response",
+        "applied": 1,
+        "blocked": 0,
+        "fallback": "none",
+        "evidenceIds": ["ctx:ax:0", "ctx:ocr:0"],
+        "images": 1,
+        "reasonerCalls": 1,
+        "appliedBasis": "evidence",
+        "appliedAcousticReason": null,
+        "unresolved": []
+      }
+    },
+    {
+      "key": "json-response-without-screenshot",
+      "pair": "json-response",
+      "variant": "without-screenshot",
+      "evidenceSource": "screenshot",
+      "mode": "technical_cleanup",
+      "rawTranscript": "serialize the Jason response",
+      "screenshot": null,
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": [],
+      "glossaryTerms": [],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "Jason",
+          "to": "JSON",
+          "basis": "evidence",
+          "acousticReason": null,
+          "confidence": 0.93,
+          "requiresPromptText": ["JSON.parse(payload)"]
+        }
+      ],
+      "expect": {
+        "text": "serialize the Jason response",
+        "applied": 0,
+        "blocked": 0,
+        "fallback": "none",
+        "evidenceIds": [],
+        "images": 0,
+        "reasonerCalls": 1,
+        "appliedBasis": null,
+        "appliedAcousticReason": null,
+        "unresolved": []
+      }
+    },
+    {
+      "key": "sqlite-migration-with-glossary",
+      "pair": "sqlite-migration",
+      "variant": "with-glossary",
+      "evidenceSource": "glossary",
+      "mode": "technical_cleanup",
+      "rawTranscript": "deploy the sequel lite migration",
+      "screenshot": null,
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": [],
+      "glossaryTerms": ["sqlite"],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "sequel lite",
+          "to": "SQLite",
+          "basis": "evidence",
+          "acousticReason": null,
+          "confidence": 0.88,
+          "requiresPromptText": ["SQLite"]
+        }
+      ],
+      "expect": {
+        "text": "deploy the SQLite migration",
+        "applied": 1,
+        "blocked": 0,
+        "fallback": "none",
+        "evidenceIds": ["ctx:glossary:0"],
+        "images": 0,
+        "reasonerCalls": 1,
+        "appliedBasis": "evidence",
+        "appliedAcousticReason": null,
+        "unresolved": []
+      }
+    },
+    {
+      "key": "sqlite-migration-without-glossary",
+      "pair": "sqlite-migration",
+      "variant": "without-glossary",
+      "evidenceSource": "glossary",
+      "mode": "technical_cleanup",
+      "rawTranscript": "deploy the sequel lite migration",
+      "screenshot": null,
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": [],
+      "glossaryTerms": [],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "sequel lite",
+          "to": "SQLite",
+          "basis": "evidence",
+          "acousticReason": null,
+          "confidence": 0.88,
+          "requiresPromptText": ["SQLite"]
+        }
+      ],
+      "expect": {
+        "text": "deploy the sequel lite migration",
+        "applied": 0,
+        "blocked": 0,
+        "fallback": "none",
+        "evidenceIds": [],
+        "images": 0,
+        "reasonerCalls": 1,
+        "appliedBasis": null,
+        "appliedAcousticReason": null,
+        "unresolved": []
+      }
+    },
+    {
+      "key": "memory-evidence",
+      "pair": null,
+      "variant": null,
+      "evidenceSource": "memory",
+      "mode": "technical_cleanup",
+      "rawTranscript": "resume the atlus rollout",
+      "screenshot": null,
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": [],
+      "glossaryTerms": [],
+      "memoryEvidence": [
+        { "id": "mem:decision:17", "text": "Decision: the Atlas rollout resumes after the migration" }
+      ],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "atlus",
+          "to": "Atlas",
+          "basis": "evidence",
+          "acousticReason": null,
+          "confidence": 0.9,
+          "requiresPromptText": ["Atlas rollout"]
+        }
+      ],
+      "expect": {
+        "text": "resume the Atlas rollout",
+        "applied": 1,
+        "blocked": 0,
+        "fallback": "none",
+        "evidenceIds": ["mem:decision:17"],
+        "images": 0,
+        "reasonerCalls": 1,
+        "appliedBasis": "evidence",
+        "appliedAcousticReason": null,
+        "unresolved": []
+      }
+    },
+    {
+      "key": "jason-person-in-screenshot",
+      "pair": null,
+      "variant": null,
+      "evidenceSource": "screenshot",
+      "mode": "technical_cleanup",
+      "rawTranscript": "ask Jason to review the pull request",
+      "screenshot": { "ref": "artifact://a02/synthetic-chat@2x.png", "width": 1280, "height": 800 },
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": ["Jason reviewed the pull request yesterday"],
+      "glossaryTerms": [],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "Jason",
+          "to": "JSON",
+          "basis": "evidence",
+          "acousticReason": null,
+          "confidence": 1,
+          "requiresPromptText": []
+        }
+      ],
+      "expect": {
+        "text": "ask Jason to review the pull request",
+        "applied": 0,
+        "blocked": 1,
+        "fallback": "none",
+        "evidenceIds": ["ctx:ocr:0"],
+        "images": 1,
+        "reasonerCalls": 1,
+        "appliedBasis": null,
+        "appliedAcousticReason": null,
+        "unresolved": [
+          { "raw": "Jason", "alternative": "JSON", "reason": "missing_evidence" }
+        ]
+      }
+    },
+    {
+      "key": "jason-person-in-glossary",
+      "pair": null,
+      "variant": null,
+      "evidenceSource": "glossary",
+      "mode": "technical_cleanup",
+      "rawTranscript": "tell Jason the deploy is blocked",
+      "screenshot": null,
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": [],
+      "glossaryTerms": ["jasonPerson"],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "Jason",
+          "to": "JSON",
+          "basis": "evidence",
+          "acousticReason": null,
+          "confidence": 0.97,
+          "requiresPromptText": []
+        }
+      ],
+      "expect": {
+        "text": "tell Jason the deploy is blocked",
+        "applied": 0,
+        "blocked": 1,
+        "fallback": "none",
+        "evidenceIds": ["ctx:glossary:0"],
+        "images": 0,
+        "reasonerCalls": 1,
+        "appliedBasis": null,
+        "appliedAcousticReason": null,
+        "unresolved": [
+          { "raw": "Jason", "alternative": "JSON", "reason": "missing_evidence" }
+        ]
+      }
+    },
+    {
+      "key": "protected-tokens",
+      "pair": null,
+      "variant": null,
+      "evidenceSource": "none",
+      "mode": "technical_cleanup",
+      "rawTranscript": "run pnpm test --watch 3 times, not \"keep raw\", and leave src/index.ts alone",
+      "screenshot": null,
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": [],
+      "glossaryTerms": [],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        { "from": "--watch", "to": "-w", "basis": "evidence", "acousticReason": null, "confidence": 1, "requiresPromptText": [] },
+        { "from": "3", "to": "5", "basis": "evidence", "acousticReason": null, "confidence": 1, "requiresPromptText": [] },
+        { "from": "not", "to": "definitely", "basis": "evidence", "acousticReason": null, "confidence": 1, "requiresPromptText": [] },
+        { "from": "\"keep raw\"", "to": "\"keep safe\"", "basis": "evidence", "acousticReason": null, "confidence": 1, "requiresPromptText": [] },
+        { "from": "src/index.ts", "to": "src/main.ts", "basis": "evidence", "acousticReason": null, "confidence": 1, "requiresPromptText": [] }
+      ],
+      "expect": {
+        "text": "run pnpm test --watch 3 times, not \"keep raw\", and leave src/index.ts alone",
+        "applied": 0,
+        "blocked": 5,
+        "fallback": "none",
+        "evidenceIds": [],
+        "images": 0,
+        "reasonerCalls": 1,
+        "appliedBasis": null,
+        "appliedAcousticReason": null,
+        "unresolved": [
+          { "raw": "--watch", "alternative": "-w", "reason": "protected_token" },
+          { "raw": "3", "alternative": "5", "reason": "protected_token" },
+          { "raw": "not", "alternative": "definitely", "reason": "protected_token" },
+          { "raw": "\"keep raw\"", "alternative": "\"keep safe\"", "reason": "protected_token" },
+          { "raw": "src/index.ts", "alternative": "src/main.ts", "reason": "protected_token" }
+        ]
+      }
+    },
+    {
+      "key": "acoustic-spelled-letters",
+      "pair": null,
+      "variant": null,
+      "evidenceSource": "acoustic",
+      "mode": "technical_cleanup",
+      "rawTranscript": "set the base U R L to localhost",
+      "screenshot": null,
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": [],
+      "glossaryTerms": [],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "U R L",
+          "to": "URL",
+          "basis": "acoustic_normalization",
+          "acousticReason": "spelled_letters",
+          "confidence": 0.81,
+          "requiresPromptText": []
+        }
+      ],
+      "expect": {
+        "text": "set the base URL to localhost",
+        "applied": 1,
+        "blocked": 0,
+        "fallback": "none",
+        "evidenceIds": [],
+        "images": 0,
+        "reasonerCalls": 1,
+        "appliedBasis": "acoustic_normalization",
+        "appliedAcousticReason": "spelled_letters",
+        "unresolved": []
+      }
+    },
+    {
+      "key": "acoustic-capitalization",
+      "pair": null,
+      "variant": null,
+      "evidenceSource": "acoustic",
+      "mode": "technical_cleanup",
+      "rawTranscript": "run grafana locally",
+      "screenshot": null,
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": [],
+      "glossaryTerms": [],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "grafana",
+          "to": "Grafana",
+          "basis": "acoustic_normalization",
+          "acousticReason": "capitalization",
+          "confidence": 0.77,
+          "requiresPromptText": []
+        }
+      ],
+      "expect": {
+        "text": "run Grafana locally",
+        "applied": 1,
+        "blocked": 0,
+        "fallback": "none",
+        "evidenceIds": [],
+        "images": 0,
+        "reasonerCalls": 1,
+        "appliedBasis": "acoustic_normalization",
+        "appliedAcousticReason": "capitalization",
+        "unresolved": []
+      }
+    },
+    {
+      "key": "acoustic-punctuation",
+      "pair": null,
+      "variant": null,
+      "evidenceSource": "acoustic",
+      "mode": "technical_cleanup",
+      "rawTranscript": "the tests pass , but the build fails",
+      "screenshot": null,
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": [],
+      "glossaryTerms": [],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": " ,",
+          "to": ",",
+          "basis": "acoustic_normalization",
+          "acousticReason": "punctuation",
+          "confidence": 0.72,
+          "requiresPromptText": []
+        }
+      ],
+      "expect": {
+        "text": "the tests pass, but the build fails",
+        "applied": 1,
+        "blocked": 0,
+        "fallback": "none",
+        "evidenceIds": [],
+        "images": 0,
+        "reasonerCalls": 1,
+        "appliedBasis": "acoustic_normalization",
+        "appliedAcousticReason": "punctuation",
+        "unresolved": []
+      }
+    },
+    {
+      "key": "acoustic-claim-without-verification",
+      "pair": null,
+      "variant": null,
+      "evidenceSource": "acoustic",
+      "mode": "technical_cleanup",
+      "rawTranscript": "deploy the sequel lite migration",
+      "screenshot": null,
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": [],
+      "glossaryTerms": [],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "sequel lite",
+          "to": "SQLite",
+          "basis": "acoustic_normalization",
+          "acousticReason": "capitalization",
+          "confidence": 0.8,
+          "requiresPromptText": []
+        }
+      ],
+      "expect": {
+        "text": "deploy the sequel lite migration",
+        "applied": 0,
+        "blocked": 1,
+        "fallback": "none",
+        "evidenceIds": [],
+        "images": 0,
+        "reasonerCalls": 1,
+        "appliedBasis": null,
+        "appliedAcousticReason": null,
+        "unresolved": [
+          { "raw": "sequel lite", "alternative": "SQLite", "reason": "invalid_acoustic_reason" }
+        ]
+      }
+    },
+    {
+      "key": "verbatim-mode",
+      "pair": null,
+      "variant": null,
+      "evidenceSource": "screenshot",
+      "mode": "verbatim",
+      "rawTranscript": "serialize the Jason response",
+      "screenshot": { "ref": "artifact://a02/synthetic-editor@2x.png", "width": 1440, "height": 900 },
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": ["const body = JSON.parse(payload);"],
+      "glossaryTerms": [],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "Jason",
+          "to": "JSON",
+          "basis": "evidence",
+          "acousticReason": null,
+          "confidence": 0.93,
+          "requiresPromptText": ["JSON.parse(payload)"]
+        }
+      ],
+      "expect": {
+        "text": "serialize the Jason response",
+        "applied": 0,
+        "blocked": 0,
+        "fallback": "none",
+        "evidenceIds": [],
+        "images": 0,
+        "reasonerCalls": 0,
+        "appliedBasis": null,
+        "appliedAcousticReason": null,
+        "unresolved": []
+      }
+    },
+    {
+      "key": "rewrite-mode",
+      "pair": null,
+      "variant": null,
+      "evidenceSource": "acoustic",
+      "mode": "rewrite",
+      "rawTranscript": "set the base U R L to localhost",
+      "screenshot": null,
+      "selectedText": null,
+      "axValues": [],
+      "ocrTexts": [],
+      "glossaryTerms": [],
+      "memoryEvidence": [],
+      "modelLatencyMs": 120,
+      "modelEdits": [
+        {
+          "from": "U R L",
+          "to": "URL",
+          "basis": "acoustic_normalization",
+          "acousticReason": "spelled_letters",
+          "confidence": 0.81,
+          "requiresPromptText": []
+        }
+      ],
+      "expect": {
+        "text": "set the base URL to localhost",
+        "applied": 1,
+        "blocked": 0,
+        "fallback": "none",
+        "evidenceIds": [],
+        "images": 0,
+        "reasonerCalls": 1,
+        "appliedBasis": "acoustic_normalization",
+        "appliedAcousticReason": "spelled_letters",
+        "unresolved": []
+      }
+    }
+  ]
+}
