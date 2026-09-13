@@ -301,16 +301,34 @@ export function createDuplexController(options: DuplexControllerOptions): Duplex
   const deliveriesInFlight = new Map<string, Promise<AgentControlReceipt>>();
 
   /**
-   * The device port owns audibility: a plan that ended, or one this controller did not see start, is
-   * reported as it actually is instead of as the last intent here.
+   * The device port owns audibility. The recorded state is only this controller's last intent, and a
+   * plan can end on its own or be replaced by a new narration epoch the controller never saw start
+   * (a fresh turn after `stop()`, a resume, a device switch), so the intent is reconciled with
+   * `output.speaking()` before every decision and status read:
+   *   - nothing audible ends any outstanding duck — there is no narration left to attenuate;
+   *   - while a recorded `paused`/`stopped` plan is no longer the audible one, that terminal intent
+   *     is stale: the audibility the port reports now belongs to a new epoch, and the next stop or
+   *     pause must reach it instead of being skipped as "already terminal".
    */
+  const reconcileOutput = (): void => {
+    if (!output.speaking()) {
+      ducked = false;
+      if (state === 'ducked') state = 'idle';
+      return;
+    }
+    if (state === 'paused' || state === 'stopped') state = 'speaking';
+  };
+
   const observedState = (): DuplexOutputState => {
-    if (state === 'paused' || state === 'stopped') return state;
-    if (!output.speaking()) return 'idle';
+    reconcileOutput();
+    if (!output.speaking()) {
+      return state === 'paused' || state === 'stopped' ? state : 'idle';
+    }
     return ducked ? 'ducked' : 'speaking';
   };
 
   const noteSpeechOnset = (onset: Readonly<{ utteranceId: string; route: DuplexRoute; atMs: number }>): void => {
+    reconcileOutput();
     if (!onsets.has(onset.utteranceId)) {
       rememberBounded(
         onsets,
@@ -330,7 +348,9 @@ export function createDuplexController(options: DuplexControllerOptions): Duplex
   };
 
   const silenceNarration = (): void => {
-    // Pausing a cancelled epoch would resurrect narration the user already stopped.
+    reconcileOutput();
+    // Pausing a cancelled epoch would resurrect narration the user already stopped. A plan that is
+    // audibly playing again is a new epoch, not that cancelled one, so it is paused as asked.
     if (state === 'stopped') return;
     output.pause();
     ducked = false;
@@ -338,6 +358,9 @@ export function createDuplexController(options: DuplexControllerOptions): Duplex
   };
 
   const cancelNarration = (): void => {
+    reconcileOutput();
+    // Narration that became audible after an earlier stop is a new epoch and is stopped too, so a
+    // hotkey stop can never leave the new narration playing.
     if (state === 'stopped') return;
     output.stop();
     ducked = false;
@@ -350,6 +373,9 @@ export function createDuplexController(options: DuplexControllerOptions): Duplex
     if (remembered !== undefined && remembered.signature === signature) {
       return remembered.decision;
     }
+    // The port may have moved on without this controller (a plan ended, or a new one became audible
+    // after the epoch recorded here was paused/stopped), so the decision is taken against audibility.
+    reconcileOutput();
     // The onset and its evidence are correlated: the duck has been resolved by this decision.
     onsets.delete(evidence.utteranceId);
 

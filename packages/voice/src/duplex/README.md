@@ -30,6 +30,12 @@ narration, which the user can repeat, instead of cancelling a generation that wa
 to stop. A backchannel is only recognized while no confirmation is pending and no new request
 follows, so an answer to a confirmation is never swallowed as an acknowledgement.
 
+The output port owns audibility, not the controller's memory of what it last asked for: `status()`
+and every decision reconcile the recorded intent with `output.speaking()`. A plan that ended on its
+own, or a newer narration that became audible after a pause or a stop, is therefore reported as it
+actually is — and the next local stop or interruption reaches that new plan instead of being skipped
+as "already paused/stopped".
+
 Routed agent-control is at-most-once (Section 5.6): `submitAgentControl` keeps the observed receipt
 of every distinct `requestId` for the lifetime of the controller, so a redelivery resolves the same
 receipt — even when it arrives after hundreds of newer routed requests — instead of instructing the
