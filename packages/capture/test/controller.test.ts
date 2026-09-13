@@ -6,11 +6,17 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AX_CAPTURE_BUDGET, createDictationController } from '../src/index.js';
+import {
+  AX_CAPTURE_BUDGET,
+  assembleContextBundle,
+  createBundlePolicy,
+  createDictationController,
+} from '../src/index.js';
 import type {
   CaptureBridge,
   CaptureOutcome,
   CaptureRequest,
+  CaptureSnapshot,
   CaptureTarget,
   InsertOutcome,
   InsertRequest,
@@ -18,6 +24,41 @@ import type {
 } from '../src/index.js';
 
 const RAW_TEXT = 'ship the tracer bullet\nsecond line';
+const VAULT_BUNDLE_ID = 'com.1password.1password';
+const WIDGET_BUNDLE_ID = 'com.echopilot.widget';
+const VAULT_SELECTION = 'synthetic-vault-master-password';
+const VAULT_NODE_TEXT = 'synthetic-vault-note';
+const VAULT_SCREENSHOT = 'artifact://unit/vault-window@2x.png';
+
+const BOUNDS = { x: 0, y: 0, width: 10, height: 10 } as const;
+
+/** A raw snapshot for `state`: the helper hands back everything, policy decides what survives. */
+function snapshotFor(state: CaptureTarget, overrides: Partial<CaptureSnapshot> = {}): CaptureSnapshot {
+  return {
+    snapshotId: 'unit-snapshot',
+    capturedAtMs: 1_700_000_000_000,
+    target: state,
+    screenshotRef: null,
+    selectedText: null,
+    axNodes: [],
+    ocrSpans: [],
+    quality: 'full',
+    truncated: false,
+    ...overrides,
+  };
+}
+
+function nodeFor(bundleId: string, value: string, overrides: Partial<CaptureSnapshot['axNodes'][number]> = {}) {
+  return {
+    nodeId: `ax-${bundleId}`,
+    bundleId,
+    role: 'AXStaticText',
+    value,
+    secure: false,
+    bounds: BOUNDS,
+    ...overrides,
+  };
+}
 
 function target(overrides: Partial<CaptureTarget> = {}): CaptureTarget {
   return {
@@ -246,4 +287,200 @@ test('beginning a new utterance drops the previous draft and captures exactly on
   assert.equal(bridge.captureRequests.length, 2);
   assert.deepEqual(await controller.insert(), { status: 'nothing_to_insert' });
   assert.equal(bridge.insertRequests.length, 0);
+});
+
+test('an excluded focused application is never captured, and its content never reaches a bundle', async () => {
+  const vault = target({
+    fingerprint: {
+      bundleId: VAULT_BUNDLE_ID,
+      pid: 9001,
+      windowId: 12,
+      elementFingerprint: 'vault:9001:12:0',
+    },
+    role: 'AXTextField',
+  });
+  const bridge = new TestBridge();
+  bridge.focused = vault;
+  // A raw helper that ignored the exclusion list and would hand the vault window back anyway.
+  bridge.captureOutcome = {
+    status: 'captured',
+    snapshot: snapshotFor(vault, {
+      screenshotRef: VAULT_SCREENSHOT,
+      selectedText: VAULT_SELECTION,
+      axNodes: [
+        nodeFor(VAULT_BUNDLE_ID, VAULT_NODE_TEXT),
+        nodeFor(WIDGET_BUNDLE_ID, 'synthetic-widget-draft'),
+      ],
+      ocrSpans: [{ text: VAULT_SELECTION, bundleId: VAULT_BUNDLE_ID, bounds: BOUNDS }],
+    }),
+  };
+  const controller = controllerFor(bridge);
+
+  const preview = await controller.beginUtterance({ screenshot: true });
+  assert.equal(preview.mode, 'transcript_only');
+  assert.equal(bridge.captureRequests.length, 0, 'an excluded application is never captured at all');
+
+  const serialized = JSON.stringify(preview.bundle);
+  assert.ok(!serialized.includes(VAULT_BUNDLE_ID), 'the excluded bundle id reached the bundle');
+  assert.ok(!serialized.includes(VAULT_SELECTION), 'excluded selected text reached the bundle');
+  assert.ok(!serialized.includes(VAULT_NODE_TEXT), 'excluded AX text reached the bundle');
+  assert.ok(!serialized.includes(VAULT_SCREENSHOT), 'a screenshot of an excluded window reached the bundle');
+  assert.equal(preview.bundle.target, null);
+  assert.equal(preview.bundle.selectedText, null);
+  assert.equal(preview.bundle.screenshotRef, null);
+  assert.deepEqual(preview.bundle.axNodes, []);
+  assert.deepEqual(preview.bundle.ocrSpans, []);
+  assert.equal(preview.bundle.quality, 'unavailable');
+  assert.deepEqual(preview.target, vault.fingerprint, 'the destination fingerprint stays for revalidation');
+
+  // Dictation still lands in the excluded application: only its context is off limits.
+  await controller.commitTranscript(RAW_TEXT);
+  assert.equal((await controller.insert()).status, 'inserted');
+  assert.deepEqual(bridge.insertRequests[0]?.targetFingerprint, vault.fingerprint);
+  assert.equal(bridge.insertRequests[0]?.submit, false);
+});
+
+test('the always-excluded widget is never captured even when the configured list is empty', async () => {
+  const widget = target({
+    fingerprint: { bundleId: WIDGET_BUNDLE_ID, pid: 9002, windowId: 13, elementFingerprint: 'widget:9002:13:0' },
+  });
+  const bridge = new TestBridge();
+  bridge.focused = widget;
+  const controller = createDictationController({ bridge, excludedBundleIds: [] });
+
+  const preview = await controller.beginUtterance({ screenshot: true });
+  assert.equal(preview.mode, 'transcript_only');
+  assert.equal(bridge.captureRequests.length, 0);
+  assert.ok(!JSON.stringify(preview.bundle).includes(WIDGET_BUNDLE_ID));
+  assert.deepEqual(preview.target, widget.fingerprint);
+});
+
+test('assembleContextBundle drops target, selection, screenshot, nodes and spans for an excluded focus', () => {
+  const vault = target({
+    fingerprint: { bundleId: VAULT_BUNDLE_ID, pid: 9001, windowId: 12, elementFingerprint: 'vault:9001:12:0' },
+  });
+  const bundle = assembleContextBundle(
+    snapshotFor(vault, {
+      screenshotRef: VAULT_SCREENSHOT,
+      selectedText: VAULT_SELECTION,
+      axNodes: [nodeFor(VAULT_BUNDLE_ID, VAULT_NODE_TEXT), nodeFor(WIDGET_BUNDLE_ID, 'synthetic-widget-draft')],
+      ocrSpans: [{ text: VAULT_SELECTION, bundleId: VAULT_BUNDLE_ID, bounds: BOUNDS }],
+    }),
+    createBundlePolicy([VAULT_BUNDLE_ID]),
+    AX_CAPTURE_BUDGET,
+  );
+
+  assert.equal(bundle.target, null);
+  assert.equal(bundle.selectedText, null);
+  assert.equal(bundle.screenshotRef, null);
+  assert.deepEqual(bundle.axNodes, []);
+  assert.deepEqual(bundle.ocrSpans, []);
+  assert.equal(bundle.quality, 'unavailable');
+  assert.equal(bundle.truncated, false);
+  assert.ok(!JSON.stringify(bundle).includes(VAULT_BUNDLE_ID));
+  assert.ok(!JSON.stringify(bundle).includes(VAULT_SELECTION));
+});
+
+test('OCR spans that only exist to restate a secure field never reach the bundle', async () => {
+  const secure = target({ secure: true, role: 'AXSecureTextField' });
+  const secureFocus = new TestBridge();
+  secureFocus.focused = secure;
+  // A raw helper answering a secure-field capture with the field's value as OCR text.
+  secureFocus.captureOutcome = {
+    status: 'captured',
+    snapshot: snapshotFor(secure, {
+      axNodes: [
+        nodeFor('com.apple.Safari', 'synthetic-secure-unit-value', { role: 'AXSecureTextField', secure: true }),
+      ],
+      ocrSpans: [{ text: 'synthetic-secure-unit-value', bundleId: 'com.apple.Safari', bounds: BOUNDS }],
+    }),
+  };
+  const securePreview = await controllerFor(secureFocus).beginUtterance({ screenshot: true });
+  assert.deepEqual(securePreview.bundle.ocrSpans, [], 'a secure focus contributes no OCR spans');
+  assert.equal(securePreview.bundle.redactions.excludedSpans, 1);
+  assert.ok(!JSON.stringify(securePreview.bundle).includes('synthetic-secure-unit-value'));
+
+  // Focused field is not itself secure, but the raw helper echoes a secure node's value as OCR.
+  const mixed = new TestBridge();
+  mixed.captureOutcome = {
+    status: 'captured',
+    snapshot: snapshotFor(target(), {
+      axNodes: [
+        nodeFor('com.apple.TextEdit', 'permitted value'),
+        nodeFor('com.apple.TextEdit', 'synthetic-secure-unit-value', { role: 'AXSecureTextField', secure: true }),
+      ],
+      ocrSpans: [
+        { text: 'permitted OCR line', bundleId: 'com.apple.TextEdit', bounds: BOUNDS },
+        { text: 'synthetic-secure-unit-value', bundleId: 'com.apple.TextEdit', bounds: BOUNDS },
+      ],
+    }),
+  };
+  const mixedPreview = await controllerFor(mixed).beginUtterance({ screenshot: true });
+  assert.deepEqual(mixedPreview.bundle.ocrSpans.map((span) => span.text), ['permitted OCR line']);
+  assert.equal(mixedPreview.bundle.redactions.excludedSpans, 1);
+  assert.ok(!JSON.stringify(mixedPreview.bundle).includes('synthetic-secure-unit-value'));
+});
+
+test('a secure role stays secure when the raw helper reports secure: false for the focused target', async () => {
+  const lying = target({ secure: false, role: 'AXSecureTextField' });
+  const bridge = new TestBridge();
+  bridge.focused = lying;
+  // The helper contradicts the focused element: it says "not secure" but hands back the value.
+  const raw: CaptureSnapshot = snapshotFor(lying, {
+    screenshotRef: 'artifact://unit/secure-window@2x.png',
+    selectedText: 'synthetic-secure-unit-value',
+    axNodes: [
+      nodeFor('com.apple.Safari', 'permitted sibling', { role: 'AXStaticText' }),
+      nodeFor('com.apple.Safari', 'synthetic-secure-unit-value', { role: 'AXSecureTextField', secure: true }),
+    ],
+    ocrSpans: [
+      { text: 'permitted sibling', bundleId: 'com.apple.Safari', bounds: BOUNDS },
+      { text: 'synthetic-secure-unit-value', bundleId: 'com.apple.Safari', bounds: BOUNDS },
+    ],
+  });
+  bridge.captureOutcome = { status: 'captured', snapshot: raw };
+
+  const preview = await controllerFor(bridge).beginUtterance({ screenshot: true });
+  assert.equal(bridge.captureRequests[0]?.includeScreenshot, false, 'a secure role is never screenshotted');
+  assert.equal(preview.bundle.screenshotRef, null);
+  assert.equal(preview.bundle.selectedText, null);
+  // A secure focus taints the whole OCR pass: spans cannot be attributed back to their field.
+  assert.deepEqual(preview.bundle.ocrSpans, []);
+  assert.deepEqual(preview.bundle.axNodes.map((node) => node.nodeId), ['ax-com.apple.Safari']);
+  assert.ok(!JSON.stringify(preview.bundle).includes('synthetic-secure-unit-value'));
+
+  // The redaction layer holds the same line even when it is called with the raw snapshot directly.
+  const bundle = assembleContextBundle(raw, createBundlePolicy([]), AX_CAPTURE_BUDGET);
+  assert.equal(bundle.selectedText, null);
+  assert.equal(bundle.screenshotRef, null);
+  assert.deepEqual(bundle.ocrSpans, []);
+});
+
+test('OCR echo matching ignores case and spacing, and leaves short unrelated spans alone', async () => {
+  const echoed: CaptureSnapshot = snapshotFor(target(), {
+    axNodes: [
+      nodeFor('com.apple.TextEdit', 'Synthetic-Secure-Unit-Value', {
+        role: 'AXSecureTextField',
+        secure: true,
+      }),
+    ],
+    ocrSpans: [
+      { text: 'synthetic secure unit value', bundleId: 'com.apple.TextEdit', bounds: BOUNDS },
+      { text: 'SYNTHETIC-SECURE-UNIT-VALUE', bundleId: 'com.apple.TextEdit', bounds: BOUNDS },
+      { text: 'permitted OCR line', bundleId: 'com.apple.TextEdit', bounds: BOUNDS },
+    ],
+  });
+
+  // The raw producer path: the helper reflects a secure node's value back as OCR text.
+  const bridge = new TestBridge();
+  bridge.captureOutcome = { status: 'captured', snapshot: echoed };
+  const preview = await controllerFor(bridge).beginUtterance({ screenshot: false });
+  assert.equal(preview.mode, 'context');
+  assert.deepEqual(preview.bundle.ocrSpans.map((span) => span.text), ['permitted OCR line']);
+  assert.ok(!JSON.stringify(preview.bundle).includes('synthetic secure unit value'));
+
+  const bundle = assembleContextBundle(echoed, createBundlePolicy([]), AX_CAPTURE_BUDGET);
+  assert.deepEqual(bundle.ocrSpans.map((span) => span.text), ['permitted OCR line']);
+  assert.equal(bundle.redactions.excludedSpans, 2);
+  assert.equal(bundle.redactions.secureNodes, 1);
 });

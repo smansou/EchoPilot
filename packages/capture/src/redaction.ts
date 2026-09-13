@@ -9,6 +9,7 @@ import type {
   AXNode,
   CaptureSnapshot,
   CaptureTarget,
+  CapturedAXNode,
   ContextBundle,
   OCRSpan,
 } from './types.js';
@@ -25,13 +26,52 @@ export type BundlePolicy = Readonly<{
   isExcluded(bundleId: string): boolean;
 }>;
 
-/** A role that is itself secure (for example `AXSecureTextField`) can never carry a value out. */
-function isSecureRole(role: string): boolean {
+/**
+ * A role that is itself secure (for example `AXSecureTextField`) can never carry a value out.
+ * The controller also uses this on the *focused* element, so a raw helper cannot unlock a secure
+ * field by reporting `secure: false`.
+ */
+export function isSecureRole(role: string): boolean {
   return role.toLowerCase().includes('secure');
 }
 
 function normalize(bundleId: string): string {
   return bundleId.trim().toLowerCase();
+}
+
+/**
+ * Lowercase and keep letters/digits only: OCR and AX text rarely agree on case, spacing or
+ * punctuation for the same value (`synthetic-secure-unit-value` vs `Synthetic Secure Unit Value`).
+ */
+function normalizeText(text: string): string {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+/**
+ * Secure values a raw helper may hand back twice: once as an AX node and once (unflagged) as OCR
+ * text. OCR spans carry no secure bit of their own, so the values are collected here and matched
+ * against every span.
+ */
+function redactedSecureTexts(nodes: ReadonlyArray<CapturedAXNode>): ReadonlyArray<string> {
+  const values = new Set<string>();
+  for (const node of nodes) {
+    if (!node.secure && !isSecureRole(node.role)) continue;
+    const value = normalizeText(node.value);
+    if (!value) continue;
+    values.add(value);
+  }
+  return [...values];
+}
+
+/** Shortest secure value worth matching as a substring: shorter ones would redact unrelated text. */
+const MIN_ECHO_LENGTH = 4;
+
+function echoesSecureText(text: string, secureTexts: ReadonlyArray<string>): boolean {
+  if (secureTexts.length === 0) return false;
+  const candidate = normalizeText(text);
+  if (!candidate) return false;
+  return secureTexts.some((secure) => candidate === secure
+    || (secure.length >= MIN_ECHO_LENGTH && candidate.includes(secure)));
 }
 
 /**
@@ -78,14 +118,22 @@ export function assembleContextBundle(
   let excludedNodes = 0;
   let excludedSpans = 0;
 
+  // A secure focus is the union of what the controller asked about and what the helper claims: a
+  // raw helper that forgets `secure` (or fakes it) must not unlock the screenshot, the selection
+  // or the OCR of a field the controller saw as secure.
+  const secureFocus = snapshot.target.secure || isSecureRole(snapshot.target.role);
+  // An excluded focused application is context we must not have at all. Even if a raw helper
+  // returns a snapshot for that window anyway, nothing of it belongs in a bundle: not the target
+  // metadata, not the selection, not the screenshot, not the AX subtree, not the OCR text
+  // (plan §5.4: "post-capture blur alone is insufficient for an excluded app").
+  const excludedFocus = policy.isExcluded(snapshot.target.fingerprint.bundleId);
+
   const permittedNodes: Array<AXNode> = [];
   for (const node of snapshot.axNodes) {
-    if (policy.isExcluded(node.bundleId)) {
-      excludedNodes += 1;
-      continue;
-    }
-    if (node.secure || isSecureRole(node.role)) {
-      secureNodes += 1;
+    const nodeIsSecure = node.secure || isSecureRole(node.role);
+    if (excludedFocus || policy.isExcluded(node.bundleId) || nodeIsSecure) {
+      if (nodeIsSecure) secureNodes += 1;
+      else excludedNodes += 1;
       continue;
     }
     permittedNodes.push({
@@ -97,28 +145,30 @@ export function assembleContextBundle(
     });
   }
 
+  const secureTexts = redactedSecureTexts(snapshot.axNodes);
   const ocrSpans: Array<OCRSpan> = [];
   for (const span of snapshot.ocrSpans) {
-    if (policy.isExcluded(span.bundleId)) {
+    // OCR has no secure flag, so a secure focused field taints every span from that capture, and a
+    // span that repeats a value redaction already removed is removed with it.
+    if (excludedFocus || secureFocus || policy.isExcluded(span.bundleId) || echoesSecureText(span.text, secureTexts)) {
       excludedSpans += 1;
       continue;
     }
     ocrSpans.push({ text: span.text, bundleId: span.bundleId, bounds: span.bounds });
   }
 
-  const secureFocus = snapshot.target.secure;
   return {
     snapshotId: snapshot.snapshotId,
     capturedAtMs: snapshot.capturedAtMs,
-    target: mapTarget(snapshot.target),
-    selectedText: secureFocus ? null : snapshot.selectedText,
-    screenshotRef: secureFocus ? null : snapshot.screenshotRef,
+    target: excludedFocus ? null : mapTarget(snapshot.target),
+    selectedText: secureFocus || excludedFocus ? null : snapshot.selectedText,
+    screenshotRef: secureFocus || excludedFocus ? null : snapshot.screenshotRef,
     axNodes: permittedNodes.slice(0, budget.maxNodes),
     ocrSpans,
-    quality: snapshot.quality,
+    quality: excludedFocus ? 'unavailable' : snapshot.quality,
     // `truncated` reports the traversal, not the post-redaction list: 620 raw nodes are 620 raw
     // nodes even after policy removes three of them.
-    truncated: snapshot.truncated || snapshot.axNodes.length > budget.maxNodes,
+    truncated: excludedFocus ? false : snapshot.truncated || snapshot.axNodes.length > budget.maxNodes,
     redactions: { secureNodes, excludedNodes, excludedSpans },
   };
 }

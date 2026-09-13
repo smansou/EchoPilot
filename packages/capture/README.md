@@ -12,8 +12,8 @@ The A01 dictation seam: dictate into a focused editor → scoped context preview
 
 | Decision | Rule |
 | --- | --- |
-| Capture | Exactly one `captureContext` per utterance, at most one permitted screenshot, never a screenshot of a secure field. |
-| Bundle | Excluded bundle ids, secure nodes, secure selections and OCR spans from excluded apps are removed here, before a bundle exists. The helper is treated as a raw producer, so redaction cannot be delegated to it (plan §5.4). |
+| Capture | Exactly one `captureContext` per permitted utterance, at most one permitted screenshot, never a screenshot of a secure field (secure flag *or* a `…secure…` role, so a helper that reports `secure: false` cannot unlock it), and never a capture at all while the focused application is excluded (including the always-excluded widget). |
+| Bundle | Excluded bundle ids, secure nodes, secure selections, OCR spans from excluded apps, and OCR spans restating a secure value are removed here, before a bundle exists. A secure focused field contributes no selection, no screenshot and no OCR at all, because an OCR span cannot be attributed back to its field. An excluded focused target contributes no target metadata, selection, screenshot, AX nodes or OCR spans even if a raw helper returns them. The helper is treated as a raw producer, so redaction cannot be delegated to it (plan §5.4). |
 | Insertion | Accessibility write first, transactional clipboard paste only when the helper reports `unsupported`. No Return/Enter key synthesis, no `activateApplication`. |
 | Focus | The original fingerprint is revalidated immediately before every write. A mismatch (or a non-editable focus) writes nothing anywhere and preserves the draft; `retargetToCurrentFocus()` is the explicit new-target decision. |
 | Clipboard | Read once, only to restore it, and restored only when the pasteboard change count still proves the user has not replaced the clipboard. |

@@ -14,7 +14,13 @@
  */
 import { AX_CAPTURE_BUDGET } from './budget.js';
 import { pasteWithClipboardTransaction } from './clipboard.js';
-import { assembleContextBundle, createBundlePolicy, sameFingerprint, transcriptOnlyBundle } from './redaction.js';
+import {
+  assembleContextBundle,
+  createBundlePolicy,
+  isSecureRole,
+  sameFingerprint,
+  transcriptOnlyBundle,
+} from './redaction.js';
 import type {
   CaptureBridge,
   CaptureMode,
@@ -58,24 +64,39 @@ export function createDictationController(options: DictationControllerOptions): 
     utteranceCount += 1;
     const target = await bridge.currentTarget();
     const wantScreenshot = input?.screenshot ?? true;
+    // A field the controller itself saw as secure never gets a screenshot, flag or role that says
+    // otherwise: `AXSecureTextField` is secure even when the helper reports `secure: false`.
+    const targetIsSecure = target !== null && (target.secure || isSecureRole(target.role));
 
     if (!target) {
       // Nothing focused to capture or to revalidate against: transcript-only, with no bundle.
       mode = 'transcript_only';
       preview = { mode, bundle: transcriptOnlyBundle(utteranceCount, Date.now()), target: null };
+    } else if (policy.isExcluded(target.fingerprint.bundleId)) {
+      // An excluded application (including the always-excluded EchoPilot widget) is never
+      // captured: no screenshot, no AX traversal, no selection, no OCR. Dictation still lands
+      // there — transcript-only — and the fingerprint stays for the pre-write revalidation.
+      mode = 'transcript_only';
+      preview = { mode, bundle: transcriptOnlyBundle(utteranceCount, Date.now()), target: target.fingerprint };
     } else {
       const outcome = await bridge.captureContext({
         target,
         // A secure field is never screenshotted, whatever the caller asked for.
-        includeScreenshot: wantScreenshot && !target.secure,
+        includeScreenshot: wantScreenshot && !targetIsSecure,
         axBudget: AX_CAPTURE_BUDGET,
         excludedBundleIds: policy.excludedBundleIds,
       });
       if (outcome.status === 'captured') {
         mode = 'context';
+        // The helper is a raw producer and its snapshot may disagree with the element this
+        // controller focused. Secureness is the union of both views, so a helper claiming
+        // `secure: false` cannot walk the focused field's selection or OCR into the bundle.
+        const snapshot = targetIsSecure && !outcome.snapshot.target.secure
+          ? { ...outcome.snapshot, target: { ...outcome.snapshot.target, secure: true } }
+          : outcome.snapshot;
         preview = {
           mode,
-          bundle: assembleContextBundle(outcome.snapshot, policy, AX_CAPTURE_BUDGET),
+          bundle: assembleContextBundle(snapshot, policy, AX_CAPTURE_BUDGET),
           target: outcome.snapshot.target.fingerprint,
         };
       } else {
