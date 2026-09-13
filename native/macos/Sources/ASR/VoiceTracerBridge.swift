@@ -70,6 +70,11 @@ public final class VoiceTracerBridge: @unchecked Sendable {
     /// never be applied or emitted, and the planner no longer owns the window it was cut from.
     private var pipelineEpoch = 0
     private var inFlightTranscription: Task<ASRWindowResult, Error>?
+    /// The VAD reports its endpoint on the one packet that crosses the trailing-silence bound, and
+    /// that packet can fall between two window boundaries. The flag is latched here so the next
+    /// window the planner cuts still ends the utterance; the planner clears the window itself, so
+    /// the endpoint is consumed exactly once.
+    private var pendingEndpoint = false
 
     public init(
         host: MicrophoneGraph,
@@ -142,6 +147,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
             pipelineEpoch &+= 1
             planner.reset()
             host.pcmChannel.clear()
+            pendingEndpoint = false
             inFlightTranscription?.cancel()
             inFlightTranscription = nil
             // Mute is a capture guarantee, not an error: a healthy session shows `muted`, while a
@@ -157,6 +163,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
             running = false
             pipelineEpoch &+= 1
             planner.reset()
+            pendingEndpoint = false
             inFlightTranscription?.cancel()
             inFlightTranscription = nil
         }
@@ -228,7 +235,10 @@ public final class VoiceTracerBridge: @unchecked Sendable {
             host.pcmChannel.drain()
             guard isPipelineActive else { return }
             if discontinuity {
-                stateQueue.sync { planner.markDiscontinuity() }
+                stateQueue.sync {
+                    planner.markDiscontinuity()
+                    pendingEndpoint = false
+                }
                 setInput("listening")
             }
             guard !batch.isEmpty else { return }
@@ -246,18 +256,27 @@ public final class VoiceTracerBridge: @unchecked Sendable {
         }
         // The mute/failure flag and the planner append share one lock: a packet that raced the mute
         // can never reopen the window the mute just cleared.
-        let event = stateQueue.sync { () -> ASRPlannerEvent? in
+        let planned = stateQueue.sync { () -> (event: ASRPlannerEvent, endpoint: Bool)? in
             guard running, !muted, !failed else { return nil }
-            return planner.append(packet: packet)
+            let endpoint = pendingEndpoint || vadState.endpoint
+            guard let event = planner.append(packet: packet) else {
+                // No window is due yet: keep the endpoint latched for the next one.
+                pendingEndpoint = endpoint
+                return nil
+            }
+            pendingEndpoint = false
+            return (event, endpoint)
         }
-        guard let event else { return }
-        switch event {
+        guard let planned else { return }
+        switch planned.event {
         case let .partial(window):
-            setInput("utterance_open")
-            await run(window: window, sealed: false, endpoint: vadState.endpoint)
+            // `utterance_open` is the engine's answer, not the request: a partial window the engine
+            // finds nothing in (trailing silence after an endpoint) must not flip the widget back
+            // into an open utterance. `applyEngineResult` sets it on display-only words instead.
+            await run(window: window, sealed: false, endpoint: planned.endpoint)
         case let .seal(window):
             setInput("committing")
-            await run(window: window, sealed: true, endpoint: vadState.endpoint)
+            await run(window: window, sealed: true, endpoint: planned.endpoint)
         }
     }
 
@@ -331,7 +350,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
                         text: text,
                         words: words
                     ),
-                    nextInput: nil
+                    nextInput: "utterance_open"
                 )
             case .unchanged:
                 return .quiet
@@ -394,6 +413,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
             input = "closed"
             planner.reset()
             host.pcmChannel.clear()
+            pendingEndpoint = false
             inFlightTranscription?.cancel()
             inFlightTranscription = nil
         }
@@ -421,6 +441,7 @@ public final class VoiceTracerBridge: @unchecked Sendable {
             input = "closed"
             planner.reset()
             host.pcmChannel.clear()
+            pendingEndpoint = false
             inFlightTranscription?.cancel()
             inFlightTranscription = nil
         }

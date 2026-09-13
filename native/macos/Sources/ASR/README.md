@@ -3,7 +3,7 @@
 | Piece | File | Rule |
 | --- | --- | --- |
 | Silero VAD | `SileroVAD.swift` | 512-sample frames at 16 kHz, hysteresis (0.5 / 0.35), endpoint after 450 ms of trailing silence |
-| WhisperKit small.en | `WhisperKitSmallEN.swift` | English-only first model pack, model folder on disk, `allowsNetwork = false`, rejects windows > 15 s |
+| WhisperKit small.en | `WhisperKitSmallEN.swift` | English-only first model pack, model folder on disk, `allowsNetwork = false`, rejects windows > 15 s, validates the pack before capture |
 | Window planner | `ASRWindowPlanner.swift` | ≤ 15 s windows, 1 s overlap, stable-prefix commits only on a window boundary or endpoint |
 | Session bridge | `VoiceTracerBridge.swift` | host + VAD + transcriber + planner → `status()` / `subscribe()` / `transcript()` / `mute()` / `close()` |
 | Local runtime | `SileroVAD.swift`, `WhisperKitSmallEN.swift` | CoreML Silero v5 backend (`SileroVADCoreMLBackend`, registered by production) + pinned WhisperKit small.en; no download, no network |
@@ -31,6 +31,17 @@ Rules that match `packages/voice` one-for-one:
   resolves and no window reopens on the audio the widget already stopped showing.
 - Endpoint commits can carry empty text when the engine is certain the utterance is over; the
   widget keeps them in order and drops the empty strings when rendering.
+- An endpoint ends the utterance exactly once: `ASRWindowPlanner.endUtterance()` drops the committed
+  window together with the utterance (the TS planner sets `window = null` in the same place) and
+  `SileroVAD` clears its per-utterance state, so trailing silence can neither re-transcribe the
+  committed PCM under a fresh utterance id nor report the endpoint again. The VAD reports the
+  endpoint on the one packet that crosses the 450 ms bound, which can fall between two window
+  boundaries, so `VoiceTracerBridge` latches it until the next window ends the utterance.
+- `WhisperKitSmallEN` validates the whole pack in its initializer, before capture opens
+  (`WhisperModelPackLayout.validate`): the three CoreML bundles (`MelSpectrogram`, `AudioEncoder`,
+  `TextDecoder`), a parseable `tokenizer.json`, and the tokenizer/model config WhisperKit's local
+  tokenizer loader needs. A present-but-incomplete pack would otherwise let that loader fall back
+  to a Hub download even with `download: false`, which the local-only path must never do.
 
 The transcriber and the VAD are injected, so the signed build links the real WhisperKit small.en
 pack and the Silero CoreML backend while development harnesses can run the deterministic
@@ -62,8 +73,12 @@ opens, so the widget never hangs on a broken install.
 `Tests/V01PipelineTests.swift` is the native pipeline regression: exactly-once packet delivery
 through `MicrophoneGraph` + `VoiceTracerBridge`, one 400 ms window that holds each packet once,
 15 s of speech plus trailing silence committing local text whose word timestamps are rebased from
-the engine's window onto the utterance, mute and an ordinary capture release settling while audio
-keeps flowing, and the 15 s window bound for an oversized packet. It also covers the visible
+the engine's window onto the utterance — and ending exactly once, with the trailing silence that
+follows committing nothing (each word once, one utterance id) — mute and an ordinary capture
+release settling while audio keeps flowing, and the 15 s window bound for an oversized packet. An
+incomplete pack (missing/corrupt `tokenizer.json`, a tokenizer file without its `model` section, a
+missing CoreML bundle, or no tokenizer/model config) fails closed in `WhisperKitSmallEN.init`
+before capture while a complete pack loads. It also covers the visible
 failure states: mic denial (through the graph's
 permission override seam), device removal, lock and helper crash each keep their error code,
 message and `closed` input visible, drop the pending audio, stop opening new ASR windows, and still

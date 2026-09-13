@@ -261,10 +261,6 @@ public final class ASRWindowPlanner {
 
     /// Audio was dropped: the open window is no longer contiguous, so it must not be committed.
     public func markDiscontinuity() {
-        windowBytes.removeAll(keepingCapacity: true)
-        windowDurationMs = 0
-        lastTranscribedMs = 0
-        windowStartMs = 0
         endUtterance()
     }
 
@@ -310,6 +306,15 @@ public final class ASRWindowPlanner {
         committedWords = []
         committedEndAbsMs = Int.min
         lastPartialText = nil
+        // The endpoint committed this window's audio, so the window has to go with the utterance.
+        // Keeping it would append the next packets to PCM that was already committed and let the
+        // next 400 ms boundary transcribe that stale window under a fresh utterance id — committing
+        // the same words again, and again for as long as trailing silence keeps arriving. (The TS
+        // planner drops its window in the same place.)
+        windowBytes.removeAll(keepingCapacity: true)
+        windowDurationMs = 0
+        windowStartMs = 0
+        lastTranscribedMs = 0
     }
 
     private func makeWindow() -> ASRWindow {

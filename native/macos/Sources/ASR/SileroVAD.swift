@@ -147,11 +147,20 @@ public final class SileroVAD {
             }
         }
 
-        let endpoint = spokeInUtterance && trailingSilenceMs >= configuration.endSilenceMs
+        let measuredTrailingSilenceMs = trailingSilenceMs
+        let endpoint = spokeInUtterance && measuredTrailingSilenceMs >= configuration.endSilenceMs
+        if endpoint {
+            // The endpoint closes the utterance: clear the per-utterance state here, or every later
+            // packet of trailing silence would keep reporting `endpoint: true` and end the next
+            // utterance before it was ever heard. `spokeInUtterance` only turns true again once
+            // speech crosses the entry threshold, so a new utterance starts from silence.
+            spokeInUtterance = false
+            trailingSilenceMs = 0
+        }
         return VADState(
             speechProbability: lastProbability,
             isSpeech: lastProbability > configuration.releaseThreshold,
-            trailingSilenceMs: trailingSilenceMs,
+            trailingSilenceMs: measuredTrailingSilenceMs,
             endpoint: endpoint
         )
     }

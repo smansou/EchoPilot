@@ -91,7 +91,8 @@ final class V01PipelineTests: XCTestCase {
     }
 
     /// Engine stand-in that answers the way the local pack does: it reports words whose times are
-    /// relative to the window it was handed, and it records every window it ran on.
+    /// relative to the window it was handed, records every window it ran on, and — like a real
+    /// small.en pack — returns no words for a window that holds only silence.
     private final class ScriptedTranscriber: LocalTranscriber, @unchecked Sendable {
         private let lock = NSLock()
         private var recorded: [ASRWindow] = []
@@ -106,6 +107,12 @@ final class V01PipelineTests: XCTestCase {
             lock.lock()
             recorded.append(window)
             lock.unlock()
+            // Pure silence decodes to nothing: the trailing-silence window the endpoint closes on
+            // must not answer with words, or the regression that re-committed the stale window
+            // would hide behind a stand-in that hears speech in silence.
+            guard window.pcm.contains(where: { $0 != 0 }) else {
+                return ASRWindowResult(text: "", words: [], endpoint: false)
+            }
             return ASRWindowResult(
                 text: "alpha beta",
                 words: [
@@ -382,6 +389,120 @@ final class V01PipelineTests: XCTestCase {
         XCTAssertTrue(
             committed.flatMap(\.words).allSatisfy { $0.startMs >= 0 && $0.endMs >= $0.startMs },
             "every committed word carries a sane utterance-relative timestamp"
+        )
+
+        // The endpoint ended the utterance: it must close exactly once and drop its window, so the
+        // trailing silence that keeps flowing afterwards can never re-transcribe the committed PCM
+        // under a fresh utterance id and commit the same words again.
+        XCTAssertEqual(
+            Set(committed.map(\.utteranceId)),
+            [first.utteranceId],
+            "the 15 s utterance ended once; trailing silence did not open a second utterance"
+        )
+        let committedWordKeys = committed.flatMap(\.words).map { "\($0.text)@\($0.startMs)-\($0.endMs)" }
+        XCTAssertEqual(
+            Set(committedWordKeys).count,
+            committedWordKeys.count,
+            "every committed word is committed exactly once, not re-committed after the endpoint"
+        )
+        XCTAssertEqual(
+            committedWordKeys.count,
+            4,
+            "only the 15 s seal and the endpoint committed words; trailing silence committed nothing"
+        )
+    }
+
+    // MARK: - 2c. The endpoint is reported once and takes its window with it
+
+    /// Silero's endpoint is a one-shot: after it closes an utterance the VAD starts from silence
+    /// again, so the packets of trailing silence that keep arriving cannot report `endpoint: true`
+    /// again and end the next utterance before it was heard.
+    func testSileroVADReportsTheEndpointExactlyOnce() throws {
+        var configuration = SileroVADConfiguration()
+        configuration.allowEnergyFallback = true
+        let vad = try SileroVAD(configuration: configuration)
+        let speech = pcmData([Int16](repeating: 8_000, count: PCMPacket.samplesPerPacket))
+        let silence = pcmData(silentSamples(packetCount: 1))
+
+        for _ in 0..<50 {
+            _ = vad.process(pcm: speech, sampleRate: PCMPacket.sampleRate)
+        }
+        var endpoints = 0
+        for _ in 0..<100 {
+            if vad.process(pcm: silence, sampleRate: PCMPacket.sampleRate).endpoint {
+                endpoints += 1
+            }
+        }
+        XCTAssertEqual(
+            endpoints,
+            1,
+            "the 450 ms endpoint fires once; trailing silence is a fresh, silent utterance"
+        )
+    }
+
+    /// The endpoint commit ends the utterance, so its window goes with it: the next window holds
+    /// only the audio that followed. Leaving the stale PCM behind let the next 400 ms boundary
+    /// transcribe the already-committed window under a fresh utterance id and commit it again.
+    func testPlannerEndpointDropsTheWindowItCommitted() {
+        let planner = ASRWindowPlanner()
+
+        var first: ASRWindow?
+        for index in 0..<20 {
+            if case let .partial(window)? = planner.append(
+                packet: packet(
+                    sequence: UInt64(index),
+                    samples: rampSamples(packetCount: 1)
+                )
+            ) {
+                first = window
+            }
+        }
+        guard let first else {
+            return XCTFail("the planner cut the first 400 ms window")
+        }
+
+        let outcome = planner.apply(
+            result: ASRWindowResult(
+                text: "alpha",
+                words: [ASRWordTimestamp(text: "alpha", startMs: 50, endMs: 250)],
+                endpoint: true
+            ),
+            window: first,
+            sealed: false
+        )
+        guard case .ended = outcome else {
+            return XCTFail("the endpoint ended the utterance, got \(outcome)")
+        }
+
+        var next: ASRWindow?
+        for index in 20..<40 {
+            if case let .partial(window)? = planner.append(
+                packet: packet(
+                    sequence: UInt64(index),
+                    samples: rampSamples(packetCount: 1)
+                )
+            ) {
+                next = window
+            }
+        }
+        guard let next else {
+            return XCTFail("the following packets opened a new window")
+        }
+        XCTAssertNotEqual(
+            next.utteranceId,
+            first.utteranceId,
+            "the endpoint closed the utterance instead of continuing it"
+        )
+        XCTAssertEqual(
+            next.pcm.count,
+            20 * PCMPacket.samplesPerPacket * 2,
+            "the new window holds only the audio that followed the endpoint"
+        )
+        XCTAssertEqual(next.startMs, 400, "the new window starts after the committed audio")
+        XCTAssertEqual(
+            next.durationMs,
+            400,
+            "no stale PCM was carried across the endpoint"
         )
     }
 
@@ -902,6 +1023,34 @@ final class V01PipelineTests: XCTestCase {
 
     // MARK: - 9. The production path links WhisperKit and registers the Silero runtime
 
+    /// Writes the on-disk shape of a complete small.en pack — the three CoreML bundles plus the
+    /// tokenizer/model JSON WhisperKit loads locally — so the fail-closed pack validation can be
+    /// exercised without the multi-hundred-megabyte weights.
+    @discardableResult
+    private func writeCompleteModelPack(at root: URL) throws -> URL {
+        let pack = root.appendingPathComponent(WhisperModelPack.englishSmall.name, isDirectory: true)
+        let manager = FileManager.default
+        try manager.createDirectory(at: pack, withIntermediateDirectories: true)
+        for name in WhisperModelPackLayout.modelNames {
+            try manager.createDirectory(
+                at: pack.appendingPathComponent("\(name).mlmodelc", isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+        try Data(#"{"model":{"type":"BPE","vocab":{},"merges":[]}}"#.utf8)
+            .write(to: pack.appendingPathComponent(WhisperModelPackLayout.tokenizerName))
+        try Data(#"{"tokenizer_class":"WhisperTokenizer"}"#.utf8)
+            .write(to: pack.appendingPathComponent(WhisperModelPackLayout.tokenizerConfigName))
+        try Data(#"{"model_type":"whisper"}"#.utf8)
+            .write(to: pack.appendingPathComponent(WhisperModelPackLayout.modelConfigName))
+        return pack
+    }
+
+    private func temporaryPackRoot() -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("v01-model-pack-\(UUID().uuidString)")
+    }
+
     /// Guards the wiring the reviewer asked for: the built package links WhisperKit small.en and
     /// production code registers a Silero backend, so `transcribe(_:)` cannot fall back to
     /// `backendUnavailable` and `SileroVAD` cannot fall back to the test-only energy stand-in.
@@ -916,12 +1065,8 @@ final class V01PipelineTests: XCTestCase {
             "production code registers the Silero backend before capture opens"
         )
 
-        let packRoot = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("v01-production-pack-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(
-            at: packRoot.appendingPathComponent(WhisperModelPack.englishSmall.name),
-            withIntermediateDirectories: true
-        )
+        let packRoot = temporaryPackRoot()
+        try writeCompleteModelPack(at: packRoot)
         addTeardownBlock {
             try? FileManager.default.removeItem(at: packRoot)
         }
@@ -938,6 +1083,70 @@ final class V01PipelineTests: XCTestCase {
             guard case SileroVADError.modelPackMissing = error else {
                 return XCTFail("expected a missing Silero pack, got \(error)")
             }
+        }
+    }
+
+    // MARK: - 10. A present-but-incomplete pack fails closed instead of reaching the network
+
+    /// WhisperKit's `loadTokenizerIfNeeded` falls back to a Hub download when `tokenizer.json` is
+    /// missing or fails to load locally, even with `download: false`. The helper therefore has to
+    /// reject an incomplete pack up front: every case below would otherwise send the local-only
+    /// path to the network, and no capture may open around it.
+    func testIncompleteWhisperPackFailsClosedBeforeCapture() throws {
+        // Control: the complete layout validates, so the failures below are the specific gaps and
+        // not a blanket refusal.
+        let completeRoot = temporaryPackRoot()
+        addTeardownBlock { try? FileManager.default.removeItem(at: completeRoot) }
+        try writeCompleteModelPack(at: completeRoot)
+        XCTAssertNoThrow(
+            try WhisperKitSmallEN(configuration: .init(modelDirectory: completeRoot)),
+            "a pack with the model bundles, tokenizer.json, tokenizer_config.json and config.json loads"
+        )
+
+        let cases: [(label: String, damage: (URL) throws -> Void)] = [
+            ("missing tokenizer.json", { pack in
+                try FileManager.default.removeItem(
+                    at: pack.appendingPathComponent(WhisperModelPackLayout.tokenizerName)
+                )
+            }),
+            ("corrupt tokenizer.json", { pack in
+                try Data("{ not json".utf8).write(
+                    to: pack.appendingPathComponent(WhisperModelPackLayout.tokenizerName)
+                )
+            }),
+            ("tokenizer.json without a model section", { pack in
+                try Data(#"{"version":"1.0"}"#.utf8).write(
+                    to: pack.appendingPathComponent(WhisperModelPackLayout.tokenizerName)
+                )
+            }),
+            ("missing AudioEncoder model", { pack in
+                try FileManager.default.removeItem(
+                    at: pack.appendingPathComponent("AudioEncoder.mlmodelc")
+                )
+            }),
+            ("no tokenizer config at all", { pack in
+                try FileManager.default.removeItem(
+                    at: pack.appendingPathComponent(WhisperModelPackLayout.tokenizerConfigName)
+                )
+                try FileManager.default.removeItem(
+                    at: pack.appendingPathComponent(WhisperModelPackLayout.modelConfigName)
+                )
+            }),
+        ]
+
+        for testCase in cases {
+            let root = temporaryPackRoot()
+            let pack = try writeCompleteModelPack(at: root)
+            try testCase.damage(pack)
+            XCTAssertThrowsError(
+                try WhisperKitSmallEN(configuration: .init(modelDirectory: root)),
+                "\(testCase.label): the pack is rejected before capture"
+            ) { error in
+                guard case ASRError.modelPackMissing = error else {
+                    return XCTFail("\(testCase.label): expected a fail-closed pack error, got \(error)")
+                }
+            }
+            try? FileManager.default.removeItem(at: root)
         }
     }
 }
