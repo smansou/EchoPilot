@@ -186,6 +186,30 @@ test('N01 unit: an agent-reported exit code is context, never a receipt', async 
   assert.deepEqual([...(await tracer.replay())], []);
 });
 
+test('N01 unit: a receipt whose check summary contradicts its exit code omits the counts', async () => {
+  const attention = attentionDouble('grant');
+  const voice = voiceDouble(attention);
+  const tracer = createNarrationTracer({ attention, voice, now: () => NOW });
+
+  await completeTurn(tracer, 'turn-1', {
+    eventId: 'turn-1-complete',
+    exitCode: 1,
+    output: 'N01-LOG-0022 not ok 22\n24 checks, 24 passed, 0 failed\n',
+  });
+  assert.equal(voice.submissions.length, 1);
+  const failedText = voice.submissions[0]?.plan.segments[0]?.text ?? '';
+  assert.equal(failedText, 'check-readonly-suite failed: exit code 1.');
+
+  await completeTurn(tracer, 'turn-2', {
+    eventId: 'turn-2-complete',
+    exitCode: 0,
+    output: '24 checks, 21 passed, 3 failed\n',
+  });
+  assert.equal(voice.submissions.length, 2);
+  const passedText = voice.submissions[1]?.plan.segments[0]?.text ?? '';
+  assert.equal(passedText, 'check-readonly-suite passed: exit code 0.');
+});
+
 test('N01 unit: a recorded evidence gap is announced once as a blocking outcome', async () => {
   const attention = attentionDouble('grant');
   const voice = voiceDouble(attention);

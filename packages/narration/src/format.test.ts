@@ -57,6 +57,39 @@ test('N01 format: only a self-consistent check summary is accepted', () => {
   assert.equal(countChecks(null), null);
 });
 
+test('N01 format: a summary is trusted only when its failures agree with the observed exit code', () => {
+  assert.deepEqual(countChecks('24 checks, 24 passed, 0 failed\n', 0), { total: 24, passed: 24, failed: 0 });
+  assert.deepEqual(countChecks('24 checks, 21 passed, 3 failed\n', 1), { total: 24, passed: 21, failed: 3 });
+  assert.equal(
+    countChecks('24 checks, 24 passed, 0 failed\n', 1),
+    null,
+    'a summary denying the nonzero exit code is not trusted',
+  );
+  assert.equal(
+    countChecks('24 checks, 21 passed, 3 failed\n', 0),
+    null,
+    'a summary claiming failures under a zero exit code is not trusted',
+  );
+});
+
+test('N01 format: counts contradicting the exit code are never recited', () => {
+  const falseGreen = completionSpokenText({
+    status: 'failed',
+    exitCode: 1,
+    counts: { total: 24, passed: 24, failed: 0 },
+    artifact: 'check-readonly-suite',
+  });
+  assert.equal(falseGreen, 'check-readonly-suite failed: exit code 1.');
+
+  const falseRed = completionSpokenText({
+    status: 'passed',
+    exitCode: 0,
+    counts: { total: 24, passed: 21, failed: 3 },
+    artifact: 'check-readonly-suite',
+  });
+  assert.equal(falseRed, 'check-readonly-suite passed: exit code 0.');
+});
+
 test('N01 format: long text is truncated inside the concise budget', () => {
   const long = Array.from({ length: 80 }, (_, index) => `word${index}`).join(' ');
   const clipped = truncateToWords(long);

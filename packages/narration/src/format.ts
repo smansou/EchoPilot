@@ -125,12 +125,23 @@ export type CompletionSpeechInput = Readonly<{
 }>;
 
 /**
+ * The counts a completion sentence may recite: only totals that agree with the observed exit code.
+ * A summary that contradicts the receipt is dropped instead of being spoken, so the one utterance
+ * stays factual (`(failed > 0)` must equal `(exitCode !== 0)`).
+ */
+function countsAgreeingWithExit(counts: CheckCounts | null, exitCode: number): CheckCounts | null {
+  if (counts === null) return null;
+  if ((counts.failed > 0) !== (exitCode !== 0)) return null;
+  return counts;
+}
+
+/**
  * The one completion sentence for a finished turn. It leads with the observed result (a blocking
  * failure is announced as the turn's outcome, not as a second utterance) and cites no agent text.
  */
 export function completionSpokenText(input: CompletionSpeechInput): string {
   const subject = input.artifact ?? 'The managed test';
-  const counts = input.counts;
+  const counts = countsAgreeingWithExit(input.counts, input.exitCode);
   if (input.status === 'failed') {
     const text = counts === null
       ? `${subject} failed: exit code ${input.exitCode}.`

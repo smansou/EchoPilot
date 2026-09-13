@@ -371,7 +371,8 @@ export function createNarrationTracer(options: NarrationTracerOptions): Narratio
               command: completion.command,
               exitCode: completion.exitCode,
               observedAt: event.observedAt,
-              counts: countChecks(completion.output),
+              // Counts are only retained when they agree with this receipt's own exit code.
+              counts: countChecks(completion.output, completion.exitCode),
             });
             refreshOutcome(session);
           }

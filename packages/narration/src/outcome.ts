@@ -39,9 +39,12 @@ export type CheckCounts = Readonly<{ total: number; passed: number; failed: numb
 
 /**
  * Reads the trailing summary line tools like the read-only fixture suite print, e.g.
- * `24 checks, 21 passed, 3 failed`. Only a self-consistent summary is accepted.
+ * `24 checks, 21 passed, 3 failed`. Only a self-consistent summary is accepted, and when the
+ * observed exit code is supplied the counts must also agree with it: a summary that reports
+ * failures while the tool exited zero — or reports none while the tool exited nonzero — is
+ * discarded, so the spoken outcome can never contradict the observed receipt.
  */
-export function countChecks(output: string | null): CheckCounts | null {
+export function countChecks(output: string | null, observedExitCode?: number): CheckCounts | null {
   if (output === null) return null;
   const pattern = /(\d+)\s+checks?,\s*(\d+)\s+passed,\s*(\d+)\s+failed/gu;
   let match: RegExpExecArray | null = null;
@@ -54,6 +57,7 @@ export function countChecks(output: string | null): CheckCounts | null {
     return null;
   }
   if (passed + failed !== total) return null;
+  if (observedExitCode !== undefined && (failed > 0) !== (observedExitCode !== 0)) return null;
   return { total, passed, failed };
 }
 
