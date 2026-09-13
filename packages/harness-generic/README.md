@@ -34,3 +34,13 @@ output can create an approval path. Existing arbitrary terminals remain observat
 `observe, send, interrupt, resume, approvalResponse, toolResults, artifactDiffs, format,
 formatVersion`. Import adapters report `observe: true`, `resume: true`, `send: false`,
 `approvalResponse: false`; the managed PTY reports `send: true` and `approvalResponse: false`.
+
+## Acceptance checks
+
+- `pnpm exec tsx --test packages/harness-generic/test/generic-import.test.ts` — the acceptance suite.
+- `node packages/harness-generic/test/check.mjs` — the oracle. It loads the TypeScript adapter
+  in-process through tsx, asserts each acceptance criterion (10 GiB bounded streaming plus
+  committed-offset resume; torn JSON / partial UTF-8 / rotation / redraw isolation; imported
+  low-confidence output that is never an authorization or execution path), then runs the acceptance
+  suite. It starts no agent CLI, so the oracle failure `the argument '--approve-for-me' cannot be
+  used with '--sandbox <SANDBOX_MODE>'` (finding f-4a271ed5a779) cannot recur.
