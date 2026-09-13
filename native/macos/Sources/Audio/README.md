@@ -9,11 +9,32 @@ The signed helper builds the capture side of the V01 tracer bullet:
 | Device enumeration | `AudioDeviceEnumerator.swift` | input devices (`uid`, `name`, `isDefault`) + change observation for `device_removed` |
 | Permissions | `MicrophonePermission.swift` | explicit active-session `granted` / `denied` / `unknown`, request only when a session asks |
 | Microphone graph | `MicrophoneGraph.swift` | `permission()`, `startCapture(onFrame:)`, `stopCapture()`, `captureActive()`, `onEvent(_:)` — the fake host's shape |
+| Playback graph | `PlaybackGraph.swift` | `open(format:)`, `write(_:)`, `onProgress(_:)`, `flush()`, `interrupt(epoch:)`, `close()` — the output half of the same session |
 
 Capture path: `AVAudioEngine` input tap → `AVAudioConverter` to 16 kHz mono Int16 → `AudioPacketizer`
 (20 ms packets, monotonic packet start times) → `frameListener` → bounded ring → ASR consumer.
 The listener is the only producer into the ring: the graph hands each packet over exactly once, so
 the ring's capacity and the ASR window/endpoint timing match real audio time.
+
+## Playback (V02)
+
+`PlaybackGraph` is the device queue the TypeScript playback session writes to
+(`packages/voice/src/playback/index.ts`): it opens the output device with the declared format
+(24 kHz mono Int16 packets from the bundled Pocket TTS worker) and schedules each frame on an
+`AVAudioPlayerNode`.
+
+- Progress is real: a frame is only reported as rendered from the player's `.dataPlayedBack`
+  completion, so a sentence the worker generated but the device never played is not "heard" and is
+  not replayable.
+- Cancel is a device operation: `flush()` stops the node, which discards every buffer that was
+  queued but not yet rendered, and `interrupt(epoch:)` additionally adopts a newer generation so a
+  worker frame produced after the cancel is dropped by `write` (visible in `staleFrameCount`)
+  instead of becoming audible.
+- Every listener call happens on the graph's state queue, so a flush is never half-applied when the
+  widget observes it.
+
+The graph is a library file of this package, so `swift build --package-path
+native/macos/Sources/Audio` builds it next to the capture side without a signing identity.
 
 Failure path: denial, device removal (CoreAudio listener), screen lock (distributed notification)
 and helper crash (`reportHelperCrash`) all emit a host event, release capture, and leave the widget

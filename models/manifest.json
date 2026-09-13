@@ -1,0 +1,65 @@
+{
+  "manifestVersion": 1,
+  "generatedBy": "the V02 packaging step (vendor-pocket-tts), which vendors every asset below from its pinned revision and refuses to write an artifact whose bytes do not hash to the recorded value",
+  "outputFormat": { "sampleRate": 24000, "channels": 1, "packetMs": 20 },
+  "assets": [
+    {
+      "id": "pocket-tts-english_2026-04",
+      "kind": "model",
+      "license": "CC-BY-4.0",
+      "licenseFile": "models/licenses/pocket-tts-english_2026-04.LICENSE",
+      "revision": "release-2026-04",
+      "sha256": "4be718f26faa997716fd50b4ce950807b296087891a81c9423d18db8fda305d2",
+      "bytes": 63897600,
+      "path": "models/pocket-tts/english_2026-04"
+    },
+    {
+      "id": "pocket-tts-voice-alba",
+      "kind": "voice",
+      "license": "CC-BY-4.0",
+      "licenseFile": "models/licenses/pocket-tts-voice-alba.LICENSE",
+      "revision": "voice-alba-2026-04",
+      "sha256": "10b2775e34e87006bf9db87e53de6dec1a4549408dd97c12184a5bf6d134933e",
+      "bytes": 3145728,
+      "path": "models/pocket-tts/voices/alba",
+      "voiceId": "alba",
+      "displayName": "Alba"
+    },
+    {
+      "id": "pocket-tts-voice-anna",
+      "kind": "voice",
+      "license": "CC-BY-4.0",
+      "licenseFile": "models/licenses/pocket-tts-voice-anna.LICENSE",
+      "revision": "voice-anna-2026-04",
+      "sha256": "a7a23d87f7e8122271afc54454792daf5d8d39c81db06da7d8563f1e853c7bc6",
+      "bytes": 3145728,
+      "path": "models/pocket-tts/voices/anna",
+      "voiceId": "anna",
+      "displayName": "Anna"
+    },
+    {
+      "id": "pocket-tts-voice-charles",
+      "kind": "voice",
+      "license": "CC-BY-4.0",
+      "licenseFile": "models/licenses/pocket-tts-voice-charles.LICENSE",
+      "revision": "voice-charles-2026-04",
+      "sha256": "f643ad2ae42c01a0b4b0fdb6bbfd1ce178c4b8569a928905aedbb335e137ca0d",
+      "bytes": 3145728,
+      "path": "models/pocket-tts/voices/charles",
+      "voiceId": "charles",
+      "displayName": "Charles"
+    },
+    {
+      "id": "pocket-tts-voice-jean",
+      "kind": "voice",
+      "license": "CC-BY-4.0",
+      "licenseFile": "models/licenses/pocket-tts-voice-jean.LICENSE",
+      "revision": "voice-jean-2026-04",
+      "sha256": "868096462b7dfe8c5d5441ee7cb79cba10e7c63590c535d9b79f901f6c92827d",
+      "bytes": 3145728,
+      "path": "models/pocket-tts/voices/jean",
+      "voiceId": "jean",
+      "displayName": "Jean"
+    }
+  ]
+}

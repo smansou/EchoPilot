@@ -1,0 +1,5 @@
+# Locked runtime for the bundled worker. The packaging step vendors exactly these archives into
+# python/lib/python3.12/site-packages and re-hashes each one before the bundle is sealed.
+numpy==2.3.2 --hash=sha256:4fc1e113fd20298463842f92a229e1c85f2efd04580e0208985a5b28adb9217e
+sentencepiece==0.2.0 --hash=sha256:e11cb779ec33b4b674bfc440fa10b31b78d80b4d2e4422d614f1779f494f05e6
+pocket-tts-runtime==1.4.0 --hash=sha256:c684aacbe47a301c7c581caca604f9a0be7b9a0ecb03c3da0f8fccc7df5e6268

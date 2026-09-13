@@ -1,0 +1,36 @@
+{
+  "worker": "pocket-tts",
+  "protocol": "jsonl-stdio",
+  "bundled": true,
+  "python": {
+    "bundled": true,
+    "implementation": "CPython",
+    "version": "3.12.8",
+    "path": "python/bin/python3",
+    "sitePackages": "python/lib/python3.12/site-packages",
+    "archiveSha256": "7f9c743d288555cd4aa297aeeed3d955a5cad4862a31c83a3fb43fb984e2fbca",
+    "launcher": "run.sh"
+  },
+  "network": "denied",
+  "offline": true,
+  "downloads": "none",
+  "dependencies": [
+    {
+      "name": "numpy",
+      "version": "2.3.2",
+      "sha256": "4fc1e113fd20298463842f92a229e1c85f2efd04580e0208985a5b28adb9217e"
+    },
+    {
+      "name": "sentencepiece",
+      "version": "0.2.0",
+      "sha256": "e11cb779ec33b4b674bfc440fa10b31b78d80b4d2e4422d614f1779f494f05e6"
+    },
+    {
+      "name": "pocket-tts-runtime",
+      "version": "1.4.0",
+      "sha256": "c684aacbe47a301c7c581caca604f9a0be7b9a0ecb03c3da0f8fccc7df5e6268"
+    }
+  ],
+  "outputFormat": { "sampleRate": 24000, "channels": 1, "packetMs": 20 },
+  "modelManifest": "../../models/manifest.json"
+}
