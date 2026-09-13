@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "ticket": "A01",
+  "description": "Synthetic focused-surface fixture for the A01 dictation tracer (dictate into a focused editor -> scoped context preview -> literal insertion -> undo). It is deliberately adversarial: every value under secretMarkers is invented, must never be captured for real, and the fixture helper returns it anyway so the bundle assembly must redact it. No real credentials, user text, clipboard contents, or screenshots are stored here.",
+  "excludedBundleIds": [
+    "com.1password.1password",
+    "com.echopilot.widget"
+  ],
+  "secretMarkers": {
+    "secureFieldValue": "synthetic-secure-field-value-9c41d0",
+    "excludedVaultText": "synthetic-vault-master-password-2f77ae",
+    "widgetDraftText": "synthetic-widget-draft-7b02c5"
+  },
+  "permittedSelectedText": "export const answer = ",
+  "permittedOcrText": "export const answer = 42",
+  "permittedAxNodeCount": 620,
+  "screenshotArtifactRef": "artifact://a01/synthetic-window@2x.png",
+  "surfaces": [
+    {
+      "key": "vscode",
+      "bundleId": "com.microsoft.VSCode",
+      "pid": 41001,
+      "windowId": 2101,
+      "displayId": 1,
+      "role": "AXTextArea",
+      "insertMethod": "accessibility",
+      "secure": false,
+      "bounds": { "x": 120, "y": 80, "width": 1200, "height": 800 },
+      "pixelScale": 2,
+      "initialText": "export const answer = "
+    },
+    {
+      "key": "textedit",
+      "bundleId": "com.apple.TextEdit",
+      "pid": 41002,
+      "windowId": 2102,
+      "displayId": 1,
+      "role": "AXTextArea",
+      "insertMethod": "accessibility",
+      "secure": false,
+      "bounds": { "x": 160, "y": 120, "width": 900, "height": 700 },
+      "pixelScale": 2,
+      "initialText": "Meeting notes: "
+    },
+    {
+      "key": "browser-field",
+      "bundleId": "com.apple.Safari",
+      "pid": 41003,
+      "windowId": 2103,
+      "displayId": 1,
+      "role": "AXTextField",
+      "insertMethod": "clipboard",
+      "secure": false,
+      "bounds": { "x": 200, "y": 160, "width": 1000, "height": 640 },
+      "pixelScale": 1,
+      "initialText": ""
+    },
+    {
+      "key": "secure-field",
+      "bundleId": "com.apple.Safari",
+      "pid": 41004,
+      "windowId": 2104,
+      "displayId": 1,
+      "role": "AXSecureTextField",
+      "insertMethod": "accessibility",
+      "secure": true,
+      "bounds": { "x": 220, "y": 180, "width": 640, "height": 480 },
+      "pixelScale": 1,
+      "initialText": ""
+    }
+  ]
+}
