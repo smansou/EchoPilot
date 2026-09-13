@@ -22,10 +22,12 @@ import { createMemoryConsolidator, type MemoryConsolidator } from '../consolidat
 import { type NormalizedEvent } from '../reducers/index.js';
 import { createMemoryStore, type MemoryStore, type NormalizedBatch } from '../store/index.js';
 import {
+  MAX_LINE_BYTES,
   createFileLogSource,
   READ_CHUNK_BYTES,
   type GenericLogSource,
 } from '../../../harness-generic/src/index.js';
+import { BoundedLineScanner } from '../../../harness-generic/src/scanner.js';
 import { createMemoryImporter, type MemoryImporter } from './index.js';
 import { readTailLines } from './reader.js';
 
@@ -451,6 +453,131 @@ test('a pending span with an oversized line repairs through the bounded scanner'
     );
   } finally {
     await repaired?.close().catch(() => undefined);
+    await forward?.close().catch(() => undefined);
+    await stack.close();
+    await forwardStack.close();
+    await rm(root, { recursive: true, force: true });
+    await rm(forwardRoot, { recursive: true, force: true });
+  }
+});
+
+test('the tail walk classifies an over-buffer line exactly as the bounded scanner does', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm03-boundary-'));
+  try {
+    const recordLine = (id: string, contentBytes: number): string => {
+      const record = JSON.stringify({
+        id,
+        kind: 'user_utterance',
+        occurredAt: '2026-09-08T00:00:00.000Z',
+        text: 'Boundary classification padding.',
+      });
+      const padding = contentBytes - Buffer.byteLength(record, 'utf8');
+      assert.ok(padding >= 0, 'the boundary record must fit inside its content length');
+      return `${record}${' '.repeat(padding)}`;
+    };
+    // One line exactly at the §5.8 buffer and one just over it: the forward scanner only drops a line
+    // once its bytes are still newline-free as the buffer passes MAX_LINE_BYTES, so "longer than
+    // MAX_LINE_BYTES" is not by itself an oversized line. The tail walk must use the same classifier.
+    const lines = [
+      recordLine('boundary-exact', MAX_LINE_BYTES),
+      recordLine('boundary-over', MAX_LINE_BYTES + 1),
+      recordLine('boundary-tail', 256),
+    ];
+    const path = join(root, 'boundary.jsonl');
+    await writeFile(path, `${lines.join('\n')}\n`, 'utf8');
+    const source = createFileLogSource(path);
+    const totalBytes = await source.size();
+
+    const scanner = new BoundedLineScanner(source, 0);
+    const forwardTypes: string[] = [];
+    for (let index = 0; index < lines.length; index += 1) forwardTypes.push((await scanner.next()).type);
+    assert.deepEqual(
+      forwardTypes,
+      ['line', 'line', 'line'],
+      'the forward scanner keeps both boundary lines, so the preview must not turn one into a gap',
+    );
+
+    const spans = await readTailLines(source, totalBytes, lines.length, () => true);
+    assert.deepEqual(
+      spans.map((span) => (span.oversized === true ? 'oversized' : 'line')),
+      forwardTypes,
+      'every tail span is classified exactly as the forward scanner classifies the same line',
+    );
+    assert.equal(spans[0]?.bytes.byteLength, MAX_LINE_BYTES, 'the buffer-sized line keeps its bytes');
+    assert.equal(
+      spans[1]?.bytes.byteLength,
+      MAX_LINE_BYTES + 1,
+      'a line just over the buffer keeps the scanner line classification and its bytes',
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('tail-first preview reports an oversized tail line as the display-only gap bootstrap commits', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm03-preview-oversized-'));
+  const forwardRoot = await mkdtemp(join(tmpdir(), 'm03-preview-oversized-forward-'));
+  const stack = await createStack(root);
+  const forwardStack = await createStack(forwardRoot);
+  let previewed: MemoryImporter | undefined;
+  let forward: MemoryImporter | undefined;
+  try {
+    const log = createOversizedLineSource();
+    previewed = await importerFor(root, log.source, stack);
+    const preview = await previewed.preview({ limit: TAIL_RECORD_COUNT + 1 });
+    assert.equal(
+      preview.events.length,
+      TAIL_RECORD_COUNT + 1,
+      'the oversized line consumes one preview slot exactly like the gap bootstrap commits',
+    );
+    const gap = preview.events[0];
+    assert.ok(gap !== undefined);
+    assert.equal(gap.event.kind, 'gap', 'an oversized tail line is never parsed into a user_utterance record');
+    assert.equal(
+      gap.event.contentHash,
+      EMPTY_HASH,
+      'the preview never materialized the oversized line: its raw bytes stay empty',
+    );
+    assert.equal(gap.diagnostic, 'malformed_json', 'the preview carries the same display-only gap diagnostic');
+    assert.equal(gap.cursor.offset, log.giantEnd, 'the gap covers the byte span the forward pass commits');
+    assert.equal(gap.event.sourceSequence, 1, 'the oversized line keeps the line ordinal of the source');
+    assert.deepEqual(
+      preview.events.slice(1).map((event) => event.event.sourceEventId),
+      ['tail-0001', 'tail-0002', 'tail-0003', 'tail-0004'],
+      'the records after the oversized line still preview in chronological order',
+    );
+    assert.equal(
+      preview.events.some((event) => event.event.sourceEventId === 'giant-0000'),
+      false,
+      'the oversized line never becomes a record with its own sourceEventId',
+    );
+    assert.ok(
+      log.stats.maxRequestedBytes <= READ_CHUNK_BYTES,
+      `the preview keeps the 64 KiB read buffer (asked for ${log.stats.maxRequestedBytes} bytes)`,
+    );
+
+    // Forward parity: bootstrap over the same bytes commits the identical gap, so the tail-first
+    // preview and the final import describe the same records.
+    const forwardRecording = recordingStore(forwardStack.store);
+    forward = await importerFor(forwardRoot, createOversizedLineSource().source, forwardStack, forwardRecording.store);
+    await forward.bootstrap();
+    const forwardEvents = forwardRecording.batches.flatMap((batch) => batch.events);
+    const forwardGap = forwardEvents.find((event) => event.kind === 'gap');
+    assert.ok(forwardGap !== undefined, 'a clean forward run commits the oversized line as a gap');
+    assert.equal(gap.event.eventId, forwardGap.eventId, 'preview and bootstrap derive the same gap event id');
+    assert.equal(
+      gap.event.sourceEventId,
+      forwardGap.sourceEventId,
+      'preview and bootstrap synthesize the same gap identity from the byte span',
+    );
+    assert.equal(gap.event.payloadRef, forwardGap.payloadRef, 'preview and bootstrap agree on the gap span');
+    for (const event of preview.events.slice(1)) {
+      const match = forwardEvents.find((candidate) => candidate.sourceEventId === event.event.sourceEventId);
+      assert.ok(match !== undefined, `the forward run must commit ${event.event.sourceEventId}`);
+      assert.equal(event.event.eventId, match.eventId, `preview and bootstrap agree on ${event.event.sourceEventId}`);
+    }
+  } finally {
+    await previewed?.close().catch(() => undefined);
     await forward?.close().catch(() => undefined);
     await stack.close();
     await forwardStack.close();

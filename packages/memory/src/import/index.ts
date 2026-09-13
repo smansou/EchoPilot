@@ -385,6 +385,8 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
       // The tail walk counts *records*, not merely non-blank lines: a line the forward pass would
       // skip (whitespace-only, or display text that normalizes to nothing) must not consume one of
       // the requested newest records, or the preview silently returns fewer than `limit` events.
+      // An over-long line is never handed to this predicate at all: the reader classifies it with the
+      // same bounded scanner `bootstrap` uses, so it stays a display-only gap here too.
       const isPreviewedRecord = (bytes: Uint8Array): boolean =>
         parseLine({ start: 0, end: bytes.byteLength, bytes }, format, 0) !== undefined;
       const lines = await readTailLines(source, totalBytes, limit, isPreviewedRecord);
@@ -393,7 +395,9 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
       let ingestSequence = 0;
       for (const span of lines) {
         ordinal += 1;
-        const record = parseLine(span, format, ordinal);
+        // Same mapping the forward pass commits: an oversized line is a display-only gap whose raw
+        // bytes (and payload) stay empty, never a parsed record.
+        const record = span.oversized === true ? oversizedRecord(format, ordinal) : parseLine(span, format, ordinal);
         if (record === undefined) continue;
         ingestSequence += 1;
         events.push(buildEmission(record, {

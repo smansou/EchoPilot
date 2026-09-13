@@ -2,20 +2,25 @@
  * Bounded byte readers for the M03 cold-start importer.
  *
  * Every read request stays inside the §5.8 64 KiB buffer and no helper ever materializes a whole
- * source or a whole span: the tail reader walks backwards in 64 KiB steps until it has the newest
- * `limit` records. Forward scanning — including the pending-span repair — goes through the H03
- * `BoundedLineScanner`, which classifies an over-long line as a display-only gap without ever
- * buffering it past `MAX_LINE_BYTES`.
+ * source or a whole line: the tail reader walks backwards in 64 KiB windows only to locate line
+ * boundaries, and reads back the bytes of one candidate line at a time (never more than
+ * `MAX_LINE_BYTES` plus one read buffer). A line past `MAX_LINE_BYTES` is classified by re-scanning
+ * it from its own first byte through the H03 `BoundedLineScanner` — the same classifier the forward
+ * import and the pending-span repair use — so the tail-first preview reports it exactly as
+ * `bootstrap` commits it (an `oversized` display-only gap with empty raw bytes) while its bytes
+ * merely stream past in bounded reads instead of being assembled.
  */
-import { concatChunks } from '../../../harness-generic/src/bytes.js';
-import { READ_CHUNK_BYTES } from '../../../harness-generic/src/scanner.js';
+import { EMPTY_BYTES, concatChunks } from '../../../harness-generic/src/bytes.js';
+import { BoundedLineScanner, MAX_LINE_BYTES, READ_CHUNK_BYTES } from '../../../harness-generic/src/scanner.js';
 import type { GenericLogSource } from '../../../harness-generic/src/types.js';
 import type { LineSpan } from './records.js';
 
 const NEWLINE = 0x0a;
 /**
- * Safety valve for the backward walk: a source with no newline in its last 16 MiB has no previewable
- * records, and the walk stops instead of materializing a whole giant line.
+ * Safety valve for the backward walk: a source whose newest line start lies more than 16 MiB above
+ * the scan point (one line longer than the cap, or megabytes of terminators in a row) has no
+ * previewable record inside the §5.8 working set, and the walk stops instead of streaming the whole
+ * source.
  */
 const MAX_TAIL_SCAN_BYTES = 16 * 1024 * 1024;
 
@@ -29,7 +34,14 @@ export type TailLineFilter = (bytes: Uint8Array) => boolean;
 const isNonBlankLine: TailLineFilter = (bytes) => !isBlankLine(bytes);
 
 /**
- * Tail-first line reader: walks backwards from the end of the source in 64 KiB steps and returns
+ * One previewed tail line: the usual span of a complete line, or — when the forward scanner classifies
+ * the line as `oversized` — a display-only span whose raw bytes are never materialized. The filter is
+ * never asked about an oversized line: `bootstrap` always commits it as a gap.
+ */
+export type TailLineSpan = LineSpan & { oversized?: true };
+
+/**
+ * Tail-first line reader: walks backwards from the end of the source in 64 KiB windows and returns
  * the newest `limit` complete lines that `isRecord` accepts, oldest first. A trailing unterminated
  * line is never a record (the forward scanner treats it as `partial` too), and the leading bytes of
  * the file are only a record when they are newline-terminated.
@@ -43,37 +55,44 @@ export async function readTailLines(
   totalBytes: number,
   limit: number,
   isRecord: TailLineFilter = isNonBlankLine,
-): Promise<LineSpan[]> {
+): Promise<TailLineSpan[]> {
   if (limit <= 0 || totalBytes <= 0) return [];
-  // Newline positions of the complete line ends read so far, descending. A line is only
-  // reconstructible once both its own terminator and the terminator before it (or the file start)
-  // have been read: the oldest newline collected so far only bounds the start of the next line and
-  // is never returned by itself. The read windows are kept (newest first) so a selected line's bytes
-  // need no second read.
-  const windows: Array<{ base: number; bytes: Uint8Array }> = [];
-  const newlines: number[] = [];
-  const lines: LineSpan[] = [];
+  const lines: TailLineSpan[] = [];
+  /**
+   * End offset (after the terminator) of the newest complete line whose first byte has not been read
+   * yet. The newest newline only bounds the next line's start and is never returned by itself.
+   */
+  let pendingEnd: number | undefined;
   let regionEnd = totalBytes;
   let scanned = 0;
   /** True once the walk has read the whole prefix of the source (byte 0 included). */
   let reachedStart = false;
-  /** Index of the newest newline that has not been turned into a candidate line yet. */
-  let next = 0;
 
-  /** Resolves the newest candidate lines, skipping blank ones, until `limit` records are collected. */
-  const collect = (): void => {
-    while (lines.length < limit && next < newlines.length) {
-      const end = newlines[next];
-      if (end === undefined) break;
-      const previous = newlines[next + 1];
-      const start = previous !== undefined ? previous + 1 : reachedStart ? 0 : undefined;
-      if (start === undefined) break; // this line's first byte has not been read yet
-      next += 1;
-      const bytes = sliceWindowBytes(windows, start, end);
-      if (bytes === undefined) continue;
-      if (!isRecord(bytes)) continue; // not a record: keep walking for older lines
-      lines.push({ start, end: end + 1, bytes });
+  /**
+   * Classifies one complete line `[start, end)` (terminator included in the span, excluded from the
+   * bytes). A line the forward scanner would reject as over-long is never assembled from windows:
+   * re-scanning it from its own first byte with the same bounded scanner yields the identical
+   * classification (a display-only `oversized` gap) without buffering it past `MAX_LINE_BYTES`.
+   */
+  const classifyLine = async (start: number, end: number): Promise<TailLineSpan | undefined> => {
+    const length = end - 1 - start;
+    if (length > MAX_LINE_BYTES) {
+      const scanner = new BoundedLineScanner(source, start);
+      const scan = await scanner.next();
+      if (scan.type === 'oversized') {
+        return { start: scan.start, end: scan.end, bytes: EMPTY_BYTES, oversized: true };
+      }
+      // A source that still serves this line normally (the scanner's size guard depends on its read
+      // granularity) keeps its bytes; anything else means the source changed under the preview.
+      if (scan.type === 'line') return { start: scan.start, end: scan.end, bytes: scan.bytes };
+      return undefined;
     }
+    const bytes = await readRange(source, start, length);
+    // A byte range the source does not serve in full (a truncated source) is not a record instead of
+    // a silently short line.
+    if (bytes === undefined || bytes.byteLength !== length) return undefined;
+    if (!isRecord(bytes)) return undefined; // not a record: keep walking for older lines
+    return { start, end, bytes };
   };
 
   while (lines.length < limit && regionEnd > 0 && scanned < MAX_TAIL_SCAN_BYTES) {
@@ -82,60 +101,55 @@ export async function readTailLines(
     // A window is filled with repeated bounded reads: a source may serve fewer bytes than it was
     // asked for (a smaller read cap, a short read), and treating that as "the source ended" would
     // silently drop the newest records of the preview. Only a zero-byte read means end-of-source.
-    const parts: Uint8Array[] = [];
-    let filled = 0;
-    while (filled < wanted) {
-      const chunk = await source.read(start + filled, wanted - filled);
-      if (chunk.byteLength === 0) break;
-      const remaining = wanted - filled;
-      const bounded = chunk.byteLength > remaining ? chunk.subarray(0, remaining) : chunk;
-      parts.push(bounded);
-      filled += bounded.byteLength;
-    }
-    if (filled === 0) break;
-    const bytes = parts.length === 1 ? parts[0] as Uint8Array : concatChunks(parts);
-    windows.push({ base: start, bytes });
-    scanned += filled;
-    for (let index = filled - 1; index >= 0; index -= 1) {
-      if (bytes[index] === NEWLINE) newlines.push(start + index);
+    const bytes = await readRange(source, start, wanted);
+    if (bytes === undefined) break;
+    scanned += bytes.byteLength;
+    // Newlines are consumed newest first: the first one only ends the line above it, every older one
+    // completes the line that ends there.
+    for (let index = bytes.byteLength - 1; index >= 0 && lines.length < limit; index -= 1) {
+      if (bytes[index] !== NEWLINE) continue;
+      const end = start + index + 1;
+      if (pendingEnd === undefined) {
+        pendingEnd = end;
+        continue;
+      }
+      const line = await classifyLine(end, pendingEnd);
+      pendingEnd = end;
+      if (line !== undefined) lines.push(line);
     }
     // A short window means the source ended before `regionEnd`; only whole records are returned.
-    if (filled < wanted) break;
+    if (bytes.byteLength < wanted) break;
     regionEnd = start;
     if (regionEnd === 0) reachedStart = true;
-    collect();
   }
-  collect();
+  // The oldest line of the file starts at byte 0, so it can only be classified once byte 0 was read.
+  if (lines.length < limit && reachedStart && pendingEnd !== undefined && pendingEnd > 0) {
+    const line = await classifyLine(0, pendingEnd);
+    if (line !== undefined) lines.push(line);
+  }
   lines.reverse();
   return lines;
 }
 
-/** Slices `[start, end)` (line content, terminator excluded) out of the read windows. */
-function sliceWindowBytes(
-  windows: ReadonlyArray<{ base: number; bytes: Uint8Array }>,
-  start: number,
-  end: number,
-): Uint8Array | undefined {
-  if (end <= start) return new Uint8Array(0);
+/**
+ * Reads `[start, start + length)` with one bounded request per 64 KiB. A partial read (the source no
+ * longer serves the whole range) is returned as-is; the caller decides whether a short range is a
+ * record. Only a zero-byte first read means the range is gone.
+ */
+async function readRange(source: GenericLogSource, start: number, length: number): Promise<Uint8Array | undefined> {
+  if (length <= 0) return EMPTY_BYTES;
   const parts: Uint8Array[] = [];
-  let cursor = start;
-  // Oldest window first so the slices concatenate in source order.
-  for (const window of [...windows].sort((left, right) => left.base - right.base)) {
-    const windowStart = window.base;
-    const windowEnd = window.base + window.bytes.byteLength;
-    if (windowEnd <= cursor || windowStart >= end) continue;
-    // The windows must cover the line without a hole: a byte range the source never served (a
-    // truncated file) is not a record instead of silently concatenating across the gap.
-    if (windowStart > cursor) return undefined;
-    const from = cursor - windowStart;
-    const to = Math.min(end, windowEnd) - windowStart;
-    if (to <= from) continue;
-    parts.push(window.bytes.subarray(from, to));
-    cursor = windowStart + to;
-    if (cursor >= end) break;
+  let filled = 0;
+  while (filled < length) {
+    const chunk = await source.read(start + filled, Math.min(READ_CHUNK_BYTES, length - filled));
+    if (chunk.byteLength === 0) break;
+    const remaining = length - filled;
+    const bounded = chunk.byteLength > remaining ? chunk.subarray(0, remaining) : chunk;
+    parts.push(bounded);
+    filled += bounded.byteLength;
   }
-  if (parts.length === 0 || cursor < end) return undefined;
-  return concatChunks(parts);
+  if (filled === 0) return undefined;
+  return parts.length === 1 ? parts[0] as Uint8Array : concatChunks(parts);
 }
 
 function isBlankLine(bytes: Uint8Array): boolean {
