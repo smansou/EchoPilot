@@ -39,9 +39,19 @@ Rules that match `packages/voice` one-for-one:
   boundaries, so `VoiceTracerBridge` latches it until the next window ends the utterance.
 - `WhisperKitSmallEN` validates the whole pack in its initializer, before capture opens
   (`WhisperModelPackLayout.validate`): the three CoreML bundles (`MelSpectrogram`, `AudioEncoder`,
-  `TextDecoder`), a parseable `tokenizer.json`, and the tokenizer/model config WhisperKit's local
-  tokenizer loader needs. A present-but-incomplete pack would otherwise let that loader fall back
-  to a Hub download even with `download: false`, which the local-only path must never do.
+  `TextDecoder`), a parseable `tokenizer.json`, and a tokenizer configuration WhisperKit's local
+  loader can classify *and* build. A present-but-incomplete pack would otherwise make that loader
+  throw and fall through to its Hub download even with `download: false`, which the local-only path
+  must never do. The check mirrors the pinned WhisperKit 1.1.0 resolution one for one:
+  `tokenizer_config.json` must exist (else `missingConfig`); the pack must resolve a tokenizer class
+  — the `tokenizer_class` the config names (WhisperKit strips a `Fast` suffix), else the
+  `"<ModelType>Tokenizer"` class it synthesizes from `config.json`'s `model_type` (else
+  `missingTokenizerClassInConfig`); `config.json` must parse when present; that class must be one its
+  `knownTokenizers` table can build (else `unsupportedTokenizer`); and `tokenizer.json` must carry
+  the sections the resolved class reads (`vocab`, plus `merges` for the BPE classes — a BPE model
+  without `merges` traps, and a missing vocabulary throws). The transcriber also pins WhisperKit's
+  tokenizer search to that validated pack folder (`tokenizerFolder:`), so the machine-level Hub
+  cache cannot be picked instead and reach the same fallback.
 
 The transcriber and the VAD are injected, so the signed build links the real WhisperKit small.en
 pack and the Silero CoreML backend while development harnesses can run the deterministic
@@ -76,9 +86,12 @@ through `MicrophoneGraph` + `VoiceTracerBridge`, one 400 ms window that holds ea
 the engine's window onto the utterance — and ending exactly once, with the trailing silence that
 follows committing nothing (each word once, one utterance id) — mute and an ordinary capture
 release settling while audio keeps flowing, and the 15 s window bound for an oversized packet. An
-incomplete pack (missing/corrupt `tokenizer.json`, a tokenizer file without its `model` section, a
-missing CoreML bundle, or no tokenizer/model config) fails closed in `WhisperKitSmallEN.init`
-before capture while a complete pack loads. It also covers the visible
+incomplete pack (missing/corrupt `tokenizer.json`, a tokenizer file without its `model` section or
+its `vocab`/`merges`, a missing CoreML bundle, no tokenizer/model config, a `config.json`-only pack,
+and a tokenizer config whose class is empty, unresolvable or not one WhisperKit can build) fails
+closed in `WhisperKitSmallEN.init` before capture while the packs WhisperKit loads locally stay
+valid; each shape is also run through WhisperKit's own `AutoTokenizerWrapper.from(modelFolder:)` so
+the regression shows the local load really throws there and really succeeds otherwise. It also covers the visible
 failure states: mic denial (through the graph's
 permission override seam), device removal, lock and helper crash each keep their error code,
 message and `closed` input visible, drop the pending audio, stop opening new ASR windows, and still

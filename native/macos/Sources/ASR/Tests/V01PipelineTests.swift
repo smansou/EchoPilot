@@ -1023,11 +1023,18 @@ final class V01PipelineTests: XCTestCase {
 
     // MARK: - 9. The production path links WhisperKit and registers the Silero runtime
 
-    /// Writes the on-disk shape of a complete small.en pack — the three CoreML bundles plus the
+    /// Writes the on-disk shape of a small.en pack — the three CoreML bundles plus the
     /// tokenizer/model JSON WhisperKit loads locally — so the fail-closed pack validation can be
-    /// exercised without the multi-hundred-megabyte weights.
+    /// exercised without the multi-hundred-megabyte weights. The three JSON files default to the
+    /// shape the pinned pack ships; `nil` leaves the file out, which is how the incomplete-pack
+    /// cases below reproduce the shapes that send WhisperKit's tokenizer loader to the Hub.
     @discardableResult
-    private func writeCompleteModelPack(at root: URL) throws -> URL {
+    private func writeModelPack(
+        at root: URL,
+        tokenizerData: String? = #"{"model":{"type":"BPE","vocab":{},"merges":[]}}"#,
+        tokenizerConfig: String? = #"{"tokenizer_class":"WhisperTokenizer"}"#,
+        modelConfig: String? = #"{"model_type":"whisper"}"#
+    ) throws -> URL {
         let pack = root.appendingPathComponent(WhisperModelPack.englishSmall.name, isDirectory: true)
         let manager = FileManager.default
         try manager.createDirectory(at: pack, withIntermediateDirectories: true)
@@ -1037,13 +1044,25 @@ final class V01PipelineTests: XCTestCase {
                 withIntermediateDirectories: true
             )
         }
-        try Data(#"{"model":{"type":"BPE","vocab":{},"merges":[]}}"#.utf8)
-            .write(to: pack.appendingPathComponent(WhisperModelPackLayout.tokenizerName))
-        try Data(#"{"tokenizer_class":"WhisperTokenizer"}"#.utf8)
-            .write(to: pack.appendingPathComponent(WhisperModelPackLayout.tokenizerConfigName))
-        try Data(#"{"model_type":"whisper"}"#.utf8)
-            .write(to: pack.appendingPathComponent(WhisperModelPackLayout.modelConfigName))
+        let files: [(name: String, contents: String?)] = [
+            (WhisperModelPackLayout.tokenizerName, tokenizerData),
+            (WhisperModelPackLayout.tokenizerConfigName, tokenizerConfig),
+            (WhisperModelPackLayout.modelConfigName, modelConfig),
+        ]
+        for file in files {
+            let url = pack.appendingPathComponent(file.name)
+            guard let contents = file.contents else {
+                try? manager.removeItem(at: url)
+                continue
+            }
+            try Data(contents.utf8).write(to: url)
+        }
         return pack
+    }
+
+    @discardableResult
+    private func writeCompleteModelPack(at root: URL) throws -> URL {
+        try writeModelPack(at: root)
     }
 
     private func temporaryPackRoot() -> URL {
@@ -1132,6 +1151,19 @@ final class V01PipelineTests: XCTestCase {
                     at: pack.appendingPathComponent(WhisperModelPackLayout.modelConfigName)
                 )
             }),
+            ("only config.json, no tokenizer_config.json", { pack in
+                try FileManager.default.removeItem(
+                    at: pack.appendingPathComponent(WhisperModelPackLayout.tokenizerConfigName)
+                )
+            }),
+            ("tokenizer config with no class and no model config", { pack in
+                try Data("{}".utf8).write(
+                    to: pack.appendingPathComponent(WhisperModelPackLayout.tokenizerConfigName)
+                )
+                try FileManager.default.removeItem(
+                    at: pack.appendingPathComponent(WhisperModelPackLayout.modelConfigName)
+                )
+            }),
         ]
 
         for testCase in cases {
@@ -1141,6 +1173,165 @@ final class V01PipelineTests: XCTestCase {
             XCTAssertThrowsError(
                 try WhisperKitSmallEN(configuration: .init(modelDirectory: root)),
                 "\(testCase.label): the pack is rejected before capture"
+            ) { error in
+                guard case ASRError.modelPackMissing = error else {
+                    return XCTFail("\(testCase.label): expected a fail-closed pack error, got \(error)")
+                }
+            }
+            try? FileManager.default.removeItem(at: root)
+        }
+    }
+
+    // MARK: - 11. The pack check mirrors WhisperKit's local tokenizer resolution
+
+    /// WhisperKit's `ModelUtilities.loadTokenizer` answers *every* local-load throw with a Hub
+    /// download, even though `download` is false. Its local load throws before it reads a single
+    /// token when the tokenizer config is absent (`missingConfig`), when neither the tokenizer
+    /// config nor `config.json` resolves a class (`missingTokenizerClassInConfig`), when the class
+    /// is not one its `knownTokenizers` table can build (`unsupportedTokenizer`), and when
+    /// `tokenizer.json` has no vocabulary for the resolved class (`missingVocab` — and a BPE
+    /// model without `merges` traps outright). Each pack below is one of those shapes, so
+    /// `WhisperKitSmallEN.init` has to reject it before capture opens; the shapes WhisperKit can
+    /// classify and build locally must keep validating, or the check would be a blanket refusal.
+    ///
+    /// The assertions also run WhisperKit's own local loader (`AutoTokenizerWrapper.from`) on the
+    /// same folders: an accepted pack must load from disk, and a rejected one must be exactly the
+    /// shape whose local load throws — the throw `ModelUtilities.loadTokenizer` answers with its
+    /// Hub download.
+    func testTokenizerResolutionMirrorsWhisperKitLocalLoader() async throws {
+        typealias PackShape = (
+            label: String,
+            tokenizerData: String,
+            tokenizerConfig: String?,
+            modelConfig: String?
+        )
+        let bpeData = #"{"model":{"type":"BPE","vocab":{},"merges":[]}}"#
+
+        let loadable: [PackShape] = [
+            (
+                "tokenizer_class names a class WhisperKit builds",
+                bpeData,
+                #"{"tokenizer_class":"WhisperTokenizer"}"#,
+                #"{"model_type":"whisper"}"#
+            ),
+            (
+                "WhisperKit strips the tokenizer_class Fast suffix",
+                bpeData,
+                #"{"tokenizer_class":"WhisperTokenizerFast"}"#,
+                nil
+            ),
+            (
+                "config.json model_type synthesizes the class",
+                bpeData,
+                #"{"unk_token":"<|endoftext|>"}"#,
+                #"{"model_type":"whisper"}"#
+            ),
+        ]
+        for testCase in loadable {
+            let root = temporaryPackRoot()
+            let pack = try writeModelPack(
+                at: root,
+                tokenizerData: testCase.tokenizerData,
+                tokenizerConfig: testCase.tokenizerConfig,
+                modelConfig: testCase.modelConfig
+            )
+            let loadsLocally = await WhisperModelPackLayout.localTokenizerLoads(packFolder: pack)
+            XCTAssertTrue(
+                loadsLocally,
+                "\(testCase.label): WhisperKit's local loader reads this pack from disk"
+            )
+            XCTAssertNoThrow(
+                try WhisperKitSmallEN(configuration: .init(modelDirectory: root)),
+                "\(testCase.label): WhisperKit loads this tokenizer locally, so the pack stays valid"
+            )
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        typealias NetworkedPack = (
+            label: String,
+            tokenizerData: String,
+            tokenizerConfig: String?,
+            modelConfig: String?,
+            localLoaderThrows: Bool
+        )
+        // `localLoaderThrows` is false only for the BPE pack without `merges`: WhisperKit traps
+        // (`fatalError`) on that shape, which a regression cannot exercise in-process.
+        let networked: [NetworkedPack] = [
+            (
+                "only config.json, no tokenizer_config.json",
+                bpeData,
+                nil,
+                #"{"model_type":"whisper"}"#,
+                true
+            ),
+            (
+                "tokenizer config without a class and no config.json",
+                bpeData,
+                #"{"unk_token":"<|endoftext|>"}"#,
+                nil,
+                true
+            ),
+            (
+                "tokenizer config without a class and config.json without a model_type",
+                bpeData,
+                "{}",
+                "{}",
+                true
+            ),
+            (
+                "empty tokenizer_class",
+                bpeData,
+                #"{"tokenizer_class":""}"#,
+                #"{"model_type":"whisper"}"#,
+                true
+            ),
+            (
+                "tokenizer_class WhisperKit cannot build",
+                bpeData,
+                #"{"tokenizer_class":"NotATokenizer"}"#,
+                #"{"model_type":"whisper"}"#,
+                true
+            ),
+            (
+                "config.json present but not JSON",
+                bpeData,
+                #"{"tokenizer_class":"WhisperTokenizer"}"#,
+                "{ not json",
+                true
+            ),
+            (
+                "tokenizer.json model without merges",
+                #"{"model":{"type":"BPE","vocab":{}}}"#,
+                #"{"tokenizer_class":"WhisperTokenizer"}"#,
+                #"{"model_type":"whisper"}"#,
+                false
+            ),
+            (
+                "tokenizer.json model without vocab",
+                #"{"model":{"type":"BPE","merges":[]}}"#,
+                #"{"tokenizer_class":"WhisperTokenizer"}"#,
+                #"{"model_type":"whisper"}"#,
+                true
+            ),
+        ]
+        for testCase in networked {
+            let root = temporaryPackRoot()
+            let pack = try writeModelPack(
+                at: root,
+                tokenizerData: testCase.tokenizerData,
+                tokenizerConfig: testCase.tokenizerConfig,
+                modelConfig: testCase.modelConfig
+            )
+            if testCase.localLoaderThrows {
+                let loadsLocally = await WhisperModelPackLayout.localTokenizerLoads(packFolder: pack)
+                XCTAssertFalse(
+                    loadsLocally,
+                    "\(testCase.label): WhisperKit's local load throws here, so it downloads instead"
+                )
+            }
+            XCTAssertThrowsError(
+                try WhisperKitSmallEN(configuration: .init(modelDirectory: root)),
+                "\(testCase.label): WhisperKit would download the tokenizer from the Hub"
             ) { error in
                 guard case ASRError.modelPackMissing = error else {
                     return XCTFail("\(testCase.label): expected a fail-closed pack error, got \(error)")

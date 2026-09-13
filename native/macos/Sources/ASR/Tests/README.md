@@ -25,7 +25,17 @@ uses, without asking for microphone permission or opening a device:
 9. an incomplete WhisperKit pack fails closed in `WhisperKitSmallEN.init` before capture: a missing
    or corrupt `tokenizer.json`, a tokenizer file without its `model` section, a missing CoreML
    bundle and a pack without any tokenizer/model config are all rejected instead of letting
-   WhisperKit's tokenizer loader reach the Hub (a complete pack still loads).
+   WhisperKit's tokenizer loader reach the Hub (a complete pack still loads);
+10. the pack check mirrors WhisperKit's own local tokenizer resolution. `config.json` without a
+    `tokenizer_config.json`, a tokenizer config that resolves no class (`missingConfig` /
+    `missingTokenizerClassInConfig`), an empty or unsupported `tokenizer_class`
+    (`unsupportedTokenizer`), a `config.json` that is present but not JSON, and a `tokenizer.json`
+    without `vocab`/`merges` are each rejected, while the shapes WhisperKit loads locally (a named
+    `WhisperTokenizer`, its `Fast` suffix, and the class synthesized from `model_type`) stay valid.
+    Every case also runs WhisperKit's own `AutoTokenizerWrapper.from(modelFolder:)` — the call
+    `ModelUtilities.loadTokenizer` makes before its Hub fallback — so the regression proves that a
+    rejected pack really is the shape whose local load throws and that an accepted pack loads from
+    disk.
 
 ```sh
 swift test --package-path native/macos/Sources/ASR
