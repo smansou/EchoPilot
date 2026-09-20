@@ -1,0 +1,232 @@
+{
+  "contractVersion": 1,
+  "fixtureId": "memory-temporal-corrections",
+  "consent": "synthetic",
+  "note": "Synthetic temporal-correction fixture for the M04 acceptance oracle (inspect/correct a memory -> updated temporal state -> different evidence-backed answer). No real user data. Two claims conflict with stronger evidence: an agent message about a failed tool receipt and an agent message about a user-confirmed fact. The polling decision is reversed at runtime through the records edit API, never by rewriting the fixture.",
+  "profileId": "profile-temporal",
+  "projectId": "project-temporal",
+  "worktreeId": "worktree-temporal-main",
+  "sessionId": "session-temporal-1",
+  "canaries": {
+    "originalChoice": "echopilotm04pollinterval30s1a2b",
+    "revisedChoice": "echopilotm04pollinterval5s3c4d",
+    "userFact": "echopilotm04durablememoryperproject5e6f",
+    "agentClaim": "echopilotm04durablememoryshared7a8b",
+    "failedReceipt": "echopilotm04smokefailed9c0d",
+    "expiredSource": "echopilotm04expiredraw0f1e"
+  },
+  "questions": {
+    "polling": "What polling interval should the Atlas widget use?",
+    "memory": "Where does Atlas durable memory live?",
+    "unrelated": "Which color should the zebra dashboard use?"
+  },
+  "reversal": {
+    "decisionId": "decision-atlas-polling",
+    "question": "What polling interval should the Atlas widget use?",
+    "choice": "Five seconds between polls. Canary echopilotm04pollinterval5s3c4d.",
+    "rationale": "The status panel needs faster feedback while a build is running.",
+    "actor": "user",
+    "occurredAt": "2026-09-12T10:00:00.000Z"
+  },
+  "events": [
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-temporal-user-ask-001",
+      "sourceId": "source-temporal-live",
+      "sourceEventId": "temporal-0001",
+      "sourceSequence": 1,
+      "ingestSequence": 1,
+      "occurredAt": "2026-09-10T09:00:00.000Z",
+      "observedAt": "2026-09-10T09:00:00.400Z",
+      "scope": {
+        "profileId": "profile-temporal",
+        "projectId": "project-temporal",
+        "worktreeId": "worktree-temporal-main",
+        "sessionId": "session-temporal-1",
+        "sensitivity": "normal"
+      },
+      "kind": "user_utterance",
+      "payloadRef": "fixture://temporal/user-ask-001",
+      "contentHash": "sha256:temporal-0001",
+      "trust": "user_explicit"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-temporal-decision-001",
+      "sourceId": "source-temporal-live",
+      "sourceEventId": "temporal-0002",
+      "sourceSequence": 2,
+      "ingestSequence": 2,
+      "occurredAt": "2026-09-10T09:05:00.000Z",
+      "observedAt": "2026-09-10T09:05:00.400Z",
+      "scope": {
+        "profileId": "profile-temporal",
+        "projectId": "project-temporal",
+        "worktreeId": "worktree-temporal-main",
+        "sessionId": "session-temporal-1",
+        "sensitivity": "normal"
+      },
+      "kind": "decision",
+      "payloadRef": "fixture://temporal/decision-001",
+      "contentHash": "sha256:temporal-0002",
+      "trust": "user_explicit"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-temporal-receipt-002",
+      "sourceId": "source-temporal-live",
+      "sourceEventId": "temporal-0003",
+      "sourceSequence": 3,
+      "ingestSequence": 3,
+      "occurredAt": "2026-09-10T09:30:00.000Z",
+      "observedAt": "2026-09-10T09:30:01.200Z",
+      "scope": {
+        "profileId": "profile-temporal",
+        "projectId": "project-temporal",
+        "worktreeId": "worktree-temporal-main",
+        "sessionId": "session-temporal-1",
+        "sensitivity": "normal"
+      },
+      "kind": "tool_completed",
+      "payloadRef": "fixture://temporal/receipt-002",
+      "contentHash": "sha256:temporal-0003",
+      "trust": "tool_observed"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-temporal-agent-task-claim-003",
+      "sourceId": "source-temporal-live",
+      "sourceEventId": "temporal-0004",
+      "sourceSequence": 4,
+      "ingestSequence": 4,
+      "occurredAt": "2026-09-10T09:31:00.000Z",
+      "observedAt": "2026-09-10T09:31:00.100Z",
+      "scope": {
+        "profileId": "profile-temporal",
+        "projectId": "project-temporal",
+        "worktreeId": "worktree-temporal-main",
+        "sessionId": "session-temporal-1",
+        "sensitivity": "normal"
+      },
+      "kind": "agent_message",
+      "payloadRef": "fixture://temporal/agent-task-claim-003",
+      "contentHash": "sha256:temporal-0004",
+      "trust": "agent_reported"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-temporal-user-fact-004",
+      "sourceId": "source-temporal-live",
+      "sourceEventId": "temporal-0005",
+      "sourceSequence": 5,
+      "ingestSequence": 5,
+      "occurredAt": "2026-09-10T10:00:00.000Z",
+      "observedAt": "2026-09-10T10:00:00.300Z",
+      "scope": {
+        "profileId": "profile-temporal",
+        "projectId": "project-temporal",
+        "worktreeId": "worktree-temporal-main",
+        "sessionId": "session-temporal-1",
+        "sensitivity": "normal"
+      },
+      "kind": "user_utterance",
+      "payloadRef": "fixture://temporal/user-fact-004",
+      "contentHash": "sha256:temporal-0005",
+      "trust": "user_explicit"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "evt-temporal-agent-fact-claim-005",
+      "sourceId": "source-temporal-live",
+      "sourceEventId": "temporal-0006",
+      "sourceSequence": 6,
+      "ingestSequence": 6,
+      "occurredAt": "2026-09-10T10:05:00.000Z",
+      "observedAt": "2026-09-10T10:05:00.200Z",
+      "scope": {
+        "profileId": "profile-temporal",
+        "projectId": "project-temporal",
+        "worktreeId": "worktree-temporal-main",
+        "sessionId": "session-temporal-1",
+        "sensitivity": "normal"
+      },
+      "kind": "agent_message",
+      "payloadRef": "fixture://temporal/agent-fact-claim-005",
+      "contentHash": "sha256:temporal-0006",
+      "trust": "agent_reported"
+    }
+  ],
+  "payloads": {
+    "fixture://temporal/user-ask-001": {
+      "text": "What polling interval should the Atlas widget use for project status?"
+    },
+    "fixture://temporal/decision-001": {
+      "question": "What polling interval should the Atlas widget use?",
+      "choice": "Thirty seconds between polls. Canary echopilotm04pollinterval30s1a2b.",
+      "rationale": "A slow poll keeps the widget quiet during long builds.",
+      "decidingActor": "user"
+    },
+    "fixture://temporal/receipt-002": {
+      "tool": "pnpm",
+      "command": "pnpm smoke",
+      "taskId": "task-atlas-temporal-smoke",
+      "title": "Run the Atlas smoke test",
+      "exitCode": 1,
+      "receiptId": "receipt-atlas-smoke-1",
+      "output": "Atlas smoke test failed with canary echopilotm04smokefailed9c0d."
+    },
+    "fixture://temporal/agent-task-claim-003": {
+      "text": "Everything is fine: the Atlas smoke test passed and the failing receipt was a false alarm."
+    },
+    "fixture://temporal/user-fact-004": {
+      "text": "Record that Atlas durable memory lives in one encrypted database per project. Canary echopilotm04durablememoryperproject5e6f."
+    },
+    "fixture://temporal/agent-fact-claim-005": {
+      "text": "Atlas durable memory now uses one shared database for every project. Canary echopilotm04durablememoryshared7a8b."
+    }
+  },
+  "derived": {
+    "facts": [
+      {
+        "id": "fact-atlas-durable-memory-user",
+        "subject": "Atlas durable memory",
+        "predicate": "storage",
+        "object": "One encrypted database per project. Canary echopilotm04durablememoryperproject5e6f.",
+        "sourceEventIds": ["evt-temporal-user-fact-004"]
+      },
+      {
+        "id": "fact-atlas-durable-memory-agent-claim",
+        "subject": "Atlas durable memory",
+        "predicate": "storage",
+        "object": "One shared database for every project. Canary echopilotm04durablememoryshared7a8b.",
+        "sourceEventIds": ["evt-temporal-agent-fact-claim-005"]
+      },
+      {
+        "id": "fact-atlas-smoke-agent-claim",
+        "subject": "task-atlas-temporal-smoke",
+        "predicate": "outcome",
+        "object": "passed",
+        "sourceEventIds": ["evt-temporal-agent-task-claim-003"]
+      },
+      {
+        "id": "fact-atlas-legacy-exporter",
+        "subject": "Atlas legacy exporter",
+        "predicate": "retention",
+        "object": "Keep the legacy exporter for ninety days. Canary echopilotm04expiredraw0f1e.",
+        "sourceEventIds": ["evt-temporal-expired-raw-000"]
+      }
+    ],
+    "decisions": [
+      {
+        "id": "decision-atlas-polling",
+        "question": "What polling interval should the Atlas widget use?",
+        "choice": "Thirty seconds between polls. Canary echopilotm04pollinterval30s1a2b.",
+        "sourceEventIds": ["evt-temporal-decision-001"]
+      }
+    ],
+    "coverage": {
+      "semantic": "partial",
+      "failedJobs": ["segment-temporal-2"]
+    }
+  }
+}
