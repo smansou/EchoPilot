@@ -1,0 +1,149 @@
+{
+  "id": "r02-pillar-stream",
+  "version": 1,
+  "ticket": "R02",
+  "consent": "synthetic",
+  "description": "Deterministic attention-policy event stream for the R02 acceptance oracle (IMPLEMENTATION_PLAN.md section 5.7). Every step is synthetic: candidates submitted from every pillar source, user-speech boundaries, and settings changes. `at` is the injected fake clock; `expect` lists the decision receipts that step must return, matched by candidateId/outcome/reason (and setting when present). Steps whose expected outcome is not 'spoken' are placed at least the 30-second lease bound after the last spoken decision, so no expectation depends on interactions this oracle does not pin.",
+  "clockStart": "2026-09-21T09:00:00.000Z",
+  "pillarSources": ["capture", "harness", "memory", "narration", "desktop", "gaze", "voice"],
+  "steps": [
+    {
+      "id": "s01",
+      "at": "2026-09-21T09:00:00.000Z",
+      "kind": "candidate",
+      "intent": "A turn-complete summary with no prior user utterance in the session is spoken after the (already met) quiet gap.",
+      "candidate": { "candidateId": "stream-n1", "sourceId": "narration", "eventClass": "turn-complete", "eventId": "ev-turn-1", "turnId": "turn-1", "sessionId": "sess-alpha" },
+      "expect": [{ "candidateId": "stream-n1", "outcome": "spoken", "reason": "turn-complete-quiet-gap" }]
+    },
+    {
+      "id": "s02",
+      "at": "2026-09-21T09:00:40.000Z",
+      "kind": "candidate",
+      "intent": "First routine progress digest of the session is spoken under the focused-work default.",
+      "candidate": { "candidateId": "stream-h1", "sourceId": "harness", "eventClass": "routine-progress", "eventId": "ev-progress-1", "sessionId": "sess-alpha" },
+      "expect": [{ "candidateId": "stream-h1", "outcome": "spoken", "reason": "routine-digest" }]
+    },
+    {
+      "id": "s03",
+      "at": "2026-09-21T09:01:20.000Z",
+      "kind": "candidate",
+      "intent": "A second digest 40 s later is inside the focused-work 120 s cooldown and is suppressed with the setting named.",
+      "candidate": { "candidateId": "stream-h2", "sourceId": "harness", "eventClass": "routine-progress", "eventId": "ev-progress-2", "sessionId": "sess-alpha" },
+      "expect": [{ "candidateId": "stream-h2", "outcome": "suppressed", "reason": "cooldown-active", "setting": "preset" }]
+    },
+    {
+      "id": "s04",
+      "at": "2026-09-21T09:02:50.000Z",
+      "kind": "candidate",
+      "intent": "130 s after the last spoken digest the cooldown has elapsed, so a third digest is spoken.",
+      "candidate": { "candidateId": "stream-h3", "sourceId": "harness", "eventClass": "routine-progress", "eventId": "ev-progress-3", "sessionId": "sess-alpha" },
+      "expect": [{ "candidateId": "stream-h3", "outcome": "spoken", "reason": "routine-digest" }]
+    },
+    {
+      "id": "s05",
+      "at": "2026-09-21T09:03:30.000Z",
+      "kind": "candidate",
+      "intent": "A background desktop session is a visual badge in the focused-work preset: no lease, no audio.",
+      "candidate": { "candidateId": "stream-b1", "sourceId": "desktop", "eventClass": "background-session", "eventId": "ev-desktop-1", "sessionId": "sess-beta" },
+      "expect": [{ "candidateId": "stream-b1", "outcome": "visual", "reason": "preset-visual-only", "setting": "preset" }]
+    },
+    { "id": "s06", "at": "2026-09-21T09:04:20.000Z", "kind": "user-speaking-start", "intent": "The user takes the floor; nothing may be spoken from here until the utterance ends.", "expect": [] },
+    {
+      "id": "s07",
+      "at": "2026-09-21T09:04:22.000Z",
+      "kind": "candidate",
+      "intent": "A blocking permission request cannot talk over the open user utterance; it waits.",
+      "candidate": { "candidateId": "stream-c1", "sourceId": "capture", "eventClass": "blocking", "eventId": "ev-permission-1" },
+      "expect": [{ "candidateId": "stream-c1", "outcome": "deferred", "reason": "user-speaking-safe-gap", "setting": null }]
+    },
+    { "id": "s08", "at": "2026-09-21T09:04:24.000Z", "kind": "tick", "intent": "A tick while the user is still speaking changes nothing and grants no lease.", "expect": [] },
+    { "id": "s09", "at": "2026-09-21T09:04:26.000Z", "kind": "user-speaking-end", "intent": "The safe-gap clock starts.", "expect": [] },
+    {
+      "id": "s10",
+      "at": "2026-09-21T09:04:29.500Z",
+      "kind": "tick",
+      "intent": "Three and a half seconds after the utterance ended, past the 3 s safe-gap bound, the deferred blocking request must be spoken.",
+      "expect": [{ "candidateId": "stream-c1", "outcome": "spoken", "reason": "blocking-safe-gap" }]
+    },
+    {
+      "id": "s11",
+      "at": "2026-09-21T09:05:40.000Z",
+      "kind": "candidate",
+      "intent": "An important failure requiring a decision is spoken while the floor is free.",
+      "candidate": { "candidateId": "stream-f1", "sourceId": "memory", "eventClass": "important-failure", "eventId": "ev-failure-1", "contentKey": "db-migration", "sessionId": "sess-alpha" },
+      "expect": [{ "candidateId": "stream-f1", "outcome": "spoken", "reason": "important-failure-decision" }]
+    },
+    { "id": "s12", "at": "2026-09-21T09:06:20.000Z", "kind": "user-speaking-start", "intent": "The user speaks again; a completion summary must wait.", "expect": [] },
+    {
+      "id": "s13",
+      "at": "2026-09-21T09:06:21.000Z",
+      "kind": "candidate",
+      "intent": "A turn-complete summary for the running turn waits for the user to finish.",
+      "candidate": { "candidateId": "stream-n2", "sourceId": "narration", "eventClass": "turn-complete", "eventId": "ev-turn-2a", "turnId": "turn-2", "sessionId": "sess-alpha" },
+      "expect": [{ "candidateId": "stream-n2", "outcome": "deferred", "reason": "user-speaking-safe-gap", "setting": null }]
+    },
+    {
+      "id": "s14",
+      "at": "2026-09-21T09:06:21.500Z",
+      "kind": "candidate",
+      "intent": "A newer summary for the same turn replaces the one that has not been spoken yet.",
+      "candidate": { "candidateId": "stream-n3", "sourceId": "narration", "eventClass": "turn-complete", "eventId": "ev-turn-2b", "turnId": "turn-2", "sessionId": "sess-alpha" },
+      "expect": [
+        { "candidateId": "stream-n2", "outcome": "replaced", "reason": "replaced-stale-completion", "setting": null },
+        { "candidateId": "stream-n3", "outcome": "deferred", "reason": "user-speaking-safe-gap", "setting": null }
+      ]
+    },
+    { "id": "s15", "at": "2026-09-21T09:06:22.000Z", "kind": "user-speaking-end", "intent": "Quiet-gap clock starts at 09:06:22.000Z.", "expect": [] },
+    { "id": "s16", "at": "2026-09-21T09:06:22.400Z", "kind": "tick", "intent": "400 ms of quiet is less than the 750 ms quiet gap; the summary stays deferred.", "expect": [] },
+    {
+      "id": "s17",
+      "at": "2026-09-21T09:06:23.000Z",
+      "kind": "tick",
+      "intent": "One second of quiet has elapsed, so the surviving summary for turn-2 is spoken.",
+      "expect": [{ "candidateId": "stream-n3", "outcome": "spoken", "reason": "turn-complete-quiet-gap" }]
+    },
+    {
+      "id": "s18",
+      "at": "2026-09-21T09:07:30.000Z",
+      "kind": "candidate",
+      "intent": "A gaze-sourced blocking request goes through the same policy and lease rules as every other pillar.",
+      "candidate": { "candidateId": "stream-g1", "sourceId": "gaze", "eventClass": "blocking", "eventId": "ev-gaze-1" },
+      "expect": [{ "candidateId": "stream-g1", "outcome": "spoken", "reason": "blocking-safe-gap" }]
+    },
+    { "id": "s19", "at": "2026-09-21T09:08:40.000Z", "kind": "settings", "intent": "The user turns on explicit output silence.", "settings": { "outputSilence": true }, "expect": [] },
+    {
+      "id": "s20",
+      "at": "2026-09-21T09:08:42.000Z",
+      "kind": "candidate",
+      "intent": "A user-requested reply still obeys explicit output silence.",
+      "candidate": { "candidateId": "stream-v1", "sourceId": "voice", "eventClass": "user-requested", "eventId": "ev-answer-1" },
+      "expect": [{ "candidateId": "stream-v1", "outcome": "suppressed", "reason": "explicit-output-silence", "setting": "outputSilence" }]
+    },
+    {
+      "id": "s21",
+      "at": "2026-09-21T09:08:44.000Z",
+      "kind": "candidate",
+      "intent": "A blocking event never overrides explicit output silence, no matter how critical it is.",
+      "candidate": { "candidateId": "stream-c2", "sourceId": "capture", "eventClass": "blocking", "eventId": "ev-permission-2" },
+      "expect": [{ "candidateId": "stream-c2", "outcome": "suppressed", "reason": "explicit-output-silence", "setting": "outputSilence" }]
+    },
+    { "id": "s22", "at": "2026-09-21T09:08:46.000Z", "kind": "settings", "intent": "The user stops the assistant: mute, with output silence lifted.", "settings": { "outputSilence": false, "muted": true }, "expect": [] },
+    {
+      "id": "s23",
+      "at": "2026-09-21T09:08:48.000Z",
+      "kind": "candidate",
+      "intent": "While muted a blocking request is suppressed, never queued.",
+      "candidate": { "candidateId": "stream-c3", "sourceId": "capture", "eventClass": "blocking", "eventId": "ev-permission-3" },
+      "expect": [{ "candidateId": "stream-c3", "outcome": "suppressed", "reason": "muted", "setting": "muted" }]
+    },
+    { "id": "s24", "at": "2026-09-21T09:08:50.000Z", "kind": "settings", "intent": "The user resumes the assistant.", "settings": { "muted": false }, "expect": [] },
+    {
+      "id": "s25",
+      "at": "2026-09-21T09:08:52.000Z",
+      "kind": "candidate",
+      "intent": "A fresh user-requested reply is spoken once the policy is allowed to speak again.",
+      "candidate": { "candidateId": "stream-v2", "sourceId": "voice", "eventClass": "user-requested", "eventId": "ev-answer-2" },
+      "expect": [{ "candidateId": "stream-v2", "outcome": "spoken", "reason": "user-requested-reply" }]
+    }
+  ]
+}
