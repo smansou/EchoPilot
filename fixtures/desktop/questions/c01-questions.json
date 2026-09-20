@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "ticket": "C01",
+  "description": "Deterministic focused-app scenarios for the C01 desktop \"what is this?\" tracer. Every app name, window title, screen line, and memory entry below is synthetic and exists only to pin scoping and grounding behavior; nothing here was captured from a real screen, and no real credential, user text, or screenshot belongs in this file.",
+  "profileId": "profile-c01",
+  "project": { "projectId": "atlas", "displayName": "Atlas" },
+  "excludedBundleIds": ["com.1password.1password", "com.apple.Mail", "com.echopilot.widget"],
+  "forbiddenControlStateWords": ["enabled", "disabled"],
+  "excludedTemplate": "{app} is excluded from capture, so I can't look at it. Remove it from the excluded apps list if you want me to read it.",
+  "limitedTemplates": {
+    "accessibility_denied": "I couldn't read {app} because Accessibility access is missing. Grant Accessibility to EchoPilot and ask again; I won't guess about what's on screen.",
+    "screen_recording_denied": "I couldn't see {app} because Screen Recording access is missing. Grant Screen Recording to EchoPilot and ask again; I won't guess about what's on screen.",
+    "no_window": "I couldn't find a window for {app} to look at. Bring it forward and ask again; I won't guess about what's on screen.",
+    "empty_context": "I couldn't read anything on {app}: no Accessibility text and no screenshot are available. Bring the content into view or grant access and ask again; I won't guess about what's on screen."
+  },
+  "scenarios": [
+    {
+      "key": "browser-error",
+      "question": "What is this error?",
+      "app": {
+        "bundleId": "com.google.Chrome",
+        "name": "Google Chrome",
+        "windowTitle": "TypeError: Cannot read properties of undefined (reading 'rows') · dashboard.ts"
+      },
+      "capture": {
+        "status": "captured",
+        "snapshot": {
+          "snapshotId": "c01-snap-browser-error",
+          "capturedAtMs": 1758399000000,
+          "screenshotRef": "artifact://c01/browser-error@2x.png",
+          "quality": "full",
+          "truncated": false,
+          "axNodes": [
+            { "role": "AXStaticText", "value": "TypeError: Cannot read properties of undefined (reading 'rows')" },
+            { "role": "AXStaticText", "value": "    at renderRows (dashboard.ts:212:14)" }
+          ],
+          "ocrSpans": [
+            { "text": "TypeError: Cannot read properties of undefined (reading 'rows')" }
+          ]
+        }
+      },
+      "memory": {
+        "explicitProject": [
+          { "id": "mem-atlas-1", "projectId": "atlas", "text": "Atlas dashboard refactor: renderRows now reads through a nullable table lookup (build 214)." }
+        ],
+        "otherProjects": [
+          { "id": "mem-helios-1", "projectId": "helios", "text": "Helios regression: dashboard.ts rows rendering returned undefined after the cache change." }
+        ]
+      },
+      "reasoner": {
+        "answer": "That is a TypeError: renderRows is reading rows from an undefined table, which matches the nullable lookup noted in the Atlas refactor. The stack points at dashboard.ts:212.",
+        "inventedEvidenceIds": ["mem-helios-1"]
+      }
+    },
+    {
+      "key": "ide-control",
+      "question": "What does this control do?",
+      "app": {
+        "bundleId": "com.microsoft.VSCode",
+        "name": "Visual Studio Code",
+        "windowTitle": "atlas — src/dashboard.ts — Visual Studio Code"
+      },
+      "capture": {
+        "status": "captured",
+        "snapshot": {
+          "snapshotId": "c01-snap-ide-control",
+          "capturedAtMs": 1758399060000,
+          "screenshotRef": "artifact://c01/ide-control@2x.png",
+          "quality": "partial",
+          "truncated": false,
+          "axNodes": [
+            { "role": "AXButton", "value": "Run Without Debugging  ⌃F5" },
+            { "role": "AXButton", "value": "Toggle Breakpoint" }
+          ],
+          "ocrSpans": []
+        }
+      },
+      "memory": {
+        "explicitProject": [
+          { "id": "mem-atlas-2", "projectId": "atlas", "text": "Atlas debug workflow: Run Without Debugging launches the active configuration without attaching the debugger." }
+        ],
+        "otherProjects": []
+      },
+      "reasoner": {
+        "answer": "That control is Run Without Debugging: it starts the active launch configuration without attaching the debugger.",
+        "inventedEvidenceIds": []
+      }
+    },
+    {
+      "key": "excluded-app",
+      "question": "What is this?",
+      "app": {
+        "bundleId": "com.1password.1password",
+        "name": "1Password",
+        "windowTitle": "Vault"
+      },
+      "captureMustNeverBeRequested": true,
+      "leakMarker": "synthetic-vault-master-password-2f77ae",
+      "capture": {
+        "status": "captured",
+        "snapshot": {
+          "snapshotId": "c01-snap-excluded",
+          "capturedAtMs": 1758399120000,
+          "screenshotRef": "artifact://c01/excluded@2x.png",
+          "quality": "full",
+          "truncated": false,
+          "axNodes": [
+            { "role": "AXTextField", "value": "synthetic-vault-master-password-2f77ae" }
+          ],
+          "ocrSpans": []
+        }
+      },
+      "memory": { "explicitProject": [], "otherProjects": [] },
+      "reasoner": null
+    },
+    {
+      "key": "missing-accessibility",
+      "question": "Why is this button disabled?",
+      "app": {
+        "bundleId": "com.microsoft.VSCode",
+        "name": "Visual Studio Code",
+        "windowTitle": "atlas — src/dashboard.ts"
+      },
+      "capture": { "status": "unavailable", "reason": "accessibility_denied" },
+      "memory": { "explicitProject": [], "otherProjects": [] },
+      "reasoner": {
+        "answer": "The Run button is disabled because the debugger is already attached.",
+        "inventedEvidenceIds": []
+      }
+    },
+    {
+      "key": "empty-context",
+      "question": "What is this control?",
+      "app": {
+        "bundleId": "com.apple.Safari",
+        "name": "Safari",
+        "windowTitle": "Untitled"
+      },
+      "capture": {
+        "status": "captured",
+        "snapshot": {
+          "snapshotId": "c01-snap-empty",
+          "capturedAtMs": 1758399180000,
+          "screenshotRef": null,
+          "quality": "unavailable",
+          "truncated": false,
+          "axNodes": [
+            { "role": "AXGroup", "value": "   " }
+          ],
+          "ocrSpans": []
+        }
+      },
+      "memory": { "explicitProject": [], "otherProjects": [] },
+      "reasoner": {
+        "answer": "That control is the page reload button and it is enabled.",
+        "inventedEvidenceIds": []
+      }
+    }
+  ]
+}
