@@ -1,0 +1,43 @@
+{
+  "$comment": "Held-out grounded session question shared by the deterministic memory-tool oracle and the opt-in paid test in packages/voice/src/backends/acceptance.test.ts. Contains no secrets and no real user audio.",
+  "scope": {
+    "profileId": "profile-v04",
+    "projectId": "project-v04",
+    "sensitivity": "normal"
+  },
+  "question": "What did we decide about the desktop auth flow?",
+  "tool": "search_memory",
+  "tool_arguments": {
+    "query": "desktop auth flow decision"
+  },
+  "evidence": [
+    {
+      "evidenceId": "ev-v04-1",
+      "text": "Decision: the desktop client uses PKCE; the implicit flow was rejected."
+    },
+    {
+      "evidenceId": "ev-v04-2",
+      "text": "The PKCE decision was reconfirmed on 2026-09-10."
+    }
+  ],
+  "evidence_summary": "Decision: the desktop client uses PKCE; the implicit flow was rejected. Reconfirmed 2026-09-10.",
+  "grounded_fact": "PKCE",
+  "answer_segments": [
+    {
+      "text": "The desktop auth flow uses PKCE. ",
+      "durationMs": 400
+    },
+    {
+      "text": "The implicit flow was rejected. ",
+      "durationMs": 400
+    },
+    {
+      "text": "It was reconfirmed on September 10. ",
+      "durationMs": 400
+    },
+    {
+      "text": "Nothing else is pending. ",
+      "durationMs": 400
+    }
+  ]
+}
