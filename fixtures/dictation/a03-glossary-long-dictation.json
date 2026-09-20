@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "ticket": "A03",
+  "description": "Synthetic fixture for the A03 path (user corrects a term -> glossary update -> better later dictation). Every transcript, project id, and utterance here is invented; there is no real audio or user data. echoPilot/sqlite/jsonPerson carry the learned entries and the utterances that must (or must not) be corrected; longDictation carries one bounded, overlapping ASR window sequence whose committed text must concatenate without a duplicated overlap.",
+  "projects": {
+    "atlas": "atlas",
+    "beacon": "beacon",
+    "cairn": "cairn"
+  },
+  "model": {
+    "modelId": "qwen3.5-4b-instruct",
+    "contextCapacity": 32768
+  },
+  "echoPilot": {
+    "projectId": "atlas",
+    "term": "EchoPilot",
+    "variants": ["echo pilot"],
+    "learnedFrom": "deploy echo pilot today",
+    "confirmedExample": "deploy EchoPilot today",
+    "secondVariant": "echo-pilot",
+    "secondLearnedFrom": "deploy echo-pilot nightly",
+    "secondExample": "deploy EchoPilot nightly",
+    "matchingUtterance": "deploy echo pilot tomorrow",
+    "matchingCorrected": "deploy EchoPilot tomorrow",
+    "unrelatedUtterance": "echo the pilot log to the console"
+  },
+  "sqlite": {
+    "projectId": "atlas",
+    "term": "SQLite",
+    "variants": ["sequel lite", "sequel-lite"],
+    "learnedFrom": "run the sequel lite migration",
+    "confirmedExample": "run the SQLite migration",
+    "matchingUtterance": "run the sequel lite migration on staging",
+    "matchingCorrected": "run the SQLite migration on staging"
+  },
+  "jsonPerson": {
+    "projectId": "atlas",
+    "term": "JSON",
+    "variants": ["jason"],
+    "confirmedExample": "serialize the JSON response",
+    "allowedUtterance": "serialize the jason response",
+    "allowedCorrected": "serialize the JSON response",
+    "rejectedUtterance": "tell Jason the deploy is blocked",
+    "rejectedBadCorrection": "tell JSON the deploy is blocked",
+    "rejectedFollowUp": "tell Jason the deploy is blocked again"
+  },
+  "beaconTerm": {
+    "projectId": "beacon",
+    "term": "BeaconTerm",
+    "variants": ["beacon term"],
+    "learnedFrom": "open the beacon term dashboard",
+    "confirmedExample": "open the BeaconTerm dashboard"
+  },
+  "longDictation": {
+    "projectId": "atlas",
+    "windowMs": 15000,
+    "overlapMs": 1000,
+    "maxChunkTokens": 25,
+    "overBudgetWindow": {
+      "startMs": 85000,
+      "endMs": 103000,
+      "text": "this window exceeded the maximum fifteen second audio budget"
+    },
+    "overlapPhrases": [
+      "the review on friday",
+      "the new release",
+      "for dictation",
+      "the held out corpus",
+      "after the freeze"
+    ],
+    "windows": [
+      {
+        "startMs": 0,
+        "endMs": 15000,
+        "text": "we need to deploy echo pilot across the staging fleet before the review on friday"
+      },
+      {
+        "startMs": 14000,
+        "endMs": 29000,
+        "text": "the review on friday will cover the glossary pipeline and the retention policy for the new release"
+      },
+      {
+        "startMs": 28000,
+        "endMs": 43000,
+        "text": "the new release also changes the correction thresholds and the overlay latency budget for dictation"
+      },
+      {
+        "startMs": 42000,
+        "endMs": 57000,
+        "text": "for dictation we will measure the warm path and the harmful edits on the held out corpus"
+      },
+      {
+        "startMs": 56000,
+        "endMs": 71000,
+        "text": "the held out corpus will be scored after the freeze"
+      },
+      {
+        "startMs": 70000,
+        "endMs": 85000,
+        "text": "after the freeze we will publish the release notes and archive the old fixtures"
+      }
+    ],
+    "glossaryVariant": "echo pilot",
+    "glossaryTerm": "EchoPilot",
+    "expectedText": "we need to deploy echo pilot across the staging fleet before the review on friday will cover the glossary pipeline and the retention policy for the new release also changes the correction thresholds and the overlay latency budget for dictation we will measure the warm path and the harmful edits on the held out corpus will be scored after the freeze we will publish the release notes and archive the old fixtures",
+    "expectedCorrectedText": "we need to deploy EchoPilot across the staging fleet before the review on friday will cover the glossary pipeline and the retention policy for the new release also changes the correction thresholds and the overlay latency budget for dictation we will measure the warm path and the harmful edits on the held out corpus will be scored after the freeze we will publish the release notes and archive the old fixtures"
+  }
+}
