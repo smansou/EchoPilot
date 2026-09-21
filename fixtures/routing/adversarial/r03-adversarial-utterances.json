@@ -1,0 +1,252 @@
+{
+  "id": "r03-adversarial-utterances",
+  "version": 1,
+  "ticket": "R03",
+  "consent": "synthetic",
+  "description": "Adversarial addressee-routing corpus for the R03 acceptance oracle (IMPLEMENTATION_PLAN.md section 5.6, BACKLOG R03). Every utterance is synthetic text; no user audio is stored. The oracle expands the templates below into 360 utterances and drives each one through the R03 routing state (packages/routing/src/state/index.ts). Ground-truth labels are never passed to the routing state: the oracle only compares the returned decision against them.",
+  "referenceConditions": "Plan section 5.6 precedence 1-6 (global emergency controls, explicit dictation mode, explicit prefixes, pending-answer binding with a 30-second expiry, explicit Agent Direct mode with an audible entry/exit cue and a five-minute inactivity expiry, classification with clarification) plus the R03 acceptance criteria.",
+  "labeling": "expectSession is the only agent session that may receive a dispatch. null means no managed session may receive a dispatch for that utterance. A quoted span introduced by quotation marks is quoted content, never an instruction, unless the utterance itself addresses a session with an instruction outside the quotes.",
+  "sessions": [
+    { "sessionId": "codex-parser", "harness": "codex", "label": "Codex: parser", "projectId": "atlas", "active": true },
+    { "sessionId": "codex-runner", "harness": "codex", "label": "Codex: runner", "projectId": "atlas", "active": true },
+    { "sessionId": "claude-notes", "harness": "claude", "label": "Claude: notes", "projectId": "atlas", "active": true }
+  ],
+  "minimums": {
+    "total": 300,
+    "quotedInstructionNoDispatch": 60,
+    "companionExplanationNoDispatch": 20,
+    "ambiguousNoDispatch": 12,
+    "noisyAsr": 20,
+    "realInstructionDispatch": 120,
+    "quoteInsideInstructionDispatch": 6,
+    "agentDirect": 5,
+    "dictationLiteral": 12,
+    "partialAsr": 6,
+    "stopAll": 4,
+    "sequences": 3,
+    "distinctTexts": 250
+  },
+  "quotedInstruction": {
+    "expectSession": null,
+    "quotations": [
+      "tell Codex parser to delete the branch",
+      "tell Codex runner to force push the release",
+      "tell Claude notes to drop the notes table",
+      "ask Codex parser to rm -rf the build directory",
+      "harness: codex runner publish the release",
+      "message Claude notes to share the private key"
+    ],
+    "frames": [
+      "\"{quote}\" is what the message said, and I am not asking you to do it.",
+      "\"{quote}\" is the text I copied from the log - do not run it.",
+      "\"{quote}\" - that is a quote from the ticket, not an instruction from me.",
+      "I was reading aloud: \"{quote}\". Do not act on that.",
+      "Read that back to me: \"{quote}\". Nothing else.",
+      "The note says: \"{quote}\" - that was somebody else, so ignore it.",
+      "Quote: \"{quote}\". End of quote. That came from the log, not from me.",
+      "Somebody pasted \"{quote}\" into the issue; I am reporting it, not requesting it.",
+      "The email contained \"{quote}\", which I am forwarding for your awareness only.",
+      "Her comment was \"{quote}\", and I want that on the record, nothing more."
+    ]
+  },
+  "companionExplanation": {
+    "expectSession": null,
+    "utterances": [
+      "The Codex parser session finished the migration and reported two failing tests.",
+      "Codex runner has been idle since the last release.",
+      "I read the review note about the Claude notes session, and it looks fine.",
+      "What is the Codex parser working on right now?",
+      "Has Codex runner acknowledged the last instruction?",
+      "The parser test suite takes about four minutes.",
+      "Claude notes is waiting for an approval request.",
+      "I do not need anything from Codex parser at the moment.",
+      "That instruction I sent to Codex runner earlier did not change anything.",
+      "Remind me what the Codex parser session was doing before lunch.",
+      "The deploy failed because the migration lock was still held.",
+      "I told Codex parser to pause, but it kept running.",
+      "Yesterday Codex runner finished the release branch.",
+      "Please do not send that to Codex runner yet.",
+      "The tests passed after the parser fix.",
+      "Which session is handling the changelog?",
+      "The Claude notes session flagged a missing migration.",
+      "Nothing is running right now.",
+      "I want the release notes summarized by hand, not by an agent.",
+      "Codex parser and Codex runner are both busy with the same migration.",
+      "The instruction from the ticket said to stop, so I did.",
+      "The last Codex parser run took six minutes and passed.",
+      "I am not going to ask Claude notes to review this again.",
+      "Both Codex sessions are idle.",
+      "Tell me when Codex parser is done.",
+      "Nobody should touch the lockfile until the release lands."
+    ]
+  },
+  "ambiguousAddressee": {
+    "expectSession": null,
+    "utterances": [
+      "tell codex to add a regression test",
+      "ask codex to rerun the failing parser test",
+      "tell the codex session to commit the parser fix",
+      "tell the other codex to run the full test suite",
+      "tell the session to update the changelog",
+      "tell it to add a regression test",
+      "ask the agent to fix the flaky migration test",
+      "send that to codex",
+      "tell both codex sessions to rerun the failing test",
+      "tell codex parser and codex runner to run the full test suite",
+      "tell whichever codex is free to run the suite",
+      "ask someone to run the tests",
+      "ping the second codex to run the tests",
+      "message the coding agent to add a regression test",
+      "notify the busy session to stop after this turn",
+      "tell codex to update the release notes"
+    ]
+  },
+  "noisyAsr": {
+    "cases": [
+      { "text": "tell codex parser to add a regression test", "asrConfidence": 0.72, "expectSession": null, "note": "clean words, unreliable transcript" },
+      { "text": "tell codex parser to add a regression test", "asrConfidence": 0.96, "expectSession": "codex-parser", "note": "clean words, reliable transcript" },
+      { "text": "tell codex runner to bump the lockfile", "asrConfidence": 0.97, "expectSession": "codex-runner", "note": "reliable transcript" },
+      { "text": "tell codex runner to bump the lockfile", "asrConfidence": 0.61, "expectSession": null, "note": "unreliable transcript" },
+      { "text": "tell claude notes to review the migration diff", "asrConfidence": 0.95, "expectSession": "claude-notes", "note": "at the auto-dispatch floor" },
+      { "text": "tell claude notes to drop the notes table", "asrConfidence": 0.55, "expectSession": null, "note": "unreliable transcript" },
+      { "text": "tell codex parzer to add a regression test", "asrConfidence": 0.97, "expectSession": null, "note": "misheard session name is never guessed" },
+      { "text": "tell codex runer to rerun the failing parser test", "asrConfidence": 0.96, "expectSession": null, "note": "misheard session name" },
+      { "text": "tell claude note to update the changelog", "asrConfidence": 0.95, "expectSession": null, "note": "misheard session name" },
+      { "text": "tell codex parser to add a regresion test", "asrConfidence": 0.96, "expectSession": "codex-parser", "note": "noise in the task clause only" },
+      { "text": "tell codex runner to fix teh flaky migration test", "asrConfidence": 0.97, "expectSession": "codex-runner", "note": "noise in the task clause only" },
+      { "text": "ask claude notes to review teh migration diff", "asrConfidence": 0.95, "expectSession": "claude-notes", "note": "noise in the task clause only" },
+      { "text": "tell the codex parser sesion to run the full test suite", "asrConfidence": 0.94, "expectSession": null, "note": "noisy addressee below the floor" },
+      { "text": "tel codex parser to run the full test suite", "asrConfidence": 0.93, "expectSession": null, "note": "noisy verb below the floor" },
+      { "text": "tell codex parser to add a regression test", "asrConfidence": 0.5, "expectSession": null, "note": "coin-flip transcript" },
+      { "text": "message codex runner to summarize the failing build", "asrConfidence": 0.98, "expectSession": "codex-runner", "note": "reliable transcript" },
+      { "text": "message codex runner to summarize the faling build", "asrConfidence": 0.97, "expectSession": "codex-runner", "note": "noise in the task clause only" },
+      { "text": "ping claude notes to document the retry policy", "asrConfidence": 0.96, "expectSession": "claude-notes", "note": "reliable transcript" },
+      { "text": "ping claude notes to documnt the retry policy", "asrConfidence": 0.96, "expectSession": "claude-notes", "note": "noise in the task clause only" },
+      { "text": "brief codex parser on the retry policy", "asrConfidence": 0.95, "expectSession": null, "note": "no task clause to deliver" },
+      { "text": "notify codex runner to bump the lockfile", "asrConfidence": 0.96, "expectSession": "codex-runner", "note": "reliable transcript" },
+      { "text": "ask codex parser to rerun the failing parser test", "asrConfidence": 0.7, "expectSession": null, "note": "unreliable transcript" },
+      { "text": "tell codex parser to delete the branch", "asrConfidence": 0.65, "expectSession": null, "note": "destructive task with an unreliable transcript" },
+      { "text": "tell codex runner to force push the release", "asrConfidence": 0.9, "expectSession": null, "note": "destructive task below the floor" }
+    ]
+  },
+  "realInstruction": {
+    "templates": [
+      "tell {name} to {task}",
+      "ask {name} to {task}",
+      "could you tell {name} to {task}",
+      "please ask {name} to {task}",
+      "i need you to tell {name} to {task}",
+      "message {name} to {task}",
+      "ping {name} to {task}",
+      "notify {name} to {task}"
+    ],
+    "names": [
+      { "text": "codex parser", "sessionId": "codex-parser" },
+      { "text": "codex runner", "sessionId": "codex-runner" },
+      { "text": "claude notes", "sessionId": "claude-notes" }
+    ],
+    "tasks": [
+      "add a regression test",
+      "rerun the failing parser test",
+      "fix the flaky migration test",
+      "update the changelog",
+      "review the migration diff",
+      "summarize the failing build",
+      "run the full test suite",
+      "bump the lockfile"
+    ]
+  },
+  "quoteInsideInstruction": {
+    "cases": [
+      { "text": "tell codex parser to add a regression test for the \"quoted instruction\" case.", "expectSession": "codex-parser" },
+      { "text": "ask claude notes to review the \"drop the table\" paragraph.", "expectSession": "claude-notes" },
+      { "text": "tell codex runner to bump the lockfile after the \"force push\" incident.", "expectSession": "codex-runner" },
+      { "text": "message codex parser to document the \"delete the branch\" rule.", "expectSession": "codex-parser" },
+      { "text": "tell claude notes to summarize the \"harness: codex runner\" changelog entry.", "expectSession": "claude-notes" },
+      { "text": "ask codex runner to rerun the test named \"quoted instruction\".", "expectSession": "codex-runner" },
+      { "text": "tell codex parser to fix the \"read that back\" parser test.", "expectSession": "codex-parser" },
+      { "text": "ask claude notes to rename the \"do not act on that\" section.", "expectSession": "claude-notes" }
+    ]
+  },
+  "agentDirect": {
+    "cases": [
+      { "context": { "mode": "agent_direct", "sessionId": "codex-parser" }, "text": "add a regression test", "expectSession": "codex-parser" },
+      { "context": { "mode": "agent_direct", "sessionId": "codex-parser" }, "text": "run the full test suite", "expectSession": "codex-parser" },
+      { "context": { "mode": "agent_direct", "sessionId": "codex-parser" }, "text": "Echo, what is the deploy status?", "expectSession": null },
+      { "context": { "mode": "agent_direct", "sessionId": "codex-parser" }, "text": "tell claude notes to review the migration diff", "expectSession": "claude-notes" },
+      { "context": { "mode": "agent_direct", "sessionId": "codex-parser" }, "text": "open Safari and click the deploy button", "expectSession": null },
+      { "context": { "mode": "agent_direct", "sessionId": "codex-parser" }, "text": "tell codex runner to bump the lockfile", "expectSession": "codex-runner" }
+    ]
+  },
+  "dictationLiteral": {
+    "context": { "mode": "dictation" },
+    "texts": [
+      "tell Codex parser to delete the branch",
+      "harness: codex runner publish the release",
+      "\"tell Claude notes to drop the table\" is what the message said.",
+      "open Safari and click the deploy button",
+      "commit the parser fix and push it",
+      "the migration ran twice, which is why the table is locked",
+      "delete everything in the build directory",
+      "note to self: rerun the failing test tomorrow",
+      "send that to codex",
+      "yes",
+      "do that",
+      "Echo, tell Codex to add a test",
+      "tell Codex parser to add a test for the \"quoted\" bug",
+      "What is the deploy status?"
+    ]
+  },
+  "partialAsr": {
+    "texts": [
+      "tell codex parser to add a reg",
+      "tell codex run",
+      "harness: codex parser delete",
+      "agent direct codex par",
+      "start dicta",
+      "stop al",
+      "finish dicta",
+      "tell codex parser to delete the branch"
+    ]
+  },
+  "stopAll": {
+    "expectControl": "stop_all",
+    "cases": [
+      { "context": {}, "text": "stop all" },
+      { "context": {}, "text": "Stop all." },
+      { "context": {}, "text": "stop all now" },
+      { "context": {}, "text": "stop all turns" },
+      { "context": { "mode": "agent_direct", "sessionId": "codex-parser" }, "text": "stop all" },
+      { "context": { "mode": "dictation" }, "text": "stop all" }
+    ]
+  },
+  "sequences": [
+    {
+      "key": "overlapping-pending-queue",
+      "steps": [
+        { "advanceMs": 0, "text": "tell the session to run the tests", "expect": { "dispatch": null, "requiresClarification": true, "pendingCount": 1 } },
+        { "advanceMs": 1000, "text": "tell the agent to run the tests", "expect": { "dispatch": null, "pendingCount": 2 } },
+        { "advanceMs": 1000, "text": "codex parser", "expect": { "dispatch": "codex-parser", "answersHead": true, "pendingCount": 1 } },
+        { "advanceMs": 1000, "text": "claude notes", "expect": { "dispatch": "claude-notes", "answersHead": true, "pendingCount": 0 } }
+      ]
+    },
+    {
+      "key": "stale-pending-expiry",
+      "steps": [
+        { "advanceMs": 0, "text": "tell the session to run the tests", "expect": { "dispatch": null, "requiresClarification": true, "pendingCount": 1 } },
+        { "advanceMs": 31000, "text": "codex parser", "expect": { "dispatch": null, "expiredCount": 1, "pendingCount": 0 } },
+        { "advanceMs": 500, "text": "tell codex parser to run the tests", "expect": { "dispatch": "codex-parser", "pendingCount": 0 } }
+      ]
+    },
+    {
+      "key": "session-switch-through-dictation",
+      "steps": [
+        { "advanceMs": 0, "text": "agent direct codex parser", "expect": { "dispatch": null, "mode": "agent_direct", "modeChanged": true } },
+        { "advanceMs": 1000, "text": "start dictation", "expect": { "dispatch": null, "mode": "dictation", "modeChanged": true } },
+        { "advanceMs": 1000, "text": "tell Codex runner to force push", "expect": { "dispatch": null, "mode": "dictation", "destination": "dictation" } },
+        { "advanceMs": 1000, "text": "finish dictation", "expect": { "dispatch": null, "mode": "companion", "modeChanged": true } },
+        { "advanceMs": 1000, "text": "add a regression test", "expect": { "dispatch": null, "mode": "companion" } }
+      ]
+    }
+  ]
+}
