@@ -14,6 +14,7 @@ import {
   windowBehavior,
 } from './window-policy';
 import { createNativeHost, type NativeHost } from './native-host';
+import { createVoiceActivationService, type VoiceActivationService, type VoiceStatus } from './voice-activation';
 import { createShellTray, type ShellTray } from './tray';
 import {
   KEY_ENTRY_CHANNEL,
@@ -44,6 +45,8 @@ let widget: BrowserWindow | null = null;
 let dashboard: BrowserWindow | null = null;
 let tray: ShellTray | null = null;
 let nativeHost: NativeHost | undefined;
+/** The production V05 lifecycle: enable once, then hands-free until idle/standby teardown. */
+let voice: VoiceActivationService | undefined;
 function requireShell(): Shell {
   if (!shell) throw new Error('EchoPilot shell is not ready yet');
   return shell;
@@ -101,10 +104,32 @@ function widgetStatus(): WidgetSnapshot {
     sessionId: state.event?.sessionId ?? null,
   });
 }
+/**
+ * The widget-facing voice state. The renderer receives the lifecycle snapshot plus the measured
+ * gates — never a host handle, and never a wake candidate that could be mistaken for an approval.
+ */
+function voiceStatusPayload(): { voice: VoiceStatus['voice']; standbyEnergy: VoiceStatus['standbyEnergy'] | null; wake: VoiceStatus['wake'] | null; worker: string } {
+  if (!voice) {
+    return {
+      voice: { ...requireShell().voiceSnapshot(), standbyEnabled: false },
+      standbyEnergy: null,
+      wake: null,
+      worker: 'starting',
+    };
+  }
+  const status = voice.status();
+  return {
+    voice: status.voice,
+    standbyEnergy: { ...status.standbyEnergy, violations: [...status.standbyEnergy.violations] },
+    wake: status.wake,
+    worker: status.worker,
+  };
+}
 function shellSnapshot() {
   const state = coordinator.getState();
   return {
     status: widgetStatus(),
+    voice: requireShell().voiceSnapshot(),
     hotkeys: {
       registered: requireShell().hotkeys.registered.map(hotkey => hotkey.accelerator),
       conflicts: requireShell().hotkeys.conflicts.map(conflict => ({
@@ -116,6 +141,17 @@ function shellSnapshot() {
     controls: WIDGET_FALLBACK_CONTROLS,
     coordinator: { muted: state.muted, eventId: state.event?.id ?? null },
   };
+}
+/**
+ * Drives the same lifecycle the widget's Enable/Disable control uses. Option-Space is therefore an
+ * alternative to the UI rather than a second, divergent code path.
+ */
+function toggleConversation(): void {
+  if (!voice) { requireShell().invoke('open-mission-control'); return; }
+  const enabled = requireShell().voiceSnapshot().enabled;
+  void (enabled ? voice.disable() : voice.enable()).catch(error => {
+    console.warn(`EchoPilot voice lifecycle: ${error instanceof Error ? error.message : String(error)}`);
+  });
 }
 function openWidget() {
   // Survives Mission Control closure, Cmd-W, and Space changes: a live window is re-revealed
@@ -175,13 +211,18 @@ async function ready() {
     token: helperToken,
     register: (accelerator, callback) => globalShortcut.register(accelerator, callback),
     onRecoverable: reason => { console.warn(`EchoPilot recoverable: ${reason}`); },
+    // Voice commands travel on the helper's private stdin; the shell owns id allocation and the
+    // authenticated ack correlation, so `index.ts` never hand-rolls a protocol frame.
+    writeToHelper: line => nativeHost?.send(line) === true,
     onAction: action => {
       switch (action) {
         // Mute and stop arrive from hotkeys, the tray, and the widget; drive the real coordinator
         // so the session state — not just the widget chrome — is what the user sees change.
         case 'mute-microphone': coordinator.setMuted(!coordinator.getState().muted); publish(); break;
         case 'replay': coordinator.replay(); publish(); break;
-        case 'toggle-conversation': toggleWidget(); break;
+        // One explicit enable is what the user does; after that the session is hands-free, so this
+        // shortcut toggles the lifecycle itself rather than any window chrome.
+        case 'toggle-conversation': toggleConversation(); break;
         case 'open-mission-control': openDashboard(); break;
         case 'hold-dictation': console.info('EchoPilot: dictation hold is not wired to capture yet.'); break;
         default: break;
@@ -193,6 +234,14 @@ async function ready() {
     token: helperToken,
     log: message => { console.info(`EchoPilot native host: ${message}`); },
   });
+  voice = createVoiceActivationService({
+    shell,
+    telemetryPath: join(app.getPath('userData'), 'voice', 'activation.jsonl'),
+    log: message => { console.info(`EchoPilot voice: ${message}`); },
+  });
+  // Every authenticated helper frame is already parsed by the shell; energy samples and acoustic
+  // windows are the lifecycle's observation inputs.
+  voice.attachNativeHost(nativeHost);
   session.defaultSession.setPermissionRequestHandler((_contents,_permission,callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
   protocol.handle('echo', async request => {
@@ -209,6 +258,25 @@ async function ready() {
     if (name === 'shell-status') {
       if (request.method !== 'GET') return new Response(null,{status:405});
       return json(shellSnapshot());
+    }
+    if (name === 'voice-status') {
+      if (request.method !== 'GET') return new Response(null,{status:405});
+      return json(voiceStatusPayload());
+    }
+    if (name === 'voice-action') {
+      if (request.method !== 'POST') return new Response(null,{status:405});
+      const body: unknown = await request.json().catch(() => null);
+      if (typeof body !== 'object' || body === null || Array.isArray(body)) return new Response(null,{status:400});
+      const action = (body as {action?: unknown}).action;
+      if (Object.keys(body).length !== 1 || (action !== 'enable' && action !== 'disable')) return new Response(null,{status:400});
+      if (!voice) return json(voiceStatusPayload(), 503);
+      try {
+        if (action === 'enable') await voice.enable();
+        else await voice.disable();
+      } catch (error) {
+        console.warn(`EchoPilot voice lifecycle: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return json(voiceStatusPayload());
     }
     if (name === 'shell-action') {
       if (request.method !== 'POST') return new Response(null,{status:405});
@@ -255,7 +323,16 @@ async function ready() {
   // Closing the widget (Mission Control, Cmd-W, a Space change) must keep the session reachable
   // through the menu bar instead of ending the app.
   app.on('window-all-closed', () => { if (shouldQuitWhenAllWindowsClosed()) app.quit(); });
-  app.on('will-quit', () => { nativeHost?.dispose(); tray?.dispose(); tray = null; globalShortcut.unregisterAll(); });
+  app.on('will-quit', () => {
+    // Standby listening and conversation models are released before the app goes away.
+    const pending = voice?.dispose();
+    voice = undefined;
+    void pending;
+    nativeHost?.dispose();
+    tray?.dispose();
+    tray = null;
+    globalShortcut.unregisterAll();
+  });
   app.on('activate',openDashboard);
   if (smoke) {
     await new Promise<void>((resolve,reject) => {widget!.webContents.once('did-finish-load',() => resolve());widget!.webContents.once('did-fail-load',(_e,code,description) => reject(new Error(`${code}: ${description}`)));});

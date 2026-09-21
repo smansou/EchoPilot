@@ -110,6 +110,8 @@ export interface WakeEnvironmentReport {
   expectedDetections: number;
   falseTriggers: number;
   falseTriggersPerHour: number;
+  /** Unlabeled detections the user later confirmed or denied, kept visible in the report. */
+  corrections: number;
 }
 
 export interface WakeFalseTriggerReport {
@@ -117,7 +119,13 @@ export interface WakeFalseTriggerReport {
   byEnvironment: Record<AcousticEnvironment, WakeEnvironmentReport>;
 }
 
-type MutableWakeCounts = { exposureMs: number; detections: number; expectedDetections: number; falseTriggers: number };
+type MutableWakeCounts = {
+  exposureMs: number;
+  detections: number;
+  expectedDetections: number;
+  falseTriggers: number;
+  corrections: number;
+};
 
 /** Reports labeled false wakes, including separate TV and background-speech rates. */
 export class WakeFalseTriggerMeter {
@@ -137,6 +145,20 @@ export class WakeFalseTriggerMeter {
     else counts.falseTriggers += 1;
   }
 
+  /**
+   * The user told us a detection was actually them. Until that happens every unlabeled detection is
+   * conservatively counted as a false trigger, so a correction is the only way the TV/background
+   * rates can move a detection into `expectedDetections`.
+   */
+  recordCorrection(environment: AcousticEnvironment): boolean {
+    const counts = this.#counts[environment];
+    if (counts.falseTriggers <= 0) return false;
+    counts.falseTriggers -= 1;
+    counts.expectedDetections += 1;
+    counts.corrections += 1;
+    return true;
+  }
+
   report(): WakeFalseTriggerReport {
     const total = emptyWakeCounts();
     const byEnvironment = {} as Record<AcousticEnvironment, WakeEnvironmentReport>;
@@ -146,6 +168,7 @@ export class WakeFalseTriggerMeter {
       total.detections += counts.detections;
       total.expectedDetections += counts.expectedDetections;
       total.falseTriggers += counts.falseTriggers;
+      total.corrections += counts.corrections;
       byEnvironment[environment] = wakeReport(counts);
     }
     return { total: wakeReport(total), byEnvironment };
@@ -158,6 +181,12 @@ export interface WakeCandidate {
   environment: AcousticEnvironment;
   observationMs?: number;
   expectedWake?: boolean;
+  /**
+   * The native detector's own decision for this window, when the reading came from a helper that
+   * ran its gate. It is reporting/attention input only: the controller still requires an enabled
+   * standby session and a valid confidence, and the outcome is never an action grant.
+   */
+  detected?: boolean;
 }
 
 export interface WakeOutcome {
@@ -187,6 +216,41 @@ export interface ConversationActivationOptions {
   wakeThreshold?: number;
   falseTriggerMeter?: WakeFalseTriggerMeter;
   energyMeter?: StandbyEnergyMeter;
+}
+
+/** Production host contract: native audio/model control plus live observations. */
+export interface VoiceActivationHost extends ActivationHost {
+  onActivity(listener: (at?: number) => void): () => void;
+  /** `native` is the signed helper's own gate for the same reading, when the helper sampled it. */
+  onStandbyEnergy(listener: (sample: StandbyEnergySample, native?: StandbyEnergyReport) => void): () => void;
+  onWakeCandidate(listener: (candidate: WakeCandidate) => void): () => void;
+}
+
+/** Reports are delivered as observations arrive so product telemetry can retain real traces. */
+export interface VoiceActivationReportSink {
+  reportStandbyEnergy(report: StandbyEnergyReport): void;
+  reportWakeFalseTriggers(report: WakeFalseTriggerReport): void;
+  reportWakeOutcome?(outcome: WakeOutcome): void;
+  /**
+   * Every raw sampler reading, with the native monitor's own gate when the reading came from the
+   * signed helper. The accumulated report is only as honest as the samples behind it, so the
+   * production sink keeps the individual readings too.
+   */
+  reportStandbySample?(sample: StandbyEnergySample, native?: StandbyEnergyReport): void;
+}
+
+export interface ConversationActivationRuntimeOptions extends Omit<ConversationActivationOptions, "host"> {
+  host: VoiceActivationHost;
+  reports: VoiceActivationReportSink;
+  tickIntervalMs?: number;
+}
+
+export interface ConversationActivationRuntime {
+  readonly controller: ConversationActivationController;
+  subscribe(listener: (snapshot: ActivationSnapshot) => void): () => void;
+  enable(): Promise<void>;
+  disable(): Promise<void>;
+  dispose(): Promise<void>;
 }
 
 const systemClock: ActivationClock = { now: () => Date.now() };
@@ -272,6 +336,21 @@ export class ConversationActivationController {
     if (this.#state === "standby") this.standbyEnergy.record(sample);
   }
 
+  /**
+   * Standby listening time the wake detector exposed without an activation. This is the rate
+   * denominator for the TV/background-speech report: a quiet hour and a TV hour only produce
+   * comparable false-trigger numbers if the exposure behind them was measured too.
+   */
+  observeStandbyWindow(observation: { environment: AcousticEnvironment; durationMs: number }): void {
+    if (!this.#enabled || this.#state !== "standby") return;
+    this.falseTriggers.record({
+      environment: observation.environment,
+      durationMs: observation.durationMs,
+      detected: false,
+      expectedWake: false,
+    });
+  }
+
   detectWake(candidate: WakeCandidate): Promise<WakeOutcome> {
     const threshold = clamp(candidate.threshold ?? this.#wakeThreshold, 0, 1);
     // A malformed score must never be promoted into a wake. The detector is an
@@ -280,10 +359,15 @@ export class ConversationActivationController {
     const confidenceIsValid = Number.isFinite(candidate.confidence)
       && candidate.confidence >= 0
       && candidate.confidence <= 1;
+    // A helper that ran its own gate decides whether *it* fired; without one the local threshold is
+    // the gate. Either way the session conditions below are re-checked here, so a detection cannot
+    // reopen capture outside an enabled standby session.
+    const localGate = confidenceIsValid && candidate.confidence >= threshold;
+    const gateFired = candidate.detected ?? localGate;
     const detected = this.#enabled
       && this.#state === "standby"
       && confidenceIsValid
-      && candidate.confidence >= threshold;
+      && gateFired;
     this.falseTriggers.record({
       environment: candidate.environment,
       durationMs: candidate.observationMs ?? 0,
@@ -413,8 +497,64 @@ export class ConversationActivationController {
   }
 }
 
+/**
+ * Connects the state machine to the production host. The scheduler is lifecycle-owned, activity
+ * comes from the live audio/conversation path, and energy/wake reports leave through a product
+ * reporting sink instead of remaining in test-only in-memory meters.
+ */
+export function createConversationActivationRuntime(
+  options: ConversationActivationRuntimeOptions,
+): ConversationActivationRuntime {
+  const { host, reports, tickIntervalMs, ...controllerOptions } = options;
+  const controller = new ConversationActivationController({ ...controllerOptions, host });
+  const publish = (): void => {
+    reports.reportStandbyEnergy(controller.standbyEnergy.report());
+    reports.reportWakeFalseTriggers(controller.falseTriggers.report());
+  };
+  let previousState = controller.snapshot().state;
+  const unsubscribers = [
+    host.onActivity((at) => controller.noteActivity(at)),
+    host.onStandbyEnergy((sample, native) => {
+      reports.reportStandbySample?.(sample, native);
+      controller.observeStandbyEnergy(sample);
+      if (controller.snapshot().state === "standby") reports.reportStandbyEnergy(controller.standbyEnergy.report());
+    }),
+    host.onWakeCandidate((candidate) => {
+      void controller.detectWake(candidate).then((outcome) => {
+        reports.reportWakeFalseTriggers(controller.falseTriggers.report());
+        reports.reportWakeOutcome?.(outcome);
+      });
+    }),
+    controller.subscribe((snapshot) => {
+      // Leaving standby is a report boundary: the standby session's measured trace is published
+      // even if the last sample arrived minutes before the idle teardown.
+      if (previousState === "standby" && snapshot.state !== "standby") publish();
+      previousState = snapshot.state;
+    }),
+  ];
+  const interval = positive(tickIntervalMs, 1_000);
+  const timer = setInterval(() => { void controller.tick(); }, interval);
+  const nodeTimer = timer as ReturnType<typeof setInterval> & { unref?: () => void };
+  nodeTimer.unref?.();
+  let disposed = false;
+
+  return {
+    controller,
+    subscribe: (listener) => controller.subscribe(listener),
+    enable: () => controller.enable(),
+    disable: () => controller.disable(),
+    async dispose() {
+      if (disposed) return;
+      disposed = true;
+      clearInterval(timer);
+      for (const unsubscribe of unsubscribers) unsubscribe();
+      await controller.disable();
+    },
+  };
+}
+
 function emptyWakeCounts(): MutableWakeCounts {
-  return { exposureMs: 0, detections: 0, expectedDetections: 0, falseTriggers: 0 };
+  return { exposureMs: 0, detections: 0, expectedDetections: 0, falseTriggers: 0, corrections: 0 };
 }
 
 function wakeReport(counts: MutableWakeCounts): WakeEnvironmentReport {

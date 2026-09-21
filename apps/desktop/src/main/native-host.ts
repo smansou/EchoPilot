@@ -13,7 +13,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { Shell, WidgetStatus } from './shell';
+import type { NativeResult, Shell, WidgetStatus } from './shell';
 
 export type NativeHostMode = 'helper' | 'simulator';
 
@@ -34,9 +34,15 @@ export type NativeHost = Readonly<{
   stop(): void;
   dispose(): void;
   isRunning(): boolean;
+  /** Write one protocol line to the helper's private stdin; false when no helper is attached. */
+  send(line: string): boolean;
+  /** Observe every authenticated/parsed helper frame (the voice activation link consumes these). */
+  onFrame(listener: (frame: NativeFrame) => void): () => void;
   /** Test/dev hook: drive the recoverable disconnect → reconnect path without killing a process. */
   simulateDisconnect(): WidgetStatus;
 }>;
+
+export type NativeFrame = Readonly<{ raw: string; result: NativeResult }>;
 
 type HelperCommand = Readonly<{ command: string; args: ReadonlyArray<string>; description: string }>;
 
@@ -104,6 +110,7 @@ export function createNativeHost(options: NativeHostOptions): NativeHost {
   let simulatorTimer: NodeJS.Timeout | null = null;
   let disposed = false;
   let stopping = false;
+  let frameListeners: Array<(frame: NativeFrame) => void> = [];
 
   function ingest(raw: string): void {
     let parsed: unknown;
@@ -122,6 +129,13 @@ export function createNativeHost(options: NativeHostOptions): NativeHost {
       return;
     }
     const result = shell.ingestNativeMessage(raw);
+    for (const listener of frameListeners) {
+      try {
+        listener({ raw, result });
+      } catch {
+        // A voice observer must never take down the supervisor that owns the helper process.
+      }
+    }
     if (result.ok) {
       // A completed authenticated handshake means this helper is healthy: the next restart starts
       // from the base delay instead of inheriting a previous crash's backoff.
@@ -210,6 +224,18 @@ export function createNativeHost(options: NativeHostOptions): NativeHost {
     start,
     stop,
     isRunning: () => child !== null,
+    send: (line: string) => {
+      const stdin = child?.stdin;
+      if (disposed || !stdin || stdin.destroyed) return false;
+      stdin.write(`${line}\n`);
+      return true;
+    },
+    onFrame: (listener) => {
+      frameListeners.push(listener);
+      return () => {
+        frameListeners = frameListeners.filter((candidate) => candidate !== listener);
+      };
+    },
     simulateDisconnect: () => {
       const status = shell.nativeHostDisconnected('Native helper disconnected; reconnecting.');
       if (mode === 'simulator' && !disposed) {

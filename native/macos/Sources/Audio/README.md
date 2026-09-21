@@ -10,6 +10,8 @@ The signed helper builds the capture side of the V01 tracer bullet:
 | Permissions | `MicrophonePermission.swift` | explicit active-session `granted` / `denied` / `unknown`, request only when a session asks |
 | Microphone graph | `MicrophoneGraph.swift` | `permission()`, `startCapture(onFrame:)`, `stopCapture()`, `captureActive()`, `onEvent(_:)` — the fake host's shape |
 | Playback graph | `PlaybackGraph.swift` | `open(format:)`, `write(_:)`, `onProgress(_:)`, `flush()`, `interrupt(epoch:)`, `close()` — the output half of the same session |
+| Standby energy | `StandbyEnergyMonitor.swift` | `StandbyEnergySampler.sample()` reads this process's `proc_pid_rusage` deltas (CPU ms, physical footprint, kernel wakeups); `StandbyEnergyMonitor.record(_:)`/`.report()` produce the duration-weighted gate with its `violations` list |
+| Standby wake window | `StandbyWakeDetector.swift` | `ingest(_:)` → `finishWindow(durationMs:)` scores the captured 16 kHz packets (RMS dBFS + crest factor) into `quiet` / `tv` / `background_speech` / `other` with `detected` + `confidence`; `threshold` and the window reset are the detector's own |
 
 Capture path: `AVAudioEngine` input tap → `AVAudioConverter` to 16 kHz mono Int16 → `AudioPacketizer`
 (20 ms packets, monotonic packet start times) → `frameListener` → bounded ring → ASR consumer.
@@ -55,12 +57,19 @@ pinned WhisperKit small.en backend.
 
 ```sh
 swift build --package-path native/macos/Sources/Audio
+swift test  --package-path native/macos/Sources/Audio    # AudioTests: standby metering + detector
 ```
 
 The native pipeline regression (exactly-once packet delivery, bounded windows, mute/release
 settling while audio flows) spans this module and `ASR`, so it lives in the ASR package's XCTest
 target: `swift test --package-path native/macos/Sources/ASR`. Each package keeps its `.build`
 scratch directory ignored, so the checked-out tree stays clean after a gate run.
+
+This package's own `AudioTests` target covers the V05 standby half of the same binary: the sampler
+really measures this process (CPU time, footprint and the kernel wakeups its own timer earns), the
+monitor passes an idle trace and reports a duration-weighted violation for a busy one, and the
+detector scores silence, steady loud program audio (TV) and crest-heavy speech without ever
+claiming an action — a window's `detected` flag is attention, not authorization.
 
 The deterministic acceptance path drives `packages/voice` through the fake host contract; this
 module is what the signed helper feeds into in the app.

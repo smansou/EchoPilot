@@ -6,6 +6,12 @@ import { resolvePrivacyOperations } from './control/privacy/host';
 import { sendShellControl, useShellSnapshot, type ShellSnapshot, type WidgetControl } from './widget/shell-status';
 import { WidgetStatusPanel } from './widget/WidgetStatusPanel';
 import { DesktopQuestionWidget } from './widget/DesktopQuestionWidget';
+import {
+  connectVoiceControl,
+  type ConnectedVoiceControl,
+  type VoiceControlStatus,
+  type VoiceIndicator,
+} from './control/voice';
 import './styles.css';
 import './widget/widget.css';
 
@@ -14,6 +20,106 @@ const isDashboard = new URLSearchParams(window.location.search).get('view') === 
 // The profile service is bound by the desktop host (see control/privacy/profile-host.ts); an
 // unbound window says so instead of rendering choices nothing can store.
 const privacyHost = resolvePrivacyOperations();
+
+/**
+ * The voice surface's own styles. Standby is deliberately not the "listening" look: a filled
+ * steady badge instead of the pulsing active one, so a low-power wake listener can never be
+ * mistaken for a live microphone, and it stays on screen for as long as standby does.
+ */
+const VOICE_STYLES = `
+.voice-control { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.voice-indicator { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 999px; font-size: 12px; letter-spacing: 0.01em; border: 1px solid transparent; }
+.voice-indicator .voice-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.voice-indicator.tone-neutral { color: #8b98a5; border-color: #2a333c; }
+.voice-indicator.tone-active { color: #6ee7a8; border-color: #1f5136; background: rgba(110, 231, 168, 0.08); }
+.voice-indicator.tone-active .voice-dot { animation: voice-pulse 1.6s ease-in-out infinite; }
+.voice-indicator.tone-standby { color: #ffd479; border-color: #5c4a1f; background: rgba(255, 212, 121, 0.10); }
+.voice-indicator.tone-danger { color: #ff9a8a; border-color: #5c2a24; background: rgba(255, 154, 138, 0.10); }
+.voice-detail { color: #9fb0bd; font-size: 11px; }
+.voice-control button { font: inherit; }
+@keyframes voice-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+`;
+
+/**
+ * The one place the user enables the hands-free session. After that the session renews itself from
+ * speech activity: idle teardown (or standby) happens without any further UI interaction.
+ */
+function VoiceSessionControl() {
+  const control = useRef<ConnectedVoiceControl | null>(null);
+  if (!control.current) control.current = connectVoiceControl();
+  const [status, setStatus] = useState<VoiceControlStatus>(() => control.current!.model.status());
+  const [indicator, setIndicator] = useState<VoiceIndicator>(() => control.current!.model.indicator());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const current = control.current!;
+    const unsubscribe = current.model.subscribe((nextStatus, nextIndicator) => {
+      setStatus(nextStatus);
+      setIndicator(nextIndicator);
+    });
+    const stopPolling = current.startPolling();
+    return () => { unsubscribe(); stopPolling(); };
+  }, []);
+
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      if (status.snapshot.enabled) await control.current!.model.disable();
+      else await control.current!.model.enable();
+    } catch {
+      setError('The voice session did not change. Check that the signed helper is running.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const energy = status.gates.standbyEnergy;
+  const wake = status.gates.wake;
+  return (
+    <div className="voice-control">
+      <style>{VOICE_STYLES}</style>
+      <span
+        className={`voice-indicator tone-${indicator.tone}`}
+        data-kind={indicator.kind}
+        data-persistent={indicator.persistent}
+        role="status"
+        aria-live="polite"
+        aria-label={indicator.ariaLabel}
+        title={indicator.ariaLabel}
+      >
+        <span className="voice-dot" aria-hidden="true" />
+        {indicator.label}
+      </span>
+      <button
+        className="control"
+        type="button"
+        disabled={busy}
+        aria-pressed={status.snapshot.enabled}
+        aria-label={status.snapshot.enabled ? 'Disable hands-free conversation' : 'Enable hands-free conversation'}
+        onClick={() => void toggle()}
+      >
+        {status.snapshot.enabled ? 'Disable conversation' : 'Enable conversation'}
+      </button>
+      {energy && energy.sampleCount > 0 && (
+        <span className="voice-detail">
+          Standby energy {energy.passed ? 'within budget' : `over budget (${energy.violations.join(', ')})`}
+          {` · ${energy.averageCpuPercent.toFixed(2)}% CPU · ${energy.wakeupsPerMinute.toFixed(1)} wakeups/min`}
+        </span>
+      )}
+      {wake && wake.exposureMs > 0 && (
+        <span className="voice-detail">
+          {`Wake false triggers ${wake.falseTriggersPerHour.toFixed(1)}/h total`}
+          {` · TV ${wake.tvFalseTriggersPerHour.toFixed(1)}/h`}
+          {` · background speech ${wake.backgroundSpeechFalseTriggersPerHour.toFixed(1)}/h`}
+        </span>
+      )}
+      {error && <span className="voice-detail" role="alert">{error}</span>}
+    </div>
+  );
+}
 
 function Icon({ name }: { name: 'mute' | 'replay' | 'expand' | 'lock' }) {
   return (
@@ -163,20 +269,22 @@ function App() {
       <header className="titlebar"><span className="wordmark">echo<span>pilot</span></span><span className="demo-badge">DEMO</span></header>
       {isDashboard ? <>
         <section className="dashboard-heading"><p className="eyebrow">YOUR COMPANION, AT A GLANCE</p><h1>Mission Control</h1><p>A small presence. A clearer view of your work.</p></section>
-        <section className="status-card"><div className={`orb ${state.muted ? 'muted' : ''}`} aria-hidden="true"><span /></div><div><p className="eyebrow">COMPANION OUTPUT</p><h2>{!ready ? 'Connecting' : state.muted ? 'Muted' : 'Ready'}</h2><p>Local demo session</p></div>{controls}</section>
+        <section className="status-card"><div className={`orb ${state.muted ? 'muted' : ''}`} aria-hidden="true"><span /></div><div><p className="eyebrow">COMPANION OUTPUT</p><h2>{!ready ? 'Connecting' : state.muted ? 'Muted' : 'Ready'}</h2><p>Local demo session · voice off until enabled</p></div>{controls}</section>
         <section className="event-card" aria-labelledby="latest-event"><div className="section-label"><h2 id="latest-event">Latest event</h2><span className="pill">Synthetic</span></div><p className="event-text" aria-live="polite">{state.event?.text ?? 'Waiting for the first demo event.'}</p>{state.event && <div className="event-meta"><span>Session · {state.event.sessionId}</span><time dateTime={state.event.createdAt}>{new Date(state.event.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>}</section>
         {privacyPanel}
         <WidgetStatusPanel snapshot={shell} busy={shellBusy} onControl={(control) => void shellControl(control)} />
-        <aside className="demo-note"><span className="note-dot" /><div><strong>This is the first working slice.</strong><p>Events are simulated. No microphone, screen capture, real agent connection, or synthesized voice is active. Replay re-delivers the latest event.</p></div></aside>
+        <VoiceSessionControl />
+        <aside className="demo-note"><span className="note-dot" /><div><strong>This is the first working slice.</strong><p>Events are simulated. The microphone and local voice models stay off until you enable conversation, and they are released again when the session goes idle.</p></div></aside>
         <footer>EchoPilot <span>·</span> Local desktop prototype</footer>
       </> : <>
-        <section className="widget-status"><div className={`orb ${state.muted ? 'muted' : ''}`} aria-hidden="true"><span /></div><div><h1>{!ready ? 'Connecting…' : state.muted ? 'Output muted' : 'Alongside you'}</h1><p>Synthetic session · no microphone</p></div></section>
+        <section className="widget-status"><div className={`orb ${state.muted ? 'muted' : ''}`} aria-hidden="true"><span /></div><div><h1>{!ready ? 'Connecting…' : state.muted ? 'Output muted' : 'Alongside you'}</h1><p>Synthetic events · voice off until enabled</p></div></section>
         <p className="widget-event" aria-live="polite">{state.event?.text ?? 'Waiting for the first demo event.'}</p>
         {/* C01: "what is this?" is answered in the widget conversation itself — never by opening
             Mission Control. The shell connects the scoped desktop runtime; until then the panel
             stays at limited context instead of guessing about the screen. */}
         <DesktopQuestionWidget muted={state.muted} />
         <WidgetStatusPanel snapshot={shell} busy={shellBusy} onControl={(control) => void shellControl(control)} />
+        <VoiceSessionControl />
         {controls}
         <p className="widget-note">Demo events only · replay re-delivers text</p>
       </>}

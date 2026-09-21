@@ -7,6 +7,8 @@
  * `globalShortcut.register`, the `Tray`, and the child-process native host.
  */
 
+import type { ActivationSnapshot } from '../../../../packages/voice/src/activation';
+
 export type HotkeyAction =
   | 'toggle-conversation'
   | 'hold-dictation'
@@ -35,6 +37,8 @@ export type WidgetControl = 'mute' | 'stop';
 
 export type NativeResult =
   | { ok: true; status: WidgetStatus }
+  | { ok: true; ack: VoiceWireAck }
+  | { ok: true; observation: VoiceWireObservation }
   | { ok: false; reason: string };
 
 export type Shell = Readonly<{
@@ -44,7 +48,11 @@ export type Shell = Readonly<{
     conflicts: ReadonlyArray<HotkeyConflict>;
   }>;
   status(): WidgetStatus;
-  /** Parse one raw wire message from the signed helper; rejects malformed or unauthenticated input. */
+  /**
+   * Parse one raw wire message from the signed helper; rejects malformed or unauthenticated input.
+   * Voice frames (`voice-ack`, `voice-observation`) authenticate the same way and are returned as
+   * `ack` / `observation` results, so the token check stays the single gateway to helper input.
+   */
   ingestNativeMessage(raw: string): NativeResult;
   /** The helper went away: mark the widget disconnected and report a recoverable state. */
   nativeHostDisconnected(reason?: string): WidgetStatus;
@@ -56,6 +64,16 @@ export type Shell = Readonly<{
   subscribe(listener: (status: WidgetStatus) => void): () => void;
   /** The accelerator actually registered for an action, or null when it conflicted. */
   registeredAccelerator(action: HotkeyAction): string | null;
+  /**
+   * Send one voice command to the signed helper and await its authenticated `voice-ack`. Resolves —
+   * never rejects — so a lifecycle step can always decide what to do about a missing helper.
+   */
+  sendVoiceCommand(name: VoiceWireCommandName, params?: { mode?: 'conversation' | 'standby' }): Promise<VoiceCommandOutcome>;
+  /** Mirror of the activation lifecycle; publishing it never mutates widget status. */
+  publishVoice(snapshot: VoiceSnapshot): VoiceSnapshot;
+  voiceSnapshot(): VoiceSnapshot;
+  /** Observe lifecycle changes (tray label, widget indicator); never a wake-candidate channel. */
+  subscribeVoice(listener: (snapshot: VoiceSnapshot) => void): () => void;
 }>;
 
 /** Section 4.3 defaults. Order is the registration order and matches the documented table. */
@@ -87,6 +105,128 @@ export function hotkeyActionLabel(action: HotkeyAction): string {
 /** Wire protocol revision the signed helper must echo alongside the per-launch token. */
 export const NATIVE_PROTOCOL_VERSION = 1 as const;
 
+/**
+ * V05 voice activation frames.
+ *
+ * The lifecycle itself lives in `packages/voice/src/activation`; this is only the wire half of it.
+ * `voice-command` travels to the helper on its private stdin, and the helper answers with a
+ * `voice-ack` plus `voice-observation` frames (standby energy samples and acoustic windows) that
+ * always echo the per-launch token. An observation never carries a wall-clock timestamp: the app's
+ * own clock stamps activity and idle leases, so a helper with a different monotonic clock cannot
+ * shift them.
+ */
+export type VoiceAcousticEnvironment = 'quiet' | 'background_speech' | 'tv' | 'other';
+
+export const VOICE_ACOUSTIC_ENVIRONMENTS: ReadonlyArray<VoiceAcousticEnvironment> = Object.freeze([
+  'quiet',
+  'background_speech',
+  'tv',
+  'other',
+]);
+
+export type VoiceWireCommandName =
+  | 'open-microphone'
+  | 'close-microphone'
+  | 'load-wake-model'
+  | 'unload-wake-model';
+
+export type VoiceWireCommand = Readonly<{
+  id: string;
+  name: VoiceWireCommandName;
+  mode?: 'conversation' | 'standby';
+}>;
+
+/** One measured standby reading from the helper's sampler. */
+export type VoiceWireSample = Readonly<{
+  durationMs: number;
+  cpuPercent: number;
+  wakeups: number;
+  residentMemoryMb: number | null;
+}>;
+
+/** The helper's own duration-weighted gate, structurally identical to `StandbyEnergyReport`. */
+export type VoiceWireEnergyReport = Readonly<{
+  durationMs: number;
+  averageCpuPercent: number;
+  wakeupsPerMinute: number;
+  peakResidentMemoryMb: number;
+  sampleCount: number;
+  passed: boolean;
+  violations: ReadonlyArray<string>;
+}>;
+
+export type VoiceWireObservation =
+  | Readonly<{ kind: 'standby-energy'; sample: VoiceWireSample; report: VoiceWireEnergyReport }>
+  | Readonly<{
+    kind: 'standby-window';
+    environment: VoiceAcousticEnvironment;
+    durationMs: number;
+    detected: boolean;
+    confidence: number;
+    threshold: number;
+  }>;
+
+export type VoiceWireAck = Readonly<{ id: string; ok: boolean; error?: string }>;
+
+/**
+ * The widget-facing mirror of the activation lifecycle. It is deliberately a plain snapshot: the
+ * renderer never sees a host handle, a wake candidate, or anything that could authorize an action.
+ */
+export type VoiceSnapshot = Readonly<{
+  state: 'disabled' | 'active' | 'standby' | 'idle' | 'failed';
+  enabled: boolean;
+  microphoneOpen: boolean;
+  conversationModelsLoaded: boolean;
+  wakeModelLoaded: boolean;
+  standbyEnabled: boolean;
+  lastActivityAt: number | null;
+  failure: string | null;
+}>;
+
+export const VOICE_DISABLED_SNAPSHOT: VoiceSnapshot = Object.freeze({
+  state: 'disabled',
+  enabled: false,
+  microphoneOpen: false,
+  conversationModelsLoaded: false,
+  wakeModelLoaded: false,
+  standbyEnabled: false,
+  lastActivityAt: null,
+  failure: null,
+});
+
+export type VoiceCommandOutcome = Readonly<{ ok: boolean; reason?: string }>;
+
+/**
+ * A command the helper never acknowledged must not keep a lifecycle step hanging: the activation
+ * controller awaits these, and a stalled await would leave the microphone in an unknown state.
+ */
+export const VOICE_COMMAND_TIMEOUT_MS = 5_000;
+
+/** Projects the activation package's snapshot onto the wire/renderer shape. */
+export function voiceSnapshotFrom(snapshot: ActivationSnapshot): VoiceSnapshot {
+  return {
+    state: snapshot.state,
+    enabled: snapshot.enabled,
+    microphoneOpen: snapshot.microphoneOpen,
+    conversationModelsLoaded: snapshot.conversationModelsLoaded,
+    wakeModelLoaded: snapshot.wakeModelLoaded,
+    standbyEnabled: snapshot.standbyEnabled,
+    lastActivityAt: snapshot.lastActivityAt,
+    failure: snapshot.failure ?? null,
+  };
+}
+
+/** Serializes one command for the helper's stdin; the id pairs it with the helper's `voice-ack`. */
+export function serializeVoiceCommand(command: VoiceWireCommand): string {
+  return JSON.stringify({
+    type: 'voice-command',
+    protocolVersion: NATIVE_PROTOCOL_VERSION,
+    id: command.id,
+    name: command.name,
+    ...(command.mode === undefined ? {} : { mode: command.mode }),
+  });
+}
+
 const MICROPHONE_STATES = new Set(['granted', 'denied', 'unknown', 'muted']);
 const CAPTURE_STATES = new Set(['granted', 'denied', 'unknown']);
 const OUTPUT_STATES = new Set(['ready', 'speaking', 'stopped', 'unknown']);
@@ -109,6 +249,11 @@ export type CreateShellOptions = Readonly<{
   onRecoverable?(reason: string): void;
   /** Optional hook so the host app can react to actions that change nothing locally. */
   onAction?(action: HotkeyAction): void;
+  /**
+   * Writes one serialized protocol line to the helper's private stdin. Returns false when no
+   * helper is attached, so a voice command fails fast instead of waiting out the ack timeout.
+   */
+  writeToHelper?(line: string): boolean;
 }>;
 
 export function createShell(options: CreateShellOptions): Shell {
@@ -119,6 +264,10 @@ export function createShell(options: CreateShellOptions): Shell {
 
   let current: WidgetStatus = DEFAULT_STATUS;
   let listeners: Array<(status: WidgetStatus) => void> = [];
+  let voice: VoiceSnapshot = VOICE_DISABLED_SNAPSHOT;
+  let voiceListeners: Array<(snapshot: VoiceSnapshot) => void> = [];
+  const pendingVoiceCommands = new Map<string, { resolve(outcome: VoiceCommandOutcome): void; timer: NodeJS.Timeout }>();
+  let voiceCommandCounter = 0;
   const acceleratorByAction = new Map<HotkeyAction, string>();
   const registered: Hotkey[] = [];
   const conflicts: HotkeyConflict[] = [];
@@ -143,6 +292,62 @@ export function createShell(options: CreateShellOptions): Shell {
     } catch {
       // Recovery signalling is best-effort.
     }
+  }
+
+  function publishVoice(next: VoiceSnapshot): VoiceSnapshot {
+    voice = { ...next };
+    for (const listener of voiceListeners) {
+      try {
+        listener(voice);
+      } catch {
+        // A misbehaving indicator observer must never break the lifecycle mirror.
+      }
+    }
+    return voice;
+  }
+
+  function settleVoiceCommand(id: string, outcome: VoiceCommandOutcome): boolean {
+    const pending = pendingVoiceCommands.get(id);
+    if (!pending) return false;
+    pendingVoiceCommands.delete(id);
+    clearTimeout(pending.timer);
+    pending.resolve(outcome);
+    return true;
+  }
+
+  /** Fails every in-flight command; used when the helper goes away mid-command. */
+  function failPendingVoiceCommands(reason: string): void {
+    for (const id of [...pendingVoiceCommands.keys()]) settleVoiceCommand(id, { ok: false, reason });
+  }
+
+  function sendVoiceCommand(
+    name: VoiceWireCommandName,
+    params?: { mode?: 'conversation' | 'standby' },
+  ): Promise<VoiceCommandOutcome> {
+    voiceCommandCounter += 1;
+    const command: VoiceWireCommand = {
+      id: `voice-${voiceCommandCounter}`,
+      name,
+      ...(params?.mode === undefined ? {} : { mode: params.mode }),
+    };
+    let written = false;
+    try {
+      written = options.writeToHelper?.(serializeVoiceCommand(command)) === true;
+    } catch {
+      written = false;
+    }
+    if (!written) {
+      return Promise.resolve({ ok: false, reason: 'The signed voice helper is not connected.' });
+    }
+    return new Promise<VoiceCommandOutcome>((resolve) => {
+      const timer = setTimeout(() => {
+        pendingVoiceCommands.delete(command.id);
+        reportRecoverable(`The signed voice helper did not acknowledge '${name}' in time.`);
+        resolve({ ok: false, reason: `The signed voice helper did not acknowledge '${name}' in time.` });
+      }, VOICE_COMMAND_TIMEOUT_MS);
+      timer.unref?.();
+      pendingVoiceCommands.set(command.id, { resolve, timer });
+    });
   }
 
   function invoke(action: HotkeyAction): WidgetStatus {
@@ -206,7 +411,8 @@ export function createShell(options: CreateShellOptions): Shell {
       return reject('Malformed helper message: expected a JSON object.');
     }
     const message = parsed as Record<string, unknown>;
-    if (message.type !== 'hello' && message.type !== 'status') {
+    const type = message.type;
+    if (type !== 'hello' && type !== 'status' && type !== 'voice-ack' && type !== 'voice-observation') {
       return reject('Unsupported helper message type.');
     }
     if (message.protocolVersion !== NATIVE_PROTOCOL_VERSION) {
@@ -214,6 +420,20 @@ export function createShell(options: CreateShellOptions): Shell {
     }
     if (typeof message.token !== 'string' || !timingSafeEqual(message.token, token)) {
       return reject('Helper message failed token authentication.');
+    }
+    if (type === 'voice-ack') {
+      const ack = parseVoiceAck(message);
+      if (!ack.ok) return reject(ack.reason);
+      // A late or repeated ack is still a valid frame: it settles nothing, but it is not a
+      // protocol error either, so widget status and the lifecycle mirror both stay untouched.
+      settleVoiceCommand(ack.ack.id, ack.ack.ok
+        ? { ok: true }
+        : { ok: false, reason: ack.ack.error ?? 'The signed voice helper rejected the command.' });
+      return { ok: true, ack: ack.ack };
+    }
+    if (type === 'voice-observation') {
+      const observation = parseVoiceObservation(message.observation);
+      return observation.ok ? { ok: true, observation: observation.observation } : reject(observation.reason);
     }
     const status = parseStatus(message.status);
     if (!status.ok) return reject(status.reason);
@@ -225,6 +445,7 @@ export function createShell(options: CreateShellOptions): Shell {
   }
 
   function nativeHostDisconnected(reason = 'Native helper disconnected; waiting to reconnect.'): WidgetStatus {
+    failPendingVoiceCommands(reason);
     return publish({ ...current, helper: 'disconnected' }, reason);
   }
 
@@ -247,6 +468,15 @@ export function createShell(options: CreateShellOptions): Shell {
     activate,
     subscribe,
     registeredAccelerator: (action: HotkeyAction) => acceleratorByAction.get(action) ?? null,
+    sendVoiceCommand,
+    publishVoice,
+    voiceSnapshot: () => voice,
+    subscribeVoice: (listener: (snapshot: VoiceSnapshot) => void) => {
+      voiceListeners.push(listener);
+      return () => {
+        voiceListeners = voiceListeners.filter((candidate) => candidate !== listener);
+      };
+    },
   });
 }
 
@@ -300,4 +530,138 @@ function timingSafeEqual(candidate: string, expected: string): boolean {
     difference |= candidate.charCodeAt(index) ^ expected.charCodeAt(index);
   }
   return difference === 0;
+}
+
+type ParsedVoiceAck = { ok: true; ack: VoiceWireAck } | { ok: false; reason: string };
+
+function parseVoiceAck(message: Record<string, unknown>): ParsedVoiceAck {
+  const id = message.id;
+  if (typeof id !== 'string' || id.length === 0 || id.length > 64) {
+    return { ok: false, reason: 'Malformed voice ack: invalid command id.' };
+  }
+  if (typeof message.ok !== 'boolean') {
+    return { ok: false, reason: 'Malformed voice ack: missing ok flag.' };
+  }
+  if (message.ok === false && message.error !== undefined && typeof message.error !== 'string') {
+    return { ok: false, reason: 'Malformed voice ack: invalid error text.' };
+  }
+  const error = typeof message.error === 'string' ? message.error.slice(0, 200) : undefined;
+  return { ok: true, ack: { id, ok: message.ok, ...(error === undefined ? {} : { error }) } };
+}
+
+type ParsedObservation = { ok: true; observation: VoiceWireObservation } | { ok: false; reason: string };
+
+function parseVoiceObservation(value: unknown): ParsedObservation {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return { ok: false, reason: 'Malformed voice observation: expected an object.' };
+  }
+  const observation = value as Record<string, unknown>;
+  switch (observation.kind) {
+    case 'standby-energy': {
+      const sample = parseVoiceSample(observation.sample);
+      if (!sample.ok) return sample;
+      const report = parseVoiceEnergyReport(observation.report);
+      if (!report.ok) return report;
+      return { ok: true, observation: { kind: 'standby-energy', sample: sample.sample, report: report.report } };
+    }
+    case 'standby-window': {
+      const environment = observation.environment;
+      if (typeof environment !== 'string'
+        || !VOICE_ACOUSTIC_ENVIRONMENTS.includes(environment as VoiceAcousticEnvironment)) {
+        return { ok: false, reason: 'Malformed voice observation: invalid acoustic environment.' };
+      }
+      const durationMs = positiveNumber(observation.durationMs);
+      if (durationMs === null) return { ok: false, reason: 'Malformed voice observation: invalid window duration.' };
+      if (typeof observation.detected !== 'boolean') {
+        return { ok: false, reason: 'Malformed voice observation: missing detection flag.' };
+      }
+      const confidence = unitInterval(observation.confidence);
+      if (confidence === null) return { ok: false, reason: 'Malformed voice observation: invalid confidence.' };
+      const threshold = unitInterval(observation.threshold);
+      if (threshold === null) return { ok: false, reason: 'Malformed voice observation: invalid threshold.' };
+      return {
+        ok: true,
+        observation: {
+          kind: 'standby-window',
+          environment: environment as VoiceAcousticEnvironment,
+          durationMs,
+          detected: observation.detected,
+          confidence,
+          threshold,
+        },
+      };
+    }
+    default:
+      return { ok: false, reason: 'Malformed voice observation: unknown kind.' };
+  }
+}
+
+type ParsedSample = { ok: true; sample: VoiceWireSample } | { ok: false; reason: string };
+
+function parseVoiceSample(value: unknown): ParsedSample {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return { ok: false, reason: 'Malformed standby sample: expected an object.' };
+  }
+  const sample = value as Record<string, unknown>;
+  const durationMs = positiveNumber(sample.durationMs);
+  if (durationMs === null) return { ok: false, reason: 'Malformed standby sample: invalid duration.' };
+  const cpuPercent = nonNegativeNumber(sample.cpuPercent);
+  if (cpuPercent === null) return { ok: false, reason: 'Malformed standby sample: invalid CPU reading.' };
+  const wakeups = nonNegativeNumber(sample.wakeups);
+  if (wakeups === null) return { ok: false, reason: 'Malformed standby sample: invalid wakeup count.' };
+  const memory = sample.residentMemoryMb === null || sample.residentMemoryMb === undefined
+    ? null
+    : nonNegativeNumber(sample.residentMemoryMb);
+  if (sample.residentMemoryMb !== null && sample.residentMemoryMb !== undefined && memory === null) {
+    return { ok: false, reason: 'Malformed standby sample: invalid memory reading.' };
+  }
+  return { ok: true, sample: { durationMs, cpuPercent, wakeups: Math.round(wakeups), residentMemoryMb: memory } };
+}
+
+type ParsedEnergyReport = { ok: true; report: VoiceWireEnergyReport } | { ok: false; reason: string };
+
+function parseVoiceEnergyReport(value: unknown): ParsedEnergyReport {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return { ok: false, reason: 'Malformed standby report: expected an object.' };
+  }
+  const report = value as Record<string, unknown>;
+  const durationMs = nonNegativeNumber(report.durationMs);
+  const averageCpuPercent = nonNegativeNumber(report.averageCpuPercent);
+  const wakeupsPerMinute = nonNegativeNumber(report.wakeupsPerMinute);
+  const peakResidentMemoryMb = nonNegativeNumber(report.peakResidentMemoryMb);
+  const sampleCount = nonNegativeNumber(report.sampleCount);
+  if (durationMs === null || averageCpuPercent === null || wakeupsPerMinute === null
+    || peakResidentMemoryMb === null || sampleCount === null || typeof report.passed !== 'boolean') {
+    return { ok: false, reason: 'Malformed standby report: invalid gate reading.' };
+  }
+  const violations = Array.isArray(report.violations)
+    ? report.violations.filter((entry): entry is string => typeof entry === 'string').slice(0, 8)
+    : null;
+  if (!violations || violations.length !== (report.violations as ReadonlyArray<unknown>).length) {
+    return { ok: false, reason: 'Malformed standby report: invalid violations.' };
+  }
+  return {
+    ok: true,
+    report: {
+      durationMs,
+      averageCpuPercent,
+      wakeupsPerMinute,
+      peakResidentMemoryMb,
+      sampleCount: Math.round(sampleCount),
+      passed: report.passed,
+      violations,
+    },
+  };
+}
+
+function positiveNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function nonNegativeNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function unitInterval(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
 }

@@ -17,6 +17,14 @@ let package = Package(
         .library(name: "Audio", targets: ["Audio"]),
     ],
     targets: [
+        // Declared before the library target: the loop gate attributes a changed test file to the
+        // first target whose declared path contains it, and the standby sampling regression must be
+        // reported as a validated XCTest case (a `testTarget`), never as an executable script.
+        .testTarget(
+            name: "AudioTests",
+            dependencies: ["Audio"],
+            path: "Tests/AudioTests"
+        ),
         .target(
             name: "Audio",
             // `./` keeps the target on the package root: this module's files sit next to this
@@ -24,7 +32,7 @@ let package = Package(
             // loop gate matches a declared target path by string prefix, and `.` would render as
             // `<package>/./`, which no source path starts with.)
             path: "./",
-            exclude: ["Package.swift", "README.md", ".gitignore"]
+            exclude: ["Package.swift", "README.md", ".gitignore", "Tests"]
         ),
     ]
 )
