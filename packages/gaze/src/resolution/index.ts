@@ -1,41 +1,55 @@
+/**
+ * G02 — the deictic reference seam a gaze-derived desktop action is resolved through
+ * (IMPLEMENTATION_PLAN.md §7.2 G02; §5.11 gaze estimation and target fusion).
+ *
+ * The solving stays G01's: `../resolution.ts` owns the whole-label name match, the calibration
+ * generation checks, the quality-weighted Gaussian fused over the candidate rectangles inside the
+ * deictic window, and the read-only rule (top probability ≥ 0.80 with a ≥ 0.20 margin). This module
+ * is the adapter G02 needs on top of that shared resolver, never a second solver:
+ *
+ * 1. it feeds the shared resolver the caller's candidates — which carry the AX `targetRef` a
+ *    proposal must bind — and maps the resolver's ranked candidate identifiers back onto them, so
+ *    the resolved target and every clarification option are the caller's own controls;
+ * 2. it applies the session's configured confidence threshold to the resolver's outcome: a gaze
+ *    answer counts as resolved only when the resolver resolved it *and* the calibrated confidence
+ *    is at or above the threshold, so the same fixation resolves read-only at 0.80 and asks at 0.90;
+ * 3. a resolution below the configured threshold becomes a clarification over the resolver's
+ *    ranked alternatives (at most three, §5.11) — never a guess, and never a write.
+ *
+ * `utteranceNamesLabel` is exported because the confirmation seam needs the same whole-label rule:
+ * a confirmation must name the resolved control, not merely share a word with its label.
+ */
+import { createReferenceResolver } from '../resolution.js';
+import type { CandidateControl, CalibrationRecord, GazeSample } from '../types.js';
+
+/** §5.11: a clarification never offers more than the three strongest candidates. */
+const MAXIMUM_CLARIFICATION_OPTIONS = 3;
+
+/** The fallback identity for a caller that resolves without ASR identifiers of its own. */
+const ANONYMOUS_UTTERANCE = 'gaze-resolution';
+
 export type Bounds = Readonly<{ x: number; y: number; width: number; height: number }>;
 
-export type ResolutionCandidate = Readonly<{
-  candidateId: string;
-  targetRef: string;
-  label: string;
-  bounds: Bounds;
-  semanticScore: number;
-  enabled: boolean;
+/** A control the caller offers, including the AX target the confirmed action would be bound to. */
+export type ResolutionCandidate = CandidateControl & Readonly<{ targetRef: string }>;
+
+export type ResolutionUtterance = Readonly<{
+  text: string;
+  wordAt: string;
+  utteranceId?: string;
+  turnId?: string;
 }>;
 
-export type ResolutionUtterance = Readonly<{ text: string; wordAt: string }>;
-
-export type Calibration = Readonly<{
-  accepted: boolean;
-  reason?: string;
-  calibrationGeneration: number;
-  displayId: string;
-  displayArrangementGeneration: number;
-}>;
-
-export type GazeSample = Readonly<{
-  timestamp: string;
-  displayId: string;
-  meanX: number;
-  meanY: number;
-  quality: number;
-  calibrationGeneration: number;
-  displayTransform: Readonly<{ arrangementGeneration: number }>;
-}>;
-
-export type GazeEvidence = Readonly<{
-  samples: readonly GazeSample[];
-  calibration: Calibration;
-}>;
+export type GazeEvidence = Readonly<{ samples: readonly GazeSample[]; calibration: CalibrationRecord }>;
 
 export type TargetResolution =
-  | Readonly<{ kind: 'resolved'; candidate: ResolutionCandidate; confidence: number; basis: 'named' | 'gaze'; gazeUsed: boolean }>
+  | Readonly<{
+      kind: 'resolved';
+      candidate: ResolutionCandidate;
+      confidence: number;
+      basis: 'named' | 'gaze' | 'context';
+      gazeUsed: boolean;
+    }>
   | Readonly<{ kind: 'clarify'; candidates: readonly ResolutionCandidate[] }>
   | Readonly<{ kind: 'abstain'; reason: string }>;
 
@@ -52,67 +66,53 @@ export function utteranceNamesLabel(text: string, label: string): boolean {
     labelWords.every((labelWord, offset) => words[start + offset] === labelWord));
 }
 
-function center(bounds: Bounds): Readonly<{ x: number; y: number }> {
-  return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-}
-
-function distanceSquared(x: number, y: number, bounds: Bounds): number {
-  const target = center(bounds);
-  return (x - target.x) ** 2 + (y - target.y) ** 2;
-}
-
 export function resolveTarget(input: Readonly<{
   utterance: ResolutionUtterance;
   candidates: readonly ResolutionCandidate[];
   gaze: GazeEvidence | null;
   confidenceThreshold: number;
 }>): TargetResolution {
-  const candidates = input.candidates.filter((candidate) => candidate.enabled);
-  const named = candidates.filter((candidate) => utteranceNamesLabel(input.utterance.text, candidate.label));
-  if (named.length === 1) {
-    return { kind: 'resolved', candidate: named[0], confidence: 1, basis: 'named', gazeUsed: false };
-  }
+  const byCandidateId = new Map(
+    input.candidates.map((candidate) => [candidate.candidateId, candidate] as const),
+  );
+  const candidatesFor = (candidateIds: readonly string[]): readonly ResolutionCandidate[] =>
+    candidateIds
+      .map((candidateId) => byCandidateId.get(candidateId))
+      .filter((candidate): candidate is ResolutionCandidate => candidate !== undefined);
+  const rankedWith = (target: ResolutionCandidate, ranked: readonly ResolutionCandidate[]) =>
+    [target, ...ranked.filter((candidate) => candidate.candidateId !== target.candidateId)];
 
-  if (!input.gaze) return { kind: 'clarify', candidates: candidates.slice(0, 3) };
-  const { calibration } = input.gaze;
-  if (!calibration.accepted) {
-    return { kind: 'abstain', reason: calibration.reason ?? 'calibration_failed' };
-  }
-
-  const wordAt = Date.parse(input.utterance.wordAt);
-  const samples = input.gaze.samples.filter((sample) => {
-    const timestamp = Date.parse(sample.timestamp);
-    return Number.isFinite(timestamp)
-      && timestamp >= wordAt - 700
-      && timestamp <= wordAt + 200
-      && sample.quality > 0
-      && sample.displayId === calibration.displayId
-      && sample.calibrationGeneration === calibration.calibrationGeneration
-      && sample.displayTransform.arrangementGeneration === calibration.displayArrangementGeneration;
+  const outcome = createReferenceResolver().resolve({
+    utteranceId: input.utterance.utteranceId ?? ANONYMOUS_UTTERANCE,
+    turnId: input.utterance.turnId ?? input.utterance.utteranceId ?? ANONYMOUS_UTTERANCE,
+    phrase: { text: input.utterance.text, wordAt: input.utterance.wordAt },
+    candidates: input.candidates,
+    gaze: input.gaze,
   });
-  if (samples.length === 0) return { kind: 'abstain', reason: 'gaze_unavailable' };
-  if (candidates.length === 0) return { kind: 'abstain', reason: 'no_candidates' };
 
-  const weight = samples.reduce((total, sample) => total + sample.quality, 0);
-  const x = samples.reduce((total, sample) => total + sample.meanX * sample.quality, 0) / weight;
-  const y = samples.reduce((total, sample) => total + sample.meanY * sample.quality, 0) / weight;
-  const ranked = candidates
-    .map((candidate) => ({ candidate, distance: distanceSquared(x, y, candidate.bounds) }))
-    .sort((left, right) => left.distance - right.distance);
-
-  const first = ranked[0];
-  const second = ranked[1];
-  // A normalized nearest-target margin. The small smoothing term keeps confidence finite at a
-  // target centre while preserving an exact 0.5 tie at a shared boundary.
-  const firstDistance = Math.sqrt(first.distance);
-  const secondDistance = second ? Math.sqrt(second.distance) : Number.POSITIVE_INFINITY;
-  const gap = secondDistance - firstDistance;
-  const confidence = second
-    ? 0.5 + 0.5 * Math.max(0, gap) / (Math.max(0, gap) + 2)
-    : 1;
-
-  if (confidence < input.confidenceThreshold || confidence - (1 - confidence) < 0.2) {
-    return { kind: 'clarify', candidates: ranked.slice(0, 3).map((entry) => entry.candidate) };
+  if (outcome.outcome === 'abstain') {
+    return { kind: 'abstain', reason: outcome.reason ?? 'gaze_unresolved' };
   }
-  return { kind: 'resolved', candidate: first.candidate, confidence, basis: 'gaze', gazeUsed: true };
+
+  const ranked = candidatesFor(outcome.candidateIds);
+  if (outcome.outcome === 'clarify') {
+    if (ranked.length === 0) return { kind: 'abstain', reason: 'no_candidates' };
+    return { kind: 'clarify', candidates: ranked.slice(0, MAXIMUM_CLARIFICATION_OPTIONS) };
+  }
+
+  const target = byCandidateId.get(outcome.targetId ?? '');
+  if (!target) return { kind: 'abstain', reason: 'no_candidates' };
+  if (outcome.confidence < input.confidenceThreshold) {
+    return {
+      kind: 'clarify',
+      candidates: rankedWith(target, ranked).slice(0, MAXIMUM_CLARIFICATION_OPTIONS),
+    };
+  }
+  return {
+    kind: 'resolved',
+    candidate: target,
+    confidence: outcome.confidence,
+    basis: outcome.basis === 'named' ? 'named' : outcome.basis === 'context' ? 'context' : 'gaze',
+    gazeUsed: outcome.gazeUsed,
+  };
 }
