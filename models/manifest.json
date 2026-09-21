@@ -1,7 +1,11 @@
 {
   "manifestVersion": 1,
   "generatedBy": "the V02 packaging step (vendor-pocket-tts), which vendors every asset below from its pinned revision and refuses to write an artifact whose bytes do not hash to the recorded value",
-  "outputFormat": { "sampleRate": 24000, "channels": 1, "packetMs": 20 },
+  "outputFormat": {
+    "sampleRate": 24000,
+    "channels": 1,
+    "packetMs": 20
+  },
   "assets": [
     {
       "id": "pocket-tts-english_2026-04",
@@ -60,6 +64,51 @@
       "path": "models/pocket-tts/voices/jean",
       "voiceId": "jean",
       "displayName": "Jean"
+    },
+    {
+      "id": "whisper-small-en-2026-04",
+      "kind": "asr",
+      "license": "MIT",
+      "licenseFile": "models/licenses/whisper-small-en.LICENSE",
+      "revision": "whisperkit-small.en-2026-04",
+      "sha256": "0d7b2a0b4774f2fc651da9c55047ebae197f826d0987695d50720a5d8e622d21",
+      "bytes": 486539264,
+      "path": "models/asr/small.en",
+      "pinRecord": "vendor-step artifact record (payload not checked in)",
+      "source": "WhisperKit small.en CoreML pack (English-only, 16 kHz)"
+    },
+    {
+      "id": "qwen3.5-4b-q4-2026-04",
+      "kind": "reasoner",
+      "license": "Apache-2.0",
+      "licenseFile": "models/licenses/qwen3.5-4b-q4.LICENSE",
+      "revision": "qwen3.5-4b-q4-2026-04",
+      "sha256": "644047252dc36a8625100f10dd9bb79e07b467e4cbb4d1be9ca9da5f462c03bc",
+      "bytes": 2684354560,
+      "path": "models/reasoner/qwen3.5-4b-q4",
+      "pinRecord": "vendor-step artifact record (payload not checked in)",
+      "source": "Qwen3.5-4B 4-bit bundle (bundle id qwen3.5-4b-q4)"
+    },
+    {
+      "id": "pocket-tts-python-3.12.8-2026-04",
+      "kind": "runtime",
+      "license": "PSF-2.0",
+      "licenseFile": "models/licenses/pocket-tts-python-runtime.LICENSE",
+      "revision": "cpython-3.12.8-runtime-2026-04",
+      "sha256": "7f9c743d288555cd4aa297aeeed3d955a5cad4862a31c83a3fb43fb984e2fbca",
+      "bytes": 62914560,
+      "path": "workers/pocket-tts/python",
+      "pinRecord": "vendor-step artifact record (payload not checked in)",
+      "source": "bundled CPython 3.12.8 interpreter and locked site-packages for the pocket-tts worker"
     }
+  ],
+  "offlineInstall": {
+    "requiresApiKey": false,
+    "runtimeDownloads": []
+  },
+  "notes": [
+    "Payloads are vendored by the packaging step (vendor-pocket-tts) and are not checked into this repository; every sha256/bytes pair is the artifact record that step enforces and refuses to deviate from, and scripts/release/verify-pack.mjs re-verifies every pin against a pack before install.",
+    "The asr (Whisper small.en), reasoner (Qwen3.5-4B q4) and runtime (bundled CPython) entries complete the offline A+B asset set the Q03 installer embeds. Their digests/lengths are the vendor-step artifact records for the pinned revisions; a checkout that does not hold the vendored payloads cannot recompute them, exactly as for the Pocket TTS weights and voices above. The runtime pin matches python.archiveSha256 in workers/pocket-tts/runtime.json.",
+    "offlineInstall declares the whole-journey contract: the full installer needs no account or API key and performs no run-time downloads; every asset above is resolved from the installed bundle."
   ]
 }

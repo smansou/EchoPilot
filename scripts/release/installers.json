@@ -1,0 +1,61 @@
+{
+  "release": "echopilot-desktop",
+  "distribution": {
+    "installerFormat": "dmg",
+    "updateChannel": "stable",
+    "signingIdentity": "Developer ID Application: EchoPilot (TEAMID)",
+    "notarization": "apple-notary-service",
+    "artifacts": [
+      "EchoPilot-<version>-offline.dmg",
+      "EchoPilot-<version>-online.dmg",
+      "EchoPilot-<version>-mac.zip"
+    ]
+  },
+  "installers": [
+    {
+      "id": "echopilot-offline",
+      "displayName": "EchoPilot (full offline installer)",
+      "kind": "full",
+      "offlineAvailability": "complete",
+      "embeddedModelAssets": true,
+      "assetSet": [
+        "whisper-small-en-2026-04",
+        "qwen3.5-4b-q4-2026-04",
+        "pocket-tts-english_2026-04",
+        "pocket-tts-voice-alba",
+        "pocket-tts-voice-anna",
+        "pocket-tts-voice-charles",
+        "pocket-tts-voice-jean",
+        "pocket-tts-python-3.12.8-2026-04"
+      ],
+      "requiresApiKey": false,
+      "runtimeDownloads": [],
+      "signed": true,
+      "notarized": true,
+      "notes": "Ships every asset from models/manifest.json inside the DMG, so dictation, local conversation, memory restart and narration work on a fresh Mac with no account, no key and no post-install download. Pack bytes are verified against the manifest pins before install (scripts/release/verify-pack.mjs)."
+    },
+    {
+      "id": "echopilot-online",
+      "displayName": "EchoPilot (small online installer)",
+      "kind": "online",
+      "offlineAvailability": "after-asset-download",
+      "embeddedModelAssets": false,
+      "assetSet": [],
+      "requiresApiKey": false,
+      "runtimeDownloads": ["models/manifest.json"],
+      "signed": true,
+      "notarized": true,
+      "notes": "Downloads the signed model pack once after installation, verifies it against the same manifest pins, and only then claims offline use; until that download completes the app reports the missing-asset state instead of speaking."
+    }
+  ],
+  "updates": {
+    "staged": true,
+    "verifyPackBeforeCommit": true,
+    "requiresSignature": true,
+    "keepPreviousVersions": 2,
+    "rollback": true,
+    "compatibilityBackups": true,
+    "mechanism": "scripts/release/install.mjs",
+    "notes": "Updates stage an immutable version, verify every asset against the pack manifest, journal the transaction and only then flip <root>/current. A verification failure never reaches the commit stage and leaves the active version untouched; an interrupted run leaves either the previous or the committed version verifiable, and rollback restores the previously active version."
+  }
+}
