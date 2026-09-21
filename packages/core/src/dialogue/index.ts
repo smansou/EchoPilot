@@ -13,6 +13,10 @@
  *   - an ambiguous destination asks one short question, dispatches nothing, and persists nothing;
  *   - partial ASR and ambient acknowledgments hold silently (the router marks them) and reach no
  *     adapter.
+ *   - a control "stop all" turn interrupts every managed harness turn in flight exactly once
+ *     through that session's adapter and reports which interruptions were acknowledged, which
+ *     were not, and which external work may still be running (R03 criterion 3). Speech controls
+ *     ("stop speaking", "mute") interrupt no managed turn.
  */
 import type {
   EvidenceBundle,
@@ -63,6 +67,8 @@ export type DialogueTurn = Readonly<{
   clarification?: string;
   dispatch?: Readonly<{ deliveryId: string; sessionId: string; instruction: string }>;
   receipt?: HarnessDeliveryReceipt;
+  /** Present on a control "stop all" turn: the honest interruption report (R03 criterion 3). */
+  stopAll?: StopAllReport;
 }>;
 
 export interface DialogueSession {
@@ -72,6 +78,31 @@ export interface DialogueSession {
 
 export type DialogueSpeak = (plan: SpeechPlan) => Promise<ReadonlyArray<VoiceOutputEvent>>;
 
+/** A managed harness turn in flight; stop all interrupts it through its session's adapter. */
+export type ManagedTurnRef = Readonly<{ sessionId: string; turnId: string }>;
+
+/** Work outside the managed adapters (external processes) that stop all cannot interrupt. */
+export type ExternalWorkRef = Readonly<{ sessionId: string; detail: string }>;
+
+export type StopAllManagedEntry = Readonly<{
+  sessionId: string;
+  turnId: string;
+  interruption: 'acknowledged' | 'unconfirmed';
+  /** Required non-empty when 'unconfirmed', so a miss explains itself instead of vanishing. */
+  reason?: string;
+}>;
+
+export type StopAllExternalEntry = Readonly<{
+  sessionId: string;
+  detail: string;
+  mayStillBeRunning: true;
+}>;
+
+export type StopAllReport = Readonly<{
+  managed: ReadonlyArray<StopAllManagedEntry>;
+  external: ReadonlyArray<StopAllExternalEntry>;
+}>;
+
 export type DialogueSessionOptions = Readonly<{
   router: DialogueRouter;
   memory: Memory;
@@ -79,6 +110,10 @@ export type DialogueSessionOptions = Readonly<{
   speak: DialogueSpeak;
   scope: Scope;
   now?: () => Date;
+  /** Read when stop all runs, never snapshotted at construction: the set changes while the session lives. */
+  managedTurns?: () => ReadonlyArray<ManagedTurnRef>;
+  /** Read when stop all runs: external work that stop all cannot reach. */
+  externalWork?: () => ReadonlyArray<ExternalWorkRef>;
 }>;
 
 type MutableOutboxRecord = {
@@ -102,6 +137,16 @@ function routingAnnotation(decision: RouteDecision): RoutingAnnotation {
     ...(hold === undefined ? {} : { hold }),
     ...(candidates === undefined ? {} : { candidates }),
   };
+}
+
+type ControlKind = 'stop_all' | 'stop_speaking' | 'pause' | 'mute';
+
+/** Reads the routing package's precedence-1 control kind without depending on its package. */
+function controlOf(decision: RouteDecision): ControlKind | undefined {
+  const control = (decision as RouteDecision & { readonly control?: unknown }).control;
+  return control === 'stop_all' || control === 'stop_speaking' || control === 'pause' || control === 'mute'
+    ? control
+    : undefined;
 }
 
 /** "codex-parser" → "Codex Parser", so the spoken reply names the session the user knows. */
@@ -280,6 +325,46 @@ export function createDialogueSession(options: DialogueSessionOptions): Dialogue
     return { decision, dispatch: { deliveryId, sessionId, instruction }, receipt };
   }
 
+  /**
+   * Stop all interrupts every managed harness turn in flight exactly once through that session's
+   * adapter. A rejected interrupt does not abort the sweep: it is reported 'unconfirmed' with a
+   * reason. Work outside the managed adapters is reported as possibly still running, never as
+   * stopped. Read live, so the report covers the turns in flight when stop all runs.
+   */
+  async function stopAll(): Promise<StopAllReport> {
+    const managed: StopAllManagedEntry[] = [];
+    for (const turn of options.managedTurns?.() ?? []) {
+      const adapter = options.adapters.get(turn.sessionId);
+      if (adapter === undefined) {
+        managed.push({
+          sessionId: turn.sessionId,
+          turnId: turn.turnId,
+          interruption: 'unconfirmed',
+          reason: `No managed session is connected for ${turn.sessionId}, so ${turn.turnId} was not interrupted.`,
+        });
+        continue;
+      }
+      try {
+        await adapter.interrupt(turn.turnId);
+        managed.push({ sessionId: turn.sessionId, turnId: turn.turnId, interruption: 'acknowledged' });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        managed.push({
+          sessionId: turn.sessionId,
+          turnId: turn.turnId,
+          interruption: 'unconfirmed',
+          reason: `${turn.sessionId} did not acknowledge the interrupt: ${detail}`,
+        });
+      }
+    }
+    const external: StopAllExternalEntry[] = (options.externalWork?.() ?? []).map((work) => ({
+      sessionId: work.sessionId,
+      detail: work.detail,
+      mayStillBeRunning: true,
+    }));
+    return { managed, external };
+  }
+
   async function handleUtterance(utterance: DialogueUtterance): Promise<DialogueTurn> {
     const decision = options.router.route(utterance);
     const annotation = routingAnnotation(decision);
@@ -301,6 +386,12 @@ export function createDialogueSession(options: DialogueSessionOptions): Dialogue
 
     if (decision.destination === 'harness' && decision.targetSessionId !== undefined) {
       return dispatch(utterance, decision, decision.targetSessionId);
+    }
+
+    // Stop all is the precedence-1 emergency control: it reaches every managed harness turn in
+    // flight and reports what it could not confirm rather than claiming the world went quiet.
+    if (controlOf(decision) === 'stop_all') {
+      return { decision, stopAll: await stopAll() };
     }
 
     // Dictation, desktop, and control destinations are executed by their own subsystems.
