@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { State as CompanionState, Command, CompanionAPI as Bridge } from '../../../../packages/contracts/src/index';
+import { createPrivacyControl, type PrivacyControl, type PrivacyControlState } from './control/privacy/index';
+import { resolvePrivacyOperations } from './control/privacy/host';
 import { sendShellControl, useShellSnapshot, type ShellSnapshot, type WidgetControl } from './widget/shell-status';
 import { WidgetStatusPanel } from './widget/WidgetStatusPanel';
 import './styles.css';
@@ -8,13 +10,17 @@ import './widget/widget.css';
 
 const bridge = (window as unknown as { echo?: Bridge }).echo;
 const isDashboard = new URLSearchParams(window.location.search).get('view') === 'dashboard';
+// The profile service is bound by the desktop host (see control/privacy/profile-host.ts); an
+// unbound window says so instead of rendering choices nothing can store.
+const privacyHost = resolvePrivacyOperations();
 
-function Icon({ name }: { name: 'mute' | 'replay' | 'expand' }) {
+function Icon({ name }: { name: 'mute' | 'replay' | 'expand' | 'lock' }) {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {name === 'mute' && <><path d="M12 15a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v7a3 3 0 0 0 3 3Z" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8M3 3l18 18" /></>}
       {name === 'replay' && <><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6" /><path d="m10 8 6 4-6 4Z" /></>}
       {name === 'expand' && <><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M9 3v18M9 9h12" /></>}
+      {name === 'lock' && <><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>}
     </svg>
   );
 }
@@ -29,6 +35,14 @@ function App() {
   const [actionShell, setActionShell] = useState<ShellSnapshot | null>(null);
   const [shellBusy, setShellBusy] = useState(false);
   const shell = actionShell ?? polledShell;
+  // The privacy control is the only owner of these choices: the UI stages them and renders the
+  // outcome; it never touches a store, a directory or a passphrase beyond the input it clears.
+  const [privacyControl] = useState<PrivacyControl>(() => createPrivacyControl(privacyHost.operations));
+  const [privacy, setPrivacy] = useState<PrivacyControlState>(() => privacyControl.state());
+  const [privacyBusy, setPrivacyBusy] = useState(false);
+  const exportPassphrase = useRef<HTMLInputElement>(null);
+  const restoreArchive = useRef<HTMLInputElement>(null);
+  const restorePassphrase = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!bridge) {
@@ -77,10 +91,68 @@ function App() {
     finally { setShellBusy(false); }
   }
 
+  // Privacy actions only report what the control (and behind it, the profile service) confirmed;
+  // a rejected choice leaves the previous outcome in place instead of reading like a success.
+  async function runPrivacy(action: () => Promise<PrivacyControlState>) {
+    if (privacyBusy) return;
+    setPrivacyBusy(true);
+    try { setPrivacy(await action()); }
+    catch { setPrivacy(privacyControl.state()); }
+    finally { setPrivacyBusy(false); }
+  }
+
+  async function togglePrivateSession() {
+    await runPrivacy(() => privacy.private ? privacyControl.endPrivateSession() : privacyControl.beginPrivateSession());
+  }
+
+  function stageForget() {
+    const event = state.event;
+    if (!event) return;
+    setPrivacy(privacyControl.requestForget({ eventIds: [event.id] }, `the latest event (${event.id})`));
+  }
+
+  function passphraseFrom(ref: React.RefObject<HTMLInputElement | null>): string {
+    const input = ref.current;
+    const value = input?.value ?? '';
+    if (input) input.value = '';
+    return value;
+  }
+
+  const privacyPanel = (
+    <section className="event-card" aria-labelledby="privacy-heading">
+      <div className="section-label"><h2 id="privacy-heading">Private session, forget, export</h2><span className="pill">{privacy.private ? 'Private' : 'Recall on'}</span></div>
+      <p className="event-text" aria-live="polite">{privacy.privateLabel}</p>
+      {!privacy.bound && <p className="widget-note">{privacyHost.reason}</p>}
+      {privacy.privateError && <p className="error" role="alert">{privacy.privateError}</p>}
+      <div className="controls" aria-label="Forget a memory">
+        <button className="control" disabled={!privacy.bound || !state.event || privacy.pendingForget !== null} onClick={stageForget} title="Stage the latest event for deletion">Forget latest event</button>
+        {privacy.pendingForget && <button className="control selected" disabled={privacyBusy} onClick={() => void runPrivacy(() => privacyControl.confirmForget())} title="Delete the staged selection">Confirm: {privacy.pendingForget.label}</button>}
+        {privacy.pendingForget && <button className="control" disabled={privacyBusy} onClick={() => setPrivacy(privacyControl.cancelForget())}>Cancel</button>}
+      </div>
+      {privacy.forget.kind === 'succeeded' && <p className="widget-note" role="status">{privacy.forget.detail}</p>}
+      {privacy.forget.kind === 'failed' && <p className="error" role="alert">{privacy.forget.reason}</p>}
+      <div className="controls" aria-label="Encrypted export">
+        <input ref={exportPassphrase} type="password" placeholder="Export passphrase" aria-label="Export passphrase" autoComplete="off" />
+        <button className="control" disabled={!privacy.bound || privacyBusy} onClick={() => void runPrivacy(() => privacyControl.exportProfile({ passphrase: passphraseFrom(exportPassphrase) }))} title="Seal this profile into an encrypted archive">Export encrypted profile</button>
+      </div>
+      {privacy.export.kind === 'succeeded' && <p className="widget-note" role="status">{privacy.export.detail}</p>}
+      {privacy.export.kind === 'failed' && <p className="error" role="alert">{privacy.export.reason}</p>}
+      <div className="controls" aria-label="Restore into a new profile">
+        <input ref={restoreArchive} type="text" placeholder="Archive path" aria-label="Archive path" autoComplete="off" />
+        <input ref={restorePassphrase} type="password" placeholder="Restore passphrase" aria-label="Restore passphrase" autoComplete="off" />
+        <button className="control" disabled={!privacy.bound || privacyBusy} onClick={() => void runPrivacy(() => privacyControl.importProfile({ archive: restoreArchive.current?.value ?? '', passphrase: passphraseFrom(restorePassphrase) }))} title="Restore the archive into the new profile directory the host configured">Restore into a new profile</button>
+      </div>
+      {privacy.import.kind === 'succeeded' && <p className="widget-note" role="status">{privacy.import.detail}</p>}
+      {privacy.import.kind === 'failed' && <p className="error" role="alert">{privacy.import.reason}</p>}
+      {privacy.privateTranscript.length > 0 && <p className="widget-note" role="status">Private session ended: {privacy.privateTranscript.length} entries were shown once and are gone.</p>}
+    </section>
+  );
+
   const controls = (
     <div className="controls" aria-label="Companion controls">
       <button className={`control ${state.muted ? 'selected' : ''}`} aria-label={state.muted ? 'Unmute companion output' : 'Mute companion output'} aria-pressed={state.muted} disabled={!ready || busy} onClick={() => void command({ type: 'set-muted', muted: !state.muted })} title={state.muted ? 'Unmute output' : 'Mute output'}><Icon name="mute" /><span>{state.muted ? 'Unmute' : 'Mute'}</span></button>
       <button className="control" disabled={!ready || busy || !state.event} onClick={() => void command({ type: 'replay' })} title="Replay the latest demo event"><Icon name="replay" /><span>Replay</span></button>
+      <button className={`control ${privacy.private ? 'selected' : ''}`} aria-label={privacy.private ? 'End the private session' : 'Start a private session'} aria-pressed={privacy.private} disabled={!privacy.bound || privacyBusy} onClick={() => void togglePrivateSession()} title={privacy.privateLabel}><Icon name="lock" /><span>{privacy.private ? 'End private' : 'Private'}</span></button>
       {!isDashboard && <button className="control icon-only" aria-label="Open Mission Control" disabled={!ready || busy} onClick={() => void command({ type: 'open-dashboard' })} title="Open Mission Control"><Icon name="expand" /></button>}
     </div>
   );
@@ -92,6 +164,7 @@ function App() {
         <section className="dashboard-heading"><p className="eyebrow">YOUR COMPANION, AT A GLANCE</p><h1>Mission Control</h1><p>A small presence. A clearer view of your work.</p></section>
         <section className="status-card"><div className={`orb ${state.muted ? 'muted' : ''}`} aria-hidden="true"><span /></div><div><p className="eyebrow">COMPANION OUTPUT</p><h2>{!ready ? 'Connecting' : state.muted ? 'Muted' : 'Ready'}</h2><p>Local demo session</p></div>{controls}</section>
         <section className="event-card" aria-labelledby="latest-event"><div className="section-label"><h2 id="latest-event">Latest event</h2><span className="pill">Synthetic</span></div><p className="event-text" aria-live="polite">{state.event?.text ?? 'Waiting for the first demo event.'}</p>{state.event && <div className="event-meta"><span>Session · {state.event.sessionId}</span><time dateTime={state.event.createdAt}>{new Date(state.event.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>}</section>
+        {privacyPanel}
         <WidgetStatusPanel snapshot={shell} busy={shellBusy} onControl={(control) => void shellControl(control)} />
         <aside className="demo-note"><span className="note-dot" /><div><strong>This is the first working slice.</strong><p>Events are simulated. No microphone, screen capture, real agent connection, or synthesized voice is active. Replay re-delivers the latest event.</p></div></aside>
         <footer>EchoPilot <span>·</span> Local desktop prototype</footer>

@@ -8,6 +8,11 @@
  * content: identity columns (`event_id`, `source_id`, `source_event_id`, `payload_ref`) are
  * routing metadata, so a forget works on a closed store and never needs the key.
  *
+ * The private half of the same ticket is enforced here too: `privateSessions` is the profile's
+ * in-memory registry and `admit` diverts events whose scope names a session opened there. The M01
+ * store produced by `createMemoryStore` calls `admit` inside its own `ingest`, so private captures
+ * reach durable storage only if that boundary stops asking — it never does.
+ *
  * Three rules make the choice stick:
  *
  *  - **Lineage first.** Deleting a displayed fact is not enough; the envelope, payload, capsule,
@@ -21,9 +26,10 @@
  *    source, a different project, or even a byte-identical copy of the file at another path still
  *    imports in full.
  *
- * `guard(store)` is the production hook for rule three: the M03 importer is a `MemoryStore`
- * consumer, so wrapping the store with the guard is what makes "re-import cannot resurrect this"
- * true without teaching the importer about privacy.
+ * The production hook for rule three is the store's own `ingest`, which admits every batch through
+ * `admit`: the M03 importer, a live capture path and a replayed batch all write through it, so a
+ * re-import cannot resurrect a forgotten record without anyone teaching the importer about privacy.
+ * `guard(store)` remains for callers that hold a bare `MemoryStore` and want the same decision.
  *
  * Ordering contract: `forget()` condenses derived state on disk, so derived readers built over the
  * same directory must be closed first (or rebuilt afterwards); the returned receipt also reports
@@ -34,6 +40,7 @@ import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { loadState, saveState } from '../consolidation/state.js';
+import { createMemoryPrivateSessions, type MemoryPrivateSessions } from './private-sessions.js';
 import { loadRecordsState, saveRecordsState } from '../records/state.js';
 import { PROFILE_DB_FILE, PROJECTS_DIR } from '../store/schema.js';
 import type { IngestOptions, IngestResult, MemoryStore, NormalizedBatch, TimelineItem, TimelineQuery } from '../store/types.js';
@@ -63,6 +70,20 @@ export type ForgetReceipt = Readonly<{
 }>;
 
 export interface MemoryDeletion {
+  /**
+   * The profile's private-session registry. Sessions opened here are enforced at the storage
+   * boundary (`admit`), so a capture from an open session is buffered in memory and never written
+   * to the store.
+   */
+  readonly privateSessions: MemoryPrivateSessions;
+  /**
+   * The storage-boundary decision for one batch: identities this profile suppresses are dropped and
+   * a capture whose scope names a session this registry opened privately is diverted to the
+   * in-memory registry (or dropped, once that session ended), so the returned batch is exactly what
+   * may reach durable storage. The M01 production store applies this inside its own `ingest`, which
+   * is why an ordinary importer or live capture path cannot bypass the user's choice.
+   */
+  admit(batch: NormalizedBatch): Promise<NormalizedBatch>;
   /** Removes the chosen lineage, condenses derived state and records the tombstones. */
   forget(request: ForgetRequest): Promise<ForgetReceipt>;
   /** Every identity this profile suppresses, newest last. */
@@ -79,9 +100,15 @@ export type CreateMemoryDeletionOptions = Readonly<{
   directory: string;
   /** Wall clock seam; the tombstone timestamps are the only thing it feeds. */
   now?: () => Date;
+  /** Private-session registry seam; production callers get a fresh in-memory registry. */
+  privateSessions?: MemoryPrivateSessions;
 }>;
 
 type Row = Record<string, unknown>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function asText(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
@@ -254,7 +281,25 @@ async function condenseDerivedState(directory: string, forgotten: ReadonlySet<st
   return { projects: [...projects].sort(), condensed };
 }
 
+/**
+ * Display text for one diverted private capture. Only the payload's own text is used; anything else
+ * is shown as its JSON shape, so the buffer never has to be interpreted by a store or a reader.
+ */
+function privateText(payload: unknown): string {
+  if (typeof payload === 'string') return payload;
+  if (isRecord(payload)) {
+    const text = payload.text;
+    if (typeof text === 'string') return text;
+  }
+  try {
+    return payload === undefined ? '' : JSON.stringify(payload);
+  } catch {
+    return '';
+  }
+}
+
 class SqliteMemoryDeletion implements MemoryDeletion {
+  readonly privateSessions: MemoryPrivateSessions;
   private readonly directory: string;
   private readonly now: () => Date;
   private ledger: TombstoneLedger | null = null;
@@ -263,6 +308,7 @@ class SqliteMemoryDeletion implements MemoryDeletion {
   constructor(options: CreateMemoryDeletionOptions) {
     this.directory = options.directory;
     this.now = options.now ?? (() => new Date());
+    this.privateSessions = options.privateSessions ?? createMemoryPrivateSessions();
   }
 
   private tombstonePath(): string {
@@ -270,7 +316,9 @@ class SqliteMemoryDeletion implements MemoryDeletion {
   }
 
   private async loadLedger(): Promise<TombstoneLedger> {
-    if (this.ledger !== null) return this.ledger;
+    // Refresh from disk on each check. A second store or deletion handle may have recorded a
+    // choice since this instance last read the ledger; caching here would let an already-open
+    // importer resurrect that record after a forget.
     const path = this.tombstonePath();
     if (!(await exists(path))) {
       this.ledger = { version: TOMBSTONE_VERSION, entries: [] };
@@ -397,22 +445,46 @@ class SqliteMemoryDeletion implements MemoryDeletion {
       && (entry.sourceEventIds.length === 0 || entry.sourceEventIds.includes(sourceEventId)));
   }
 
+  async admit(batch: NormalizedBatch): Promise<NormalizedBatch> {
+    if (batch === null || typeof batch !== 'object' || !Array.isArray(batch.events)) return batch;
+    // The ledger is read once per batch and matched by exact identity, never by content hash, so
+    // suppressing one record can never block a different source (or a copy of it at another path).
+    const ledger = await this.loadLedger();
+    const kept: NormalizedBatch['events'][number][] = [];
+    let diverted = 0;
+    for (const event of batch.events) {
+      const sessionId = event.scope?.sessionId;
+      if (this.privateSessions.wasPrivate(sessionId)) {
+        // A private session's capture is buffered for display and never handed to the store. An
+        // ended session id is dropped without buffering: `capture` returns `undefined` once the
+        // session is closed, so a late batch cannot outlive the transcript the user already saw.
+        this.privateSessions.capture({
+          sessionId,
+          kind: event.kind,
+          text: privateText(batch.payloads?.[event.payloadRef]),
+        });
+        diverted += 1;
+        continue;
+      }
+      if (ledger.entries.some((entry) => entry.sourceId === event.sourceId
+        && (entry.sourceEventIds.length === 0 || entry.sourceEventIds.includes(event.sourceEventId)))) {
+        continue;
+      }
+      kept.push(event);
+    }
+    if (kept.length === batch.events.length && diverted === 0) return batch;
+    const payloadRefs = new Set(kept.map((event) => event.payloadRef));
+    const payloads = Object.fromEntries(Object.entries(batch.payloads ?? {}).filter(([ref]) => payloadRefs.has(ref)));
+    return { events: kept, payloads };
+  }
+
   guard(store: MemoryStore): MemoryStore {
     if (store === null || typeof store !== 'object' || typeof store.ingest !== 'function') {
       throw new TypeError('memory deletion guard requires a memory store');
     }
     const guard: MemoryStore = {
-      ingest: async (batch: NormalizedBatch, options?: IngestOptions): Promise<IngestResult> => {
-        // The ledger is read once per batch and matched by exact identity, never by content hash,
-        // so suppressing one record can never block a different source (or a copy of it).
-        const ledger = await this.loadLedger();
-        const kept = batch.events.filter((event) => !ledger.entries.some((entry) => entry.sourceId === event.sourceId
-          && (entry.sourceEventIds.length === 0 || entry.sourceEventIds.includes(event.sourceEventId))));
-        if (kept.length === batch.events.length) return store.ingest(batch, options);
-        const payloadRefs = new Set(kept.map((event) => event.payloadRef));
-        const payloads = Object.fromEntries(Object.entries(batch.payloads).filter(([ref]) => payloadRefs.has(ref)));
-        return store.ingest({ events: kept, payloads }, options);
-      },
+      ingest: async (batch: NormalizedBatch, options?: IngestOptions): Promise<IngestResult> =>
+        store.ingest(await this.admit(batch), options),
       timeline: (query: TimelineQuery): Promise<TimelineItem[]> => store.timeline(query),
       durableCursor: (): Promise<string> => store.durableCursor(),
       // The guard is a view over the owner's store: closing it must never close the store itself.
@@ -424,6 +496,7 @@ class SqliteMemoryDeletion implements MemoryDeletion {
   async close(): Promise<void> {
     await this.pending;
     this.ledger = null;
+    this.privateSessions.close();
   }
 }
 

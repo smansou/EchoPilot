@@ -139,22 +139,29 @@ test('a wrong passphrase fails without modifying the destination', async () => {
   const root = await mkdtemp(join(tmpdir(), 's03-privacy-passphrase-'));
   const profile = join(root, 'profile');
   const archive = join(root, 'export.echopilot');
-  const destination = join(root, 'destination');
+  const restored = join(root, 'restored');
+  const wrongPassphraseDestination = join(root, 'wrong-passphrase-destination');
   try {
     await seedProfile(profile);
     await exportProfile({ directory: profile, destination: archive, passphrase: PASSPHRASE });
-    await importProfile({ archive, directory: destination, passphrase: PASSPHRASE });
-    const filesBefore = await filesUnder(destination);
-    const digestBefore = await treeDigest(destination);
+    await importProfile({ archive, directory: restored, passphrase: PASSPHRASE });
+    const filesBefore = await filesUnder(restored);
+    const digestBefore = await treeDigest(restored);
 
     await assert.rejects(
-      () => importProfile({ archive, directory: destination, passphrase: WRONG_PASSPHRASE }),
+      () => importProfile({ archive, directory: restored, passphrase: PASSPHRASE }),
+      /must be a new, absent profile directory/,
+      'a restore must refuse to overlay an existing profile',
+    );
+    assert.deepEqual(await filesUnder(restored), filesBefore, 'an occupied destination must remain unchanged');
+    assert.equal(await treeDigest(restored), digestBefore, 'an occupied destination must not be overwritten');
+
+    await assert.rejects(
+      () => importProfile({ archive, directory: wrongPassphraseDestination, passphrase: WRONG_PASSPHRASE }),
       /could not be decrypted with the provided passphrase/,
       'a wrong passphrase must fail the archive key check',
     );
-    assert.deepEqual(await filesUnder(destination), filesBefore, 'a failed restore must not add or remove files');
-    assert.equal(await treeDigest(destination), digestBefore, 'a failed restore must not rewrite the destination');
-    assert.equal((await stat(destination)).isDirectory(), true, 'the destination must still be the restored profile');
+    assert.equal(await stat(wrongPassphraseDestination).then(() => true).catch(() => false), false, 'a wrong passphrase must not create the destination');
 
     // A damaged archive is refused the same way: authentication precedes every write.
     const tampered = join(root, 'tampered.echopilot');

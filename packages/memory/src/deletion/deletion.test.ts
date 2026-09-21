@@ -145,7 +145,7 @@ test('forget removes the lineage, condenses derived state and leaves the rest of
   }
 });
 
-test('the guarded store refuses to resurrect a forgotten source while another project imports the same bytes', async () => {
+test('an ordinary memory store refuses to resurrect a forgotten source while another project imports the same bytes', async () => {
   const root = await mkdtemp(join(tmpdir(), 's03-deletion-import-'));
   const store = await createMemoryStore({ directory: root, key: KEY, profileId: PROFILE_ID });
   const neighbourDirectory = join(root, 'neighbour');
@@ -165,7 +165,7 @@ test('the guarded store refuses to resurrect a forgotten source while another pr
       source: createFileLogSource(sourcePath),
       format: 'jsonl',
       scope: SCOPE,
-      store: deletion.guard(store),
+      store,
       consolidator: stack.consolidator,
     });
     const first = await importer.bootstrap();
@@ -183,7 +183,7 @@ test('the guarded store refuses to resurrect a forgotten source while another pr
       source: createFileLogSource(sourcePath),
       format: 'jsonl',
       scope: SCOPE,
-      store: deletion.guard(store),
+      store,
       consolidator: stack.consolidator,
     });
     const second = await reimport.bootstrap();
@@ -202,7 +202,7 @@ test('the guarded store refuses to resurrect a forgotten source while another pr
       source: createFileLogSource(copyPath),
       format: 'jsonl',
       scope: { ...SCOPE, projectId: NEIGHBOUR_PROJECT_ID, sessionId: 'session-s03-deletion-neighbour' },
-      store: deletion.guard(neighbourStore),
+      store: neighbourStore,
       consolidator: neighbourStack.consolidator,
     });
     const neighbour = await neighbourImporter.bootstrap();

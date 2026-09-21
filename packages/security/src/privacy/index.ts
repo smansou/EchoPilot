@@ -22,8 +22,8 @@
  * carries a profile across a passphrase boundary.
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 const EXPORT_MAGIC = 'echopilot-private-export-v1';
 const EXPORT_VERSION = 1;
@@ -77,7 +77,7 @@ export type ExportReceipt = Readonly<{
 
 export type ImportProfileRequest = Readonly<{
   archive: string;
-  /** Destination profile directory; created when missing. */
+  /** Destination profile directory; it must be absent so a restore cannot mix with existing data. */
   directory: string;
   passphrase: string;
 }>;
@@ -116,10 +116,23 @@ function digestOf(bytes: Uint8Array): string {
 /** Rejects an archive path that would escape the restore directory when joined. */
 function safeRelativePath(value: string): string {
   const normalized = value.replace(/\\/g, '/').replace(/^\.\//, '');
-  if (normalized.length === 0 || isAbsolute(normalized) || normalized.split('/').includes('..')) {
+  const components = normalized.split('/');
+  if (normalized.length === 0 || normalized.includes('\0') || isAbsolute(normalized)
+    || /^[a-zA-Z]:/.test(normalized)
+    || components.some((component) => component.length === 0 || component === '.' || component === '..')) {
     throw new Error(`private export carries an unsafe path: ${value}`);
   }
   return normalized;
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') return false;
+    throw error;
+  }
 }
 
 async function filesUnder(root: string, skip: ReadonlySet<string>): Promise<string[]> {
@@ -218,15 +231,32 @@ function parseManifest(plaintext: Buffer): Manifest {
     const file = entry as { path?: unknown; sha256?: unknown; bytes?: unknown };
     const path = safeRelativePath(requireText(file.path, 'a file path in the export manifest'));
     const sha256 = requireText(file.sha256, 'a file digest in the export manifest');
-    const bytes = requireText(file.bytes, 'file contents in the export manifest');
-    files.push({ path, sha256, bytes });
+    if (typeof file.bytes !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.bytes)) {
+      throw new Error(`private export file ${path} is not valid base64`);
+    }
+    if (!/^[a-f0-9]{64}$/i.test(sha256)) throw new Error(`private export file ${path} has an invalid digest`);
+    files.push({ path, sha256, bytes: file.bytes });
+  }
+  const paths = new Set<string>();
+  for (const file of files) {
+    if (paths.has(file.path)) throw new Error(`private export manifest repeats the path ${file.path}`);
+    paths.add(file.path);
+  }
+  for (const path of paths) {
+    const components = path.split('/');
+    for (let index = 1; index < components.length; index += 1) {
+      const parent = components.slice(0, index).join('/');
+      if (paths.has(parent)) throw new Error(`private export manifest uses ${parent} as both a file and directory`);
+    }
   }
   return { version: EXPORT_VERSION, createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : '', files };
 }
 
 /**
- * Restores an archive into a new profile directory. Authentication and per-file digest checks run
- * before any write, so a wrong passphrase (or a damaged archive) leaves the destination untouched.
+ * Restores an archive into an absent profile directory. Authentication and per-file digest checks
+ * run before any write, so a wrong passphrase (or a damaged archive) leaves the destination
+ * untouched. Files are assembled in a private sibling directory and installed with one rename;
+ * an existing profile is never overlaid or partially replaced.
  */
 export async function importProfile(request: ImportProfileRequest): Promise<ImportReceipt> {
   const archivePath = resolve(requireText(request?.archive, 'an archive path'));
@@ -237,7 +267,7 @@ export async function importProfile(request: ImportProfileRequest): Promise<Impo
   const manifest = parseManifest(openArchive(passphrase, archive));
   const decoded = manifest.files.map((file) => {
     const bytes = Buffer.from(file.bytes, 'base64');
-    if (bytes.length === 0 && file.bytes.length > 0) throw new Error(`private export file ${file.path} is not valid base64`);
+    if (bytes.toString('base64') !== file.bytes) throw new Error(`private export file ${file.path} is not valid base64`);
     const digest = Buffer.from(digestOf(bytes), 'hex');
     const expected = Buffer.from(file.sha256, 'hex');
     if (expected.length !== digest.length || !timingSafeEqual(expected, digest)) {
@@ -246,14 +276,27 @@ export async function importProfile(request: ImportProfileRequest): Promise<Impo
     return { path: file.path, bytes };
   });
 
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  for (const file of decoded) {
-    const target = join(directory, file.path);
-    if (relative(directory, target).startsWith('..')) throw new Error(`private export file ${file.path} escapes the restore directory`);
-    await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-    const temporary = `${target}.restore.tmp`;
-    await writeFile(temporary, file.bytes, { mode: 0o600 });
-    await rename(temporary, target);
+  if (await pathExists(directory)) throw new Error('private export restore destination must be a new, absent profile directory');
+  const parent = dirname(directory);
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  const staging = join(parent, `.${basename(directory)}.restore-${randomBytes(12).toString('hex')}`);
+  await mkdir(staging, { mode: 0o700 });
+  try {
+    for (const file of decoded) {
+      const target = join(staging, file.path);
+      const inside = relative(staging, target);
+      if (inside.length === 0 || inside.startsWith('..') || isAbsolute(inside)) {
+        throw new Error(`private export file ${file.path} escapes the restore directory`);
+      }
+      await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+      await writeFile(target, file.bytes, { mode: 0o600, flag: 'wx' });
+    }
+    // Recheck immediately before installation so a destination created during staging is refused.
+    if (await pathExists(directory)) throw new Error('private export restore destination must be a new, absent profile directory');
+    await rename(staging, directory);
+  } catch (error) {
+    await rm(staging, { recursive: true, force: true });
+    throw error;
   }
   return { directory, files: decoded.map((file) => file.path) };
 }

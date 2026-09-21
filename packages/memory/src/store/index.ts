@@ -39,6 +39,7 @@ import {
   type TaskObservation,
   type TaskRecord,
 } from '../reducers/index.js';
+import { createMemoryDeletion, type MemoryDeletion } from '../deletion/index.js';
 import { deriveStoreKey, fingerprint, openJson, openText, profileDomain, projectDomain, sealJson, sealValue } from './crypto.js';
 import {
   MEMORY_SCHEMA_VERSION,
@@ -136,19 +137,31 @@ class SqliteMemoryStore implements MemoryStore {
   private readonly masterKey: string;
   private readonly profilePath: string;
   private readonly profileKey: Buffer;
+  /** The profile's privacy policy; every `ingest` is admitted through it before it is written. */
+  readonly privacy: MemoryDeletion;
+  /** True when this store created the handle and must therefore close it. */
+  private readonly ownsPrivacy: boolean;
   /** Project databases currently ATTACHed to the single connection, in least-recently-used order. */
   private readonly attached = new Map<string, ProjectBinding>();
   private attachCounter = 0;
   private cursor = '';
   private closed = false;
 
-  constructor(options: CreateMemoryStoreOptions, db: DatabaseSync, profilePath: string, profileKey: Buffer) {
+  constructor(
+    options: CreateMemoryStoreOptions,
+    db: DatabaseSync,
+    profilePath: string,
+    profileKey: Buffer,
+    privacy: MemoryDeletion,
+  ) {
     this.db = db;
     this.directory = options.directory;
     this.profileId = options.profileId;
     this.masterKey = options.key;
     this.profilePath = profilePath;
     this.profileKey = profileKey;
+    this.privacy = privacy;
+    this.ownsPrivacy = options.privacy === undefined;
   }
 
   /** Opens an existing encrypted store; a wrong key must fail here, before any write. */
@@ -209,7 +222,17 @@ class SqliteMemoryStore implements MemoryStore {
     this.cursor = '';
   }
 
+  /**
+   * The single durable write path. The user's choices are applied here — suppressed identities are
+   * dropped and a capture from an open private session is buffered in memory — so every writer,
+   * including the M03 importer and a resumed import, stores exactly what the profile still permits.
+   */
   async ingest(batch: NormalizedBatch, options?: IngestOptions): Promise<IngestResult> {
+    this.assertOpen();
+    return this.writeBatch(await this.privacy.admit(batch), options);
+  }
+
+  private async writeBatch(batch: NormalizedBatch, options?: IngestOptions): Promise<IngestResult> {
     this.assertOpen();
     const events = this.normalizeBatch(batch);
     if (events.length === 0) {
@@ -335,6 +358,9 @@ class SqliteMemoryStore implements MemoryStore {
   }
 
   async close(): Promise<void> {
+    // A handle the profile layer owns outlives this store; a handle this store created (the
+    // default) is closed with it so the private-session buffer is dropped.
+    if (this.ownsPrivacy) await this.privacy.close();
     this.closeSync();
   }
 
@@ -827,7 +853,16 @@ class SqliteMemoryStore implements MemoryStore {
   }
 }
 
-export async function createMemoryStore(options: CreateMemoryStoreOptions): Promise<MemoryStore> {
+/**
+ * A production memory store plus the profile privacy handle it enforces on every write: the
+ * durable forget ledger (a re-import of a forgotten source is filtered at `ingest`) and the
+ * private-session registry (`ingest` diverts captures whose scope names a session opened here, so
+ * they never reach durable storage). The handle is the same one the store's own guard consults, so
+ * a caller that begins a private session through `store.privacy` changes what this store persists.
+ */
+export type PrivacyBoundMemoryStore = MemoryStore & Readonly<{ privacy: MemoryDeletion }>;
+
+export async function createMemoryStore(options: CreateMemoryStoreOptions): Promise<PrivacyBoundMemoryStore> {
   if (!isRecord(options)) throw new TypeError('createMemoryStore requires { directory, key, profileId }');
   const directory = asString(options.directory);
   const key = asString(options.key);
@@ -838,14 +873,20 @@ export async function createMemoryStore(options: CreateMemoryStoreOptions): Prom
 
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const profilePath = join(directory, PROFILE_DB_FILE);
+  // The profile's privacy handle is created (or adopted) before the first write can happen, so the
+  // store is never briefly unguarded. When the profile layer already owns a handle for this
+  // directory it is reused: the registry a private session was opened on is then the same one this
+  // store consults, and a forget recorded by either handle suppresses both.
+  const privacy = options.privacy ?? await createMemoryDeletion({ directory });
   let db: DatabaseSync;
   try {
     db = new DatabaseSync(profilePath);
   } catch (error) {
+    if (options.privacy === undefined) await privacy.close();
     throw new Error(`memory store could not open ${profilePath}: ${(error as Error).message}`);
   }
 
-  const store = new SqliteMemoryStore({ directory, key, profileId }, db, profilePath, deriveStoreKey(key, profileDomain(profileId)));
+  const store = new SqliteMemoryStore({ directory, key, profileId }, db, profilePath, deriveStoreKey(key, profileDomain(profileId)), privacy);
   try {
     // Init-vs-verify is content-based: a crashed first run leaves an empty profile.db, which must
     // initialize again instead of failing its key check forever.
@@ -853,6 +894,7 @@ export async function createMemoryStore(options: CreateMemoryStoreOptions): Prom
     else store.initializeProfile();
   } catch (error) {
     store.closeSync();
+    if (options.privacy === undefined) await privacy.close();
     throw error;
   }
   return store;

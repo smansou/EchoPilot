@@ -1,3 +1,4 @@
+import type { MemoryDeletion } from '../deletion/index.js';
 import type { NormalizedEvent } from '../reducers/index.js';
 
 export type { EventScope, NormalizedEvent, Sensitivity, SourceCapsule, TaskStatus } from '../reducers/index.js';
@@ -38,6 +39,13 @@ export interface MemoryStore {
   timeline(query: TimelineQuery): Promise<TimelineItem[]>;
   durableCursor(): Promise<string>;
   close(): Promise<void>;
+  /**
+   * The profile's privacy handle, present on every store produced by `createMemoryStore`: the
+   * durable forget ledger this store enforces at ingest and the private-session registry its
+   * storage boundary honors. A consumer that needs to forget, to begin a private session or to
+   * know whether an identity is suppressed reads it from here instead of opening a second handle.
+   */
+  readonly privacy?: MemoryDeletion;
 }
 
 export interface CreateMemoryStoreOptions {
@@ -47,4 +55,10 @@ export interface CreateMemoryStoreOptions {
   key: string;
   /** Profile registry identity for the store. */
   profileId: string;
+  /**
+   * An existing deletion handle for this profile. Supplying the handle the profile layer already
+   * owns shares one forget ledger *and one private-session registry* with the store, which is what
+   * makes a private session opened elsewhere apply at this storage boundary.
+   */
+  privacy?: MemoryDeletion;
 }

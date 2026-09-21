@@ -21,7 +21,9 @@
  *
  * Imported content is untrusted evidence only: every envelope carries trust `imported`, an
  * authorization-shaped record keeps the generic adapter's display-only `unsupported` kind, and the
- * importer exposes no send/grant/approval surface at all.
+ * importer exposes no send/grant/approval surface at all. Its production MemoryStore applies the
+ * profile's forget ledger at ingest, so resumed or repeated imports cannot restore suppressed
+ * source-event identities.
  */
 import { mkdir } from 'node:fs/promises';
 
@@ -189,6 +191,9 @@ export async function createMemoryImporter(options: MemoryImporterOptions): Prom
   ): Promise<{ inserted: number; duplicates: number }> => {
     if (emissions.length === 0) return { inserted: 0, duplicates: 0 };
     const batch: NormalizedBatch = { events: emissions.map((emission) => emission.event), payloads };
+    // No importer-side filter is needed: the M01 store produced by `createMemoryStore` admits every
+    // batch through the profile's forget ledger (and its private sessions) in `ingest` itself, so a
+    // resumed or repeated import is subject to the same policy as live capture.
     const result = await store.ingest(batch);
     return { inserted: result.inserted, duplicates: result.duplicates };
   };

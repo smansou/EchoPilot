@@ -7,6 +7,10 @@
 - `projects/<slug>-<fingerprint>.db` — one database per project; queries are served from that
   database only, so a timeline can never cross project boundaries.
 
+Every store returned by `createMemoryStore` checks the profile's durable forget ledger before it
+ingests a batch. Importers using the ordinary store API therefore cannot restore a forgotten
+source-event identity, even when the forget was recorded by another open handle.
+
 ## Encryption gate
 
 This fork has no SQLCipher native addon available (no `better-sqlite3*` dependency and no network
