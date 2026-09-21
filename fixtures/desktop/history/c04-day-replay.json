@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 1,
+  "ticket": "C04",
+  "description": "Deterministic day-replay corpus for the C04 desktop-history tracer (opt-in event-triggered history -> compact project context -> later recall). Every application, window title, record text, question and answer below is synthetic; nothing was captured from a real screen, and no real credential, user text or screenshot belongs in this file. Timestamps are fixed UTC instants so the replay is byte-stable.",
+  "profileId": "profile-c04",
+  "project": { "projectId": "atlas", "displayName": "Atlas" },
+  "excludedBundleIds": ["com.1password.1password", "com.apple.Mail"],
+  "rawCanary": "RAW-DUMP-C04-CANARY",
+  "snapshotIdPrefix": "c04-snap-",
+  "frameRefTemplate": "artifact://c04/frames/{snapshotId}.png",
+  "samplingPolicy": {
+    "minIntervalMs": 60000,
+    "maxCapturesPerHour": 8,
+    "maxEnergyMsPerDay": 8000,
+    "captureCostMs": 400
+  },
+  "workSession": {
+    "label": "Atlas dashboard day",
+    "beginsAt": "2026-09-15T08:00:00.000Z",
+    "endsAt": "2026-09-15T14:30:00.000Z"
+  },
+  "checkpoints": [
+    "2026-09-15T08:07:00.000Z",
+    "2026-09-15T09:50:00.000Z",
+    "2026-09-15T13:20:00.000Z"
+  ],
+  "apps": {
+    "terminal": { "bundleId": "com.googlecode.iterm2", "name": "iTerm2" },
+    "vscode": { "bundleId": "com.microsoft.VSCode", "name": "Visual Studio Code" },
+    "chrome": { "bundleId": "com.google.Chrome", "name": "Google Chrome" },
+    "vault": { "bundleId": "com.1password.1password", "name": "1Password" }
+  },
+  "phases": [
+    {
+      "key": "terminal-morning-suite",
+      "label": "Morning terminal test runs",
+      "app": "terminal",
+      "beginsAt": "2026-09-15T08:00:00.000Z",
+      "endsAt": "2026-09-15T08:06:00.000Z",
+      "stepMs": 20000,
+      "changeEveryTicks": 1,
+      "documentRef": "iterm2://atlas/workspace",
+      "focusedControl": "terminal.pane.1",
+      "windowTitle": "atlas — zsh — 120x40",
+      "summaries": [
+        "Ran the atlas migration test suite in the terminal; 42 checks passed.",
+        "Terminal: fixed the failing atlas migration fixture and reran the suite.",
+        "Terminal: inspected the atlas schema diff for the migration rollout."
+      ]
+    },
+    {
+      "key": "editor-morning-plan",
+      "label": "Morning editor plan notes",
+      "app": "vscode",
+      "beginsAt": "2026-09-15T08:10:00.000Z",
+      "endsAt": "2026-09-15T08:30:00.000Z",
+      "stepMs": 60000,
+      "changeEveryTicks": 4,
+      "documentRef": "vscode://atlas/docs/migration-plan.md",
+      "focusedControl": "editor.text",
+      "windowTitle": "migration-plan.md — atlas — Visual Studio Code",
+      "summaries": [
+        "Edited the atlas dashboard plan notes for the migration window.",
+        "Editor: sketched the atlas dashboard error handling outline."
+      ]
+    },
+    {
+      "key": "browser-morning-review",
+      "label": "Morning browser review",
+      "app": "chrome",
+      "beginsAt": "2026-09-15T09:00:00.000Z",
+      "endsAt": "2026-09-15T09:45:00.000Z",
+      "stepMs": 60000,
+      "changeEveryTicks": 2,
+      "documentRef": "chrome://atlas/dashboard-issues",
+      "focusedControl": "browser.tab.active",
+      "windowTitle": "Atlas dashboard issues — Google Chrome",
+      "summaries": [
+        "Read the atlas dashboard error-handling thread in the browser.",
+        "Browser: compared dashboard retry handling notes against the atlas plan.",
+        "Browser: bookmarked the atlas dashboard migration checklist."
+      ]
+    },
+    {
+      "key": "browser-midday-read",
+      "label": "Midday long read (no meaningful change)",
+      "app": "chrome",
+      "beginsAt": "2026-09-15T10:00:00.000Z",
+      "endsAt": "2026-09-15T12:00:00.000Z",
+      "stepMs": 60000,
+      "changeEveryTicks": 100000,
+      "documentRef": "chrome://atlas/dashboard-migration-guide",
+      "focusedControl": "browser.tab.active",
+      "windowTitle": "Atlas dashboard migration guide — Google Chrome",
+      "summaries": [
+        "Reading the atlas dashboard migration guide in the browser."
+      ]
+    },
+    {
+      "key": "vault-lunch",
+      "label": "Excluded application in front",
+      "app": "vault",
+      "excluded": true,
+      "beginsAt": "2026-09-15T12:00:00.000Z",
+      "endsAt": "2026-09-15T12:20:00.000Z",
+      "stepMs": 30000,
+      "changeEveryTicks": 1,
+      "documentRef": "onepassword://vault/atlas-deploy",
+      "focusedControl": "vault.item.detail",
+      "windowTitle": "Atlas deploy key — 1Password",
+      "summaries": [
+        "1Password vault: rotated the atlas deploy key for the dashboard service."
+      ]
+    },
+    {
+      "key": "editor-afternoon-fix",
+      "label": "Afternoon dashboard fix",
+      "app": "vscode",
+      "beginsAt": "2026-09-15T12:20:00.000Z",
+      "endsAt": "2026-09-15T13:20:00.000Z",
+      "stepMs": 120000,
+      "changeEveryTicks": 2,
+      "documentRef": "vscode://atlas/src/dashboard.ts",
+      "focusedControl": "editor.text",
+      "windowTitle": "dashboard.ts — atlas — Visual Studio Code",
+      "summaries": [
+        "Edited atlas dashboard error handling in src/dashboard.ts to guard the null table.",
+        "Editor: added an atlas dashboard retry test for the guarded lookup."
+      ]
+    },
+    {
+      "key": "terminal-afternoon-suite",
+      "label": "Afternoon terminal reruns",
+      "app": "terminal",
+      "beginsAt": "2026-09-15T13:20:00.000Z",
+      "endsAt": "2026-09-15T13:50:00.000Z",
+      "stepMs": 30000,
+      "changeEveryTicks": 3,
+      "documentRef": "iterm2://atlas/workspace",
+      "focusedControl": "terminal.pane.2",
+      "windowTitle": "atlas — zsh — 120x40",
+      "summaries": [
+        "Terminal: reran the atlas dashboard suite after the error-handling fix.",
+        "Terminal: rebuilt the atlas dashboard bundle and checked the logs."
+      ]
+    },
+    {
+      "key": "browser-afternoon-verify",
+      "label": "Afternoon browser verification",
+      "app": "chrome",
+      "beginsAt": "2026-09-15T13:50:00.000Z",
+      "endsAt": "2026-09-15T14:30:00.000Z",
+      "stepMs": 60000,
+      "changeEveryTicks": 2,
+      "documentRef": "chrome://atlas/release-notes",
+      "focusedControl": "browser.tab.active",
+      "windowTitle": "Atlas release notes — Google Chrome",
+      "summaries": [
+        "Browser: verified the atlas dashboard release notes and the migration checklist.",
+        "Browser: reviewed the atlas dashboard retry banner after the fix."
+      ]
+    },
+    {
+      "key": "editor-evening-session",
+      "label": "Evening dashboard edit session",
+      "app": "vscode",
+      "beginsAt": "2026-09-15T14:30:00.000Z",
+      "endsAt": "2026-09-15T15:30:00.000Z",
+      "stepMs": 60000,
+      "changeEveryTicks": 1,
+      "documentRef": "vscode://atlas/src/dashboard.ts",
+      "focusedControl": "editor.text",
+      "windowTitle": "dashboard.ts — atlas — Visual Studio Code",
+      "summaries": [
+        "Edited the atlas dashboard error handling to guard the null table lookup.",
+        "Added an atlas dashboard retry test around the guarded lookup."
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "key": "q-terminal-suite",
+      "question": "How did the migration suite pass in the terminal?",
+      "answer": "The atlas migration suite passed in the terminal after you fixed the failing fixture, and the later terminal runs rebuilt the dashboard bundle.",
+      "inventedEvidenceIds": ["mem-helios-1"]
+    },
+    {
+      "key": "q-dashboard-error",
+      "question": "Which change touched the dashboard error handling?",
+      "answer": "You guarded the null table lookup in atlas dashboard error handling, added a retry test, and verified the retry banner in the browser.",
+      "inventedEvidenceIds": ["mem-helios-1"]
+    }
+  ],
+  "preloadedMemory": [
+    {
+      "id": "mem-helios-1",
+      "projectId": "helios",
+      "text": "Helios dashboard error handling: the retry banner fix landed after the schema migration."
+    }
+  ],
+  "samplerProbe": {
+    "frequencyCase": {
+      "policy": { "minIntervalMs": 60000, "maxCapturesPerHour": 8, "maxEnergyMsPerDay": 8000, "captureCostMs": 400 },
+      "observations": [
+        { "label": "first-change", "atOffsetMs": 0, "signature": "state-a", "capture": true, "reason": "changed" },
+        { "label": "same-state-30s", "atOffsetMs": 30000, "signature": "state-a", "capture": false, "reason": "unchanged" },
+        { "label": "change-before-min-interval", "atOffsetMs": 45000, "signature": "state-b", "capture": false, "reason": "throttled", "budget": "frequency" },
+        { "label": "pending-change-retried-at-min-interval", "atOffsetMs": 60000, "signature": "state-b", "capture": true, "reason": "changed" },
+        { "label": "same-state-again", "atOffsetMs": 120000, "signature": "state-b", "capture": false, "reason": "unchanged" },
+        { "label": "change-3", "atOffsetMs": 180000, "signature": "state-c", "capture": true, "reason": "changed" },
+        { "label": "change-4", "atOffsetMs": 240000, "signature": "state-d", "capture": true, "reason": "changed" },
+        { "label": "change-5", "atOffsetMs": 300000, "signature": "state-e", "capture": true, "reason": "changed" },
+        { "label": "change-6", "atOffsetMs": 360000, "signature": "state-f", "capture": true, "reason": "changed" },
+        { "label": "change-7", "atOffsetMs": 420000, "signature": "state-g", "capture": true, "reason": "changed" },
+        { "label": "change-8", "atOffsetMs": 480000, "signature": "state-h", "capture": true, "reason": "changed" },
+        { "label": "change-9-hourly-cap", "atOffsetMs": 540000, "signature": "state-i", "capture": false, "reason": "throttled", "budget": "frequency" },
+        { "label": "change-10-hourly-cap", "atOffsetMs": 600000, "signature": "state-j", "capture": false, "reason": "throttled", "budget": "frequency" },
+        { "label": "hour-window-refresh", "atOffsetMs": 3660000, "signature": "state-j", "capture": true, "reason": "changed" }
+      ]
+    },
+    "energyCase": {
+      "policy": { "minIntervalMs": 60000, "maxCapturesPerHour": 8, "maxEnergyMsPerDay": 800, "captureCostMs": 400 },
+      "observations": [
+        { "label": "energy-first", "atOffsetMs": 0, "signature": "state-a", "capture": true, "reason": "changed" },
+        { "label": "energy-second", "atOffsetMs": 60000, "signature": "state-b", "capture": true, "reason": "changed" },
+        { "label": "energy-exhausted", "atOffsetMs": 120000, "signature": "state-c", "capture": false, "reason": "throttled", "budget": "energy" },
+        { "label": "energy-exhausted-again", "atOffsetMs": 180000, "signature": "state-c", "capture": false, "reason": "throttled", "budget": "energy" },
+        { "label": "energy-window-refresh", "atOffsetMs": 86460000, "signature": "state-c", "capture": true, "reason": "changed" }
+      ]
+    },
+    "stopCase": {
+      "policy": { "minIntervalMs": 60000, "maxCapturesPerHour": 8, "maxEnergyMsPerDay": 8000, "captureCostMs": 400 },
+      "observations": [
+        { "label": "before-stop", "atOffsetMs": 0, "signature": "state-a", "capture": true, "reason": "changed" },
+        { "label": "after-stop-change", "atOffsetMs": 600000, "signature": "state-b", "capture": false, "reason": "stopped" },
+        { "label": "after-stop-change-again", "atOffsetMs": 1200000, "signature": "state-c", "capture": false, "reason": "stopped" }
+      ]
+    }
+  }
+}
