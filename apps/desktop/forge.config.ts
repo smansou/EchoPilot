@@ -8,19 +8,71 @@
  * fetched after installation: there is no download URL anywhere in the embed list, and
  * `hooks.packageAfterCopy` verifies the vendored pack against models/manifest.json before the
  * bundle is signed, so a tampered or incomplete pack cannot be packaged.
+ *
+ * The `@electron-forge/*` packages are release-only tooling: the packaging job installs them, the
+ * application and the default developer install do not carry them. They are therefore resolved at
+ * configuration-load time through `loadForgePackage` — a runtime import of the package name — while
+ * the config keeps its own structural types, so `tsc --noEmit` and the offline install path stay
+ * independent of the Forge toolchain and the resolved config keeps the exact same shape.
  */
 import { execFileSync } from 'node:child_process';
-import { join, resolve } from 'node:path';
-import type { ForgeConfig } from '@electron-forge/shared-types';
-import { MakerDMG } from '@electron-forge/maker-dmg';
-import { MakerZIP } from '@electron-forge/maker-zip';
-import { VitePlugin } from '@electron-forge/plugin-vite';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const repoRoot = resolve(__dirname, '..', '..');
+const appDirectory = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(appDirectory, '..', '..');
 
 
 const appVersion = process.env.ECHOPILOT_VERSION ?? '0.0.0';
 const signingIdentity = process.env.ECHOPILOT_SIGN_IDENTITY;
+
+/** Constructor shape shared by the Forge makers this config instantiates. */
+type ForgeMaker = new (options: Record<string, unknown>, platforms: readonly string[]) => unknown;
+
+interface PackagerConfig {
+  name: string;
+  appBundleId: string;
+  appVersion: string;
+  asar: { unpack: string };
+  /** Repository-relative payloads the app must carry so it works with no network. */
+  extraResource: string[];
+  osxSign: {
+    identity: string | undefined;
+    hardenedRuntime: boolean;
+    gatekeeperAssess: boolean;
+    entitlements: string;
+    'entitlements-inherit': string;
+  };
+  osxNotarize: { appleId: string; appleIdPassword: string; teamId: string };
+}
+
+interface ForgeConfig {
+  packagerConfig: PackagerConfig;
+  makers: unknown[];
+  plugins: unknown[];
+  hooks: { packageAfterCopy: (forgeConfig: unknown, buildPath: string) => Promise<void> };
+}
+
+/**
+ * Resolve a Forge package that exists only in the packaging job. The specifier is passed as a
+ * runtime value so this file typechecks and loads without the Forge dev dependencies installed.
+ */
+async function loadForgePackage<T>(specifier: string): Promise<T> {
+  try {
+    return (await import(specifier)) as T;
+  } catch (cause) {
+    throw new Error(
+      `Packaging requires '${specifier}'; install the @electron-forge dev dependencies before running 'electron-forge make'.`,
+      { cause },
+    );
+  }
+}
+
+const { MakerDMG } = await loadForgePackage<{ MakerDMG: ForgeMaker }>('@electron-forge/maker-dmg');
+const { MakerZIP } = await loadForgePackage<{ MakerZIP: ForgeMaker }>('@electron-forge/maker-zip');
+const { VitePlugin } = await loadForgePackage<{ VitePlugin: new (options: Record<string, unknown>) => unknown }>(
+  '@electron-forge/plugin-vite',
+);
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -39,8 +91,8 @@ const config: ForgeConfig = {
       identity: signingIdentity,
       hardenedRuntime: true,
       gatekeeperAssess: false,
-      entitlements: join(__dirname, 'build', 'entitlements.mac.plist'),
-      'entitlements-inherit': join(__dirname, 'build', 'entitlements.mac.plist'),
+      entitlements: join(appDirectory, 'build', 'entitlements.mac.plist'),
+      'entitlements-inherit': join(appDirectory, 'build', 'entitlements.mac.plist'),
     },
     osxNotarize: {
       appleId: process.env.APPLE_ID ?? '',
@@ -53,7 +105,7 @@ const config: ForgeConfig = {
       {
         name: `EchoPilot-${appVersion}-offline`,
         format: 'ULFO',
-        icon: join(__dirname, 'build', 'icon.icns'),
+        icon: join(appDirectory, 'build', 'icon.icns'),
         overwrite: true,
       },
       ['darwin'],
