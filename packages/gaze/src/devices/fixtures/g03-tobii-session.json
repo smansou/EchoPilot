@@ -1,0 +1,1344 @@
+{
+  "fixtureId": "g03-tobii-session",
+  "provenance": "Fully synthetic dedicated-device (Tobii Pro Fusion seam) session authored for the G03 acceptance oracle. No hardware, no SDK, no user data: every observation is normalized gaze metadata at the shape the native GazeTobii helper publishes. The webcam-parity evidence mirrors the calibrated G01 output schema.",
+  "display": {
+    "displayId": "display-main",
+    "originX": 0,
+    "originY": 0,
+    "width": 1600,
+    "height": 1000,
+    "scale": 2,
+    "arrangementGeneration": 1
+  },
+  "sideDisplay": {
+    "displayId": "display-side",
+    "originX": 1600,
+    "originY": 120,
+    "width": 1280,
+    "height": 800,
+    "scale": 2,
+    "arrangementGeneration": 1
+  },
+  "device": {
+    "deviceId": "tobii-fusion-01",
+    "combination": {
+      "deviceModel": "tobii-pro-fusion",
+      "sdkName": "tobii-pro-sdk",
+      "sdkVersion": "4.1.0",
+      "platform": "macos",
+      "osVersion": "14.5",
+      "architecture": "arm64"
+    }
+  },
+  "qualification": {
+    "probe": {
+      "gazeX": 0.25,
+      "gazeY": 0.75
+    },
+    "expectedProbePoint": {
+      "x": 400,
+      "y": 750
+    },
+    "combinations": [
+      {
+        "combination": {
+          "deviceModel": "tobii-pro-fusion",
+          "sdkName": "tobii-pro-sdk",
+          "sdkVersion": "4.1.0",
+          "platform": "macos",
+          "osVersion": "14.5",
+          "architecture": "arm64"
+        },
+        "supported": true
+      },
+      {
+        "combination": {
+          "deviceModel": "tobii-pro-fusion",
+          "sdkName": "tobii-pro-sdk",
+          "sdkVersion": "4.1.0",
+          "platform": "macos",
+          "osVersion": "13.6",
+          "architecture": "arm64"
+        },
+        "supported": true
+      },
+      {
+        "combination": {
+          "deviceModel": "tobii-pro-fusion",
+          "sdkName": "tobii-pro-sdk",
+          "sdkVersion": "3.6.0",
+          "platform": "macos",
+          "osVersion": "14.5",
+          "architecture": "arm64"
+        },
+        "supported": false,
+        "reason": "unsupported_sdk_version"
+      },
+      {
+        "combination": {
+          "deviceModel": "tobii-pro-fusion",
+          "sdkName": "tobii-pro-sdk",
+          "sdkVersion": "4.1.0",
+          "platform": "macos",
+          "osVersion": "12.3",
+          "architecture": "arm64"
+        },
+        "supported": false,
+        "reason": "unsupported_os_version"
+      },
+      {
+        "combination": {
+          "deviceModel": "tobii-eye-tracker-5",
+          "sdkName": "tobii-pro-sdk",
+          "sdkVersion": "4.1.0",
+          "platform": "macos",
+          "osVersion": "14.5",
+          "architecture": "arm64"
+        },
+        "supported": false,
+        "reason": "unsupported_device_model"
+      },
+      {
+        "combination": {
+          "deviceModel": "tobii-pro-fusion",
+          "sdkName": "tobii-pro-sdk",
+          "sdkVersion": "4.1.0",
+          "platform": "windows",
+          "osVersion": "11",
+          "architecture": "x86_64"
+        },
+        "supported": false,
+        "reason": "unsupported_platform"
+      }
+    ]
+  },
+  "calibration": {
+    "displayId": "display-main",
+    "targets": [
+      {
+        "targetId": "cal-1",
+        "x": 200,
+        "y": 140,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.000Z",
+            "displayId": "display-main",
+            "gazeX": 0.132276,
+            "gazeY": 0.13234,
+            "leftValidity": 0.9333,
+            "rightValidity": 0.9492
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.100Z",
+            "displayId": "display-main",
+            "gazeX": 0.132773,
+            "gazeY": 0.132046,
+            "leftValidity": 0.9401,
+            "rightValidity": 0.9361
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.200Z",
+            "displayId": "display-main",
+            "gazeX": 0.132321,
+            "gazeY": 0.131987,
+            "leftValidity": 0.9364,
+            "rightValidity": 0.9442
+          }
+        ]
+      },
+      {
+        "targetId": "cal-2",
+        "x": 800,
+        "y": 140,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.300Z",
+            "displayId": "display-main",
+            "gazeX": 0.507244,
+            "gazeY": 0.132488,
+            "leftValidity": 0.9308,
+            "rightValidity": 0.9359
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.400Z",
+            "displayId": "display-main",
+            "gazeX": 0.507659,
+            "gazeY": 0.132177,
+            "leftValidity": 0.9362,
+            "rightValidity": 0.933
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.500Z",
+            "displayId": "display-main",
+            "gazeX": 0.50761,
+            "gazeY": 0.131753,
+            "leftValidity": 0.9301,
+            "rightValidity": 0.9418
+          }
+        ]
+      },
+      {
+        "targetId": "cal-3",
+        "x": 1400,
+        "y": 140,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.600Z",
+            "displayId": "display-main",
+            "gazeX": 0.882754,
+            "gazeY": 0.132387,
+            "leftValidity": 0.9337,
+            "rightValidity": 0.9463
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.700Z",
+            "displayId": "display-main",
+            "gazeX": 0.882491,
+            "gazeY": 0.131832,
+            "leftValidity": 0.9444,
+            "rightValidity": 0.9429
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.800Z",
+            "displayId": "display-main",
+            "gazeX": 0.882569,
+            "gazeY": 0.131669,
+            "leftValidity": 0.9312,
+            "rightValidity": 0.9372
+          }
+        ]
+      },
+      {
+        "targetId": "cal-4",
+        "x": 200,
+        "y": 500,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.900Z",
+            "displayId": "display-main",
+            "gazeX": 0.132694,
+            "gazeY": 0.492409,
+            "leftValidity": 0.9489,
+            "rightValidity": 0.9356
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.000Z",
+            "displayId": "display-main",
+            "gazeX": 0.132657,
+            "gazeY": 0.491662,
+            "leftValidity": 0.9479,
+            "rightValidity": 0.9418
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.100Z",
+            "displayId": "display-main",
+            "gazeX": 0.132532,
+            "gazeY": 0.491776,
+            "leftValidity": 0.9452,
+            "rightValidity": 0.9465
+          }
+        ]
+      },
+      {
+        "targetId": "cal-5",
+        "x": 800,
+        "y": 500,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:01.200Z",
+            "displayId": "display-main",
+            "gazeX": 0.507441,
+            "gazeY": 0.492033,
+            "leftValidity": 0.9413,
+            "rightValidity": 0.9395
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.300Z",
+            "displayId": "display-main",
+            "gazeX": 0.507367,
+            "gazeY": 0.492034,
+            "leftValidity": 0.9482,
+            "rightValidity": 0.9371
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.400Z",
+            "displayId": "display-main",
+            "gazeX": 0.507446,
+            "gazeY": 0.491686,
+            "leftValidity": 0.9341,
+            "rightValidity": 0.9336
+          }
+        ]
+      },
+      {
+        "targetId": "cal-6",
+        "x": 1400,
+        "y": 500,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:01.500Z",
+            "displayId": "display-main",
+            "gazeX": 0.882632,
+            "gazeY": 0.492197,
+            "leftValidity": 0.9454,
+            "rightValidity": 0.9436
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.600Z",
+            "displayId": "display-main",
+            "gazeX": 0.882338,
+            "gazeY": 0.49205,
+            "leftValidity": 0.9429,
+            "rightValidity": 0.9395
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.700Z",
+            "displayId": "display-main",
+            "gazeX": 0.882449,
+            "gazeY": 0.491813,
+            "leftValidity": 0.9362,
+            "rightValidity": 0.9332
+          }
+        ]
+      },
+      {
+        "targetId": "cal-7",
+        "x": 200,
+        "y": 860,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:01.800Z",
+            "displayId": "display-main",
+            "gazeX": 0.132583,
+            "gazeY": 0.852037,
+            "leftValidity": 0.9412,
+            "rightValidity": 0.9301
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.900Z",
+            "displayId": "display-main",
+            "gazeX": 0.132545,
+            "gazeY": 0.851936,
+            "leftValidity": 0.9497,
+            "rightValidity": 0.9481
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.000Z",
+            "displayId": "display-main",
+            "gazeX": 0.132488,
+            "gazeY": 0.851722,
+            "leftValidity": 0.9323,
+            "rightValidity": 0.9353
+          }
+        ]
+      },
+      {
+        "targetId": "cal-8",
+        "x": 800,
+        "y": 860,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:02.100Z",
+            "displayId": "display-main",
+            "gazeX": 0.507326,
+            "gazeY": 0.851525,
+            "leftValidity": 0.9431,
+            "rightValidity": 0.9347
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.200Z",
+            "displayId": "display-main",
+            "gazeX": 0.507456,
+            "gazeY": 0.852116,
+            "leftValidity": 0.9317,
+            "rightValidity": 0.9369
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.300Z",
+            "displayId": "display-main",
+            "gazeX": 0.507732,
+            "gazeY": 0.852022,
+            "leftValidity": 0.9392,
+            "rightValidity": 0.9482
+          }
+        ]
+      },
+      {
+        "targetId": "cal-9",
+        "x": 1400,
+        "y": 860,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:02.400Z",
+            "displayId": "display-main",
+            "gazeX": 0.882364,
+            "gazeY": 0.852318,
+            "leftValidity": 0.9387,
+            "rightValidity": 0.9323
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.500Z",
+            "displayId": "display-main",
+            "gazeX": 0.882249,
+            "gazeY": 0.851754,
+            "leftValidity": 0.9471,
+            "rightValidity": 0.9328
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.600Z",
+            "displayId": "display-main",
+            "gazeX": 0.882436,
+            "gazeY": 0.851615,
+            "leftValidity": 0.9464,
+            "rightValidity": 0.9334
+          }
+        ]
+      }
+    ],
+    "validationTargets": [
+      {
+        "targetId": "val-1",
+        "x": 500,
+        "y": 300,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:02.700Z",
+            "displayId": "display-main",
+            "gazeX": 0.319768,
+            "gazeY": 0.291037,
+            "leftValidity": 0.9277,
+            "rightValidity": 0.9259
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.800Z",
+            "displayId": "display-main",
+            "gazeX": 0.319479,
+            "gazeY": 0.293063,
+            "leftValidity": 0.9164,
+            "rightValidity": 0.9299
+          }
+        ]
+      },
+      {
+        "targetId": "val-2",
+        "x": 1100,
+        "y": 300,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:02.900Z",
+            "displayId": "display-main",
+            "gazeX": 0.694484,
+            "gazeY": 0.292837,
+            "leftValidity": 0.9181,
+            "rightValidity": 0.9144
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:03.000Z",
+            "displayId": "display-main",
+            "gazeX": 0.695464,
+            "gazeY": 0.291473,
+            "leftValidity": 0.9116,
+            "rightValidity": 0.9139
+          }
+        ]
+      },
+      {
+        "targetId": "val-3",
+        "x": 800,
+        "y": 150,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:03.100Z",
+            "displayId": "display-main",
+            "gazeX": 0.507635,
+            "gazeY": 0.141448,
+            "leftValidity": 0.9117,
+            "rightValidity": 0.9164
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:03.200Z",
+            "displayId": "display-main",
+            "gazeX": 0.507989,
+            "gazeY": 0.14319,
+            "leftValidity": 0.9229,
+            "rightValidity": 0.9198
+          }
+        ]
+      },
+      {
+        "targetId": "val-4",
+        "x": 800,
+        "y": 850,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:03.300Z",
+            "displayId": "display-main",
+            "gazeX": 0.507832,
+            "gazeY": 0.84227,
+            "leftValidity": 0.9254,
+            "rightValidity": 0.9169
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:03.400Z",
+            "displayId": "display-main",
+            "gazeX": 0.507643,
+            "gazeY": 0.84094,
+            "leftValidity": 0.92,
+            "rightValidity": 0.9221
+          }
+        ]
+      },
+      {
+        "targetId": "val-5",
+        "x": 1300,
+        "y": 700,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:03.500Z",
+            "displayId": "display-main",
+            "gazeX": 0.819803,
+            "gazeY": 0.691402,
+            "leftValidity": 0.9195,
+            "rightValidity": 0.915
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:03.600Z",
+            "displayId": "display-main",
+            "gazeX": 0.819565,
+            "gazeY": 0.691306,
+            "leftValidity": 0.9231,
+            "rightValidity": 0.9253
+          }
+        ]
+      }
+    ]
+  },
+  "failedCalibration": {
+    "displayId": "display-main",
+    "targets": [
+      {
+        "targetId": "cal-1",
+        "x": 200,
+        "y": 140,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.000Z",
+            "displayId": "display-main",
+            "gazeX": 0.132125,
+            "gazeY": 0.132523,
+            "leftValidity": 0.0234,
+            "rightValidity": 0.0337
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.100Z",
+            "displayId": "display-main",
+            "gazeX": 0.132769,
+            "gazeY": 0.131059,
+            "leftValidity": 0.0335,
+            "rightValidity": 0.0231
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.200Z",
+            "displayId": "display-main",
+            "gazeX": 0.13209,
+            "gazeY": 0.131916,
+            "leftValidity": 0.0272,
+            "rightValidity": 0.0268
+          }
+        ]
+      },
+      {
+        "targetId": "cal-2",
+        "x": 800,
+        "y": 140,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.300Z",
+            "displayId": "display-main",
+            "gazeX": 0.508102,
+            "gazeY": 0.131981,
+            "leftValidity": 0.0202,
+            "rightValidity": 0.0256
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.400Z",
+            "displayId": "display-main",
+            "gazeX": 0.5076,
+            "gazeY": 0.13222,
+            "leftValidity": 0.0251,
+            "rightValidity": 0.0205
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.500Z",
+            "displayId": "display-main",
+            "gazeX": 0.507741,
+            "gazeY": 0.1323,
+            "leftValidity": 0.024,
+            "rightValidity": 0.0293
+          }
+        ]
+      },
+      {
+        "targetId": "cal-3",
+        "x": 1400,
+        "y": 140,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.600Z",
+            "displayId": "display-main",
+            "gazeX": 0.882936,
+            "gazeY": 0.132395,
+            "leftValidity": 0.0375,
+            "rightValidity": 0.0394
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.700Z",
+            "displayId": "display-main",
+            "gazeX": 0.882707,
+            "gazeY": 0.131148,
+            "leftValidity": 0.0381,
+            "rightValidity": 0.0307
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.800Z",
+            "displayId": "display-main",
+            "gazeX": 0.882789,
+            "gazeY": 0.131135,
+            "leftValidity": 0.0294,
+            "rightValidity": 0.0229
+          }
+        ]
+      },
+      {
+        "targetId": "cal-4",
+        "x": 200,
+        "y": 500,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.900Z",
+            "displayId": "display-main",
+            "gazeX": 0.132997,
+            "gazeY": 0.491842,
+            "leftValidity": 0.0224,
+            "rightValidity": 0.0212
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.000Z",
+            "displayId": "display-main",
+            "gazeX": 0.133044,
+            "gazeY": 0.491401,
+            "leftValidity": 0.0323,
+            "rightValidity": 0.024
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.100Z",
+            "displayId": "display-main",
+            "gazeX": 0.132365,
+            "gazeY": 0.492954,
+            "leftValidity": 0.0339,
+            "rightValidity": 0.0207
+          }
+        ]
+      },
+      {
+        "targetId": "cal-5",
+        "x": 800,
+        "y": 500,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:01.200Z",
+            "displayId": "display-main",
+            "gazeX": 0.507614,
+            "gazeY": 0.491248,
+            "leftValidity": 0.027,
+            "rightValidity": 0.0363
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.300Z",
+            "displayId": "display-main",
+            "gazeX": 0.507572,
+            "gazeY": 0.491874,
+            "leftValidity": 0.0373,
+            "rightValidity": 0.0383
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.400Z",
+            "displayId": "display-main",
+            "gazeX": 0.507923,
+            "gazeY": 0.492991,
+            "leftValidity": 0.0296,
+            "rightValidity": 0.0209
+          }
+        ]
+      },
+      {
+        "targetId": "cal-6",
+        "x": 1400,
+        "y": 500,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:01.500Z",
+            "displayId": "display-main",
+            "gazeX": 0.882531,
+            "gazeY": 0.491011,
+            "leftValidity": 0.0202,
+            "rightValidity": 0.021
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.600Z",
+            "displayId": "display-main",
+            "gazeX": 0.88206,
+            "gazeY": 0.492077,
+            "leftValidity": 0.0378,
+            "rightValidity": 0.0323
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.700Z",
+            "displayId": "display-main",
+            "gazeX": 0.881891,
+            "gazeY": 0.491986,
+            "leftValidity": 0.0248,
+            "rightValidity": 0.0386
+          }
+        ]
+      },
+      {
+        "targetId": "cal-7",
+        "x": 200,
+        "y": 860,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:01.800Z",
+            "displayId": "display-main",
+            "gazeX": 0.132799,
+            "gazeY": 0.851803,
+            "leftValidity": 0.0341,
+            "rightValidity": 0.0214
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.900Z",
+            "displayId": "display-main",
+            "gazeX": 0.132344,
+            "gazeY": 0.852546,
+            "leftValidity": 0.0225,
+            "rightValidity": 0.0324
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.000Z",
+            "displayId": "display-main",
+            "gazeX": 0.131922,
+            "gazeY": 0.852517,
+            "leftValidity": 0.0383,
+            "rightValidity": 0.026
+          }
+        ]
+      },
+      {
+        "targetId": "cal-8",
+        "x": 800,
+        "y": 860,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:02.100Z",
+            "displayId": "display-main",
+            "gazeX": 0.506895,
+            "gazeY": 0.851165,
+            "leftValidity": 0.0311,
+            "rightValidity": 0.0259
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.200Z",
+            "displayId": "display-main",
+            "gazeX": 0.507443,
+            "gazeY": 0.852317,
+            "leftValidity": 0.0362,
+            "rightValidity": 0.0395
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.300Z",
+            "displayId": "display-main",
+            "gazeX": 0.507901,
+            "gazeY": 0.851619,
+            "leftValidity": 0.023,
+            "rightValidity": 0.0397
+          }
+        ]
+      },
+      {
+        "targetId": "cal-9",
+        "x": 1400,
+        "y": 860,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:02.400Z",
+            "displayId": "display-main",
+            "gazeX": 0.88282,
+            "gazeY": 0.852665,
+            "leftValidity": 0.0319,
+            "rightValidity": 0.0286
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.500Z",
+            "displayId": "display-main",
+            "gazeX": 0.882214,
+            "gazeY": 0.851385,
+            "leftValidity": 0.0228,
+            "rightValidity": 0.0241
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.600Z",
+            "displayId": "display-main",
+            "gazeX": 0.882581,
+            "gazeY": 0.852358,
+            "leftValidity": 0.0318,
+            "rightValidity": 0.0245
+          }
+        ]
+      }
+    ],
+    "validationTargets": [
+      {
+        "targetId": "cal-1",
+        "x": 200,
+        "y": 140,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.000Z",
+            "displayId": "display-main",
+            "gazeX": 0.132125,
+            "gazeY": 0.132523,
+            "leftValidity": 0.0234,
+            "rightValidity": 0.0337
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.100Z",
+            "displayId": "display-main",
+            "gazeX": 0.132769,
+            "gazeY": 0.131059,
+            "leftValidity": 0.0335,
+            "rightValidity": 0.0231
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.200Z",
+            "displayId": "display-main",
+            "gazeX": 0.13209,
+            "gazeY": 0.131916,
+            "leftValidity": 0.0272,
+            "rightValidity": 0.0268
+          }
+        ]
+      },
+      {
+        "targetId": "cal-2",
+        "x": 800,
+        "y": 140,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.300Z",
+            "displayId": "display-main",
+            "gazeX": 0.508102,
+            "gazeY": 0.131981,
+            "leftValidity": 0.0202,
+            "rightValidity": 0.0256
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.400Z",
+            "displayId": "display-main",
+            "gazeX": 0.5076,
+            "gazeY": 0.13222,
+            "leftValidity": 0.0251,
+            "rightValidity": 0.0205
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.500Z",
+            "displayId": "display-main",
+            "gazeX": 0.507741,
+            "gazeY": 0.1323,
+            "leftValidity": 0.024,
+            "rightValidity": 0.0293
+          }
+        ]
+      },
+      {
+        "targetId": "cal-3",
+        "x": 1400,
+        "y": 140,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.600Z",
+            "displayId": "display-main",
+            "gazeX": 0.882936,
+            "gazeY": 0.132395,
+            "leftValidity": 0.0375,
+            "rightValidity": 0.0394
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.700Z",
+            "displayId": "display-main",
+            "gazeX": 0.882707,
+            "gazeY": 0.131148,
+            "leftValidity": 0.0381,
+            "rightValidity": 0.0307
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:00.800Z",
+            "displayId": "display-main",
+            "gazeX": 0.882789,
+            "gazeY": 0.131135,
+            "leftValidity": 0.0294,
+            "rightValidity": 0.0229
+          }
+        ]
+      },
+      {
+        "targetId": "cal-4",
+        "x": 200,
+        "y": 500,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:00.900Z",
+            "displayId": "display-main",
+            "gazeX": 0.132997,
+            "gazeY": 0.491842,
+            "leftValidity": 0.0224,
+            "rightValidity": 0.0212
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.000Z",
+            "displayId": "display-main",
+            "gazeX": 0.133044,
+            "gazeY": 0.491401,
+            "leftValidity": 0.0323,
+            "rightValidity": 0.024
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.100Z",
+            "displayId": "display-main",
+            "gazeX": 0.132365,
+            "gazeY": 0.492954,
+            "leftValidity": 0.0339,
+            "rightValidity": 0.0207
+          }
+        ]
+      },
+      {
+        "targetId": "cal-5",
+        "x": 800,
+        "y": 500,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:01.200Z",
+            "displayId": "display-main",
+            "gazeX": 0.507614,
+            "gazeY": 0.491248,
+            "leftValidity": 0.027,
+            "rightValidity": 0.0363
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.300Z",
+            "displayId": "display-main",
+            "gazeX": 0.507572,
+            "gazeY": 0.491874,
+            "leftValidity": 0.0373,
+            "rightValidity": 0.0383
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.400Z",
+            "displayId": "display-main",
+            "gazeX": 0.507923,
+            "gazeY": 0.492991,
+            "leftValidity": 0.0296,
+            "rightValidity": 0.0209
+          }
+        ]
+      },
+      {
+        "targetId": "cal-6",
+        "x": 1400,
+        "y": 500,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:01.500Z",
+            "displayId": "display-main",
+            "gazeX": 0.882531,
+            "gazeY": 0.491011,
+            "leftValidity": 0.0202,
+            "rightValidity": 0.021
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.600Z",
+            "displayId": "display-main",
+            "gazeX": 0.88206,
+            "gazeY": 0.492077,
+            "leftValidity": 0.0378,
+            "rightValidity": 0.0323
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.700Z",
+            "displayId": "display-main",
+            "gazeX": 0.881891,
+            "gazeY": 0.491986,
+            "leftValidity": 0.0248,
+            "rightValidity": 0.0386
+          }
+        ]
+      },
+      {
+        "targetId": "cal-7",
+        "x": 200,
+        "y": 860,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:01.800Z",
+            "displayId": "display-main",
+            "gazeX": 0.132799,
+            "gazeY": 0.851803,
+            "leftValidity": 0.0341,
+            "rightValidity": 0.0214
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:01.900Z",
+            "displayId": "display-main",
+            "gazeX": 0.132344,
+            "gazeY": 0.852546,
+            "leftValidity": 0.0225,
+            "rightValidity": 0.0324
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.000Z",
+            "displayId": "display-main",
+            "gazeX": 0.131922,
+            "gazeY": 0.852517,
+            "leftValidity": 0.0383,
+            "rightValidity": 0.026
+          }
+        ]
+      },
+      {
+        "targetId": "cal-8",
+        "x": 800,
+        "y": 860,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:02.100Z",
+            "displayId": "display-main",
+            "gazeX": 0.506895,
+            "gazeY": 0.851165,
+            "leftValidity": 0.0311,
+            "rightValidity": 0.0259
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.200Z",
+            "displayId": "display-main",
+            "gazeX": 0.507443,
+            "gazeY": 0.852317,
+            "leftValidity": 0.0362,
+            "rightValidity": 0.0395
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.300Z",
+            "displayId": "display-main",
+            "gazeX": 0.507901,
+            "gazeY": 0.851619,
+            "leftValidity": 0.023,
+            "rightValidity": 0.0397
+          }
+        ]
+      },
+      {
+        "targetId": "cal-9",
+        "x": 1400,
+        "y": 860,
+        "observations": [
+          {
+            "capturedAt": "2026-09-21T10:00:02.400Z",
+            "displayId": "display-main",
+            "gazeX": 0.88282,
+            "gazeY": 0.852665,
+            "leftValidity": 0.0319,
+            "rightValidity": 0.0286
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.500Z",
+            "displayId": "display-main",
+            "gazeX": 0.882214,
+            "gazeY": 0.851385,
+            "leftValidity": 0.0228,
+            "rightValidity": 0.0241
+          },
+          {
+            "capturedAt": "2026-09-21T10:00:02.600Z",
+            "displayId": "display-main",
+            "gazeX": 0.882581,
+            "gazeY": 0.852358,
+            "leftValidity": 0.0318,
+            "rightValidity": 0.0245
+          }
+        ]
+      }
+    ]
+  },
+  "speech": {
+    "deictic": {
+      "utteranceId": "u-deictic",
+      "turnId": "turn-1",
+      "text": "which one is this",
+      "wordAt": "2026-09-21T10:00:05.000Z"
+    },
+    "named": {
+      "utteranceId": "u-named",
+      "turnId": "turn-2",
+      "text": "publish button",
+      "wordAt": "2026-09-21T10:00:05.000Z"
+    },
+    "confirmation": {
+      "utteranceId": "u-confirm",
+      "text": "publish button, live"
+    },
+    "confirmationTargetOnly": {
+      "utteranceId": "u-confirm-target",
+      "text": "publish button"
+    },
+    "confirmationGeneric": {
+      "utteranceId": "u-confirm-generic",
+      "text": "yes, do it"
+    },
+    "confirmationRepeat": {
+      "utteranceId": "u-confirm-repeat",
+      "text": "publish button, live"
+    }
+  },
+  "request": {
+    "requestId": "req-1",
+    "stepId": "step-publish",
+    "value": "live"
+  },
+  "fixations": {
+    "publish": {
+      "observations": [
+        {
+          "capturedAt": "2026-09-21T10:00:04.700Z",
+          "displayId": "display-main",
+          "gazeX": 0.270333,
+          "gazeY": 0.252106,
+          "leftValidity": 0.9403,
+          "rightValidity": 0.9584
+        },
+        {
+          "capturedAt": "2026-09-21T10:00:04.850Z",
+          "displayId": "display-main",
+          "gazeX": 0.269684,
+          "gazeY": 0.252409,
+          "leftValidity": 0.9475,
+          "rightValidity": 0.9583
+        },
+        {
+          "capturedAt": "2026-09-21T10:00:05.000Z",
+          "displayId": "display-main",
+          "gazeX": 0.26967,
+          "gazeY": 0.25141,
+          "leftValidity": 0.9513,
+          "rightValidity": 0.947
+        }
+      ]
+    }
+  },
+  "candidates": [
+    {
+      "candidateId": "c-publish",
+      "targetRef": "ax-publish",
+      "label": "Publish button",
+      "bounds": {
+        "x": 330,
+        "y": 238,
+        "width": 180,
+        "height": 44
+      },
+      "semanticScore": 0.5,
+      "enabled": true
+    },
+    {
+      "candidateId": "c-discard",
+      "targetRef": "ax-discard",
+      "label": "Discard button",
+      "bounds": {
+        "x": 1010,
+        "y": 238,
+        "width": 180,
+        "height": 44
+      },
+      "semanticScore": 0.5,
+      "enabled": true
+    },
+    {
+      "candidateId": "c-preview",
+      "targetRef": "ax-preview",
+      "label": "Preview button",
+      "bounds": {
+        "x": 610,
+        "y": 718,
+        "width": 180,
+        "height": 44
+      },
+      "semanticScore": 0.5,
+      "enabled": true
+    }
+  ],
+  "controls": [
+    {
+      "ref": "ax-publish",
+      "windowTitle": "Editor — Draft",
+      "role": "AXButton",
+      "label": "Publish button",
+      "value": "disabled",
+      "enabled": true,
+      "focused": false,
+      "bounds": {
+        "x": 330,
+        "y": 238,
+        "width": 180,
+        "height": 44
+      }
+    },
+    {
+      "ref": "ax-discard",
+      "windowTitle": "Editor — Draft",
+      "role": "AXButton",
+      "label": "Discard button",
+      "value": "enabled",
+      "enabled": true,
+      "focused": false,
+      "bounds": {
+        "x": 1010,
+        "y": 238,
+        "width": 180,
+        "height": 44
+      }
+    },
+    {
+      "ref": "ax-preview",
+      "windowTitle": "Editor — Draft",
+      "role": "AXButton",
+      "label": "Preview button",
+      "value": "enabled",
+      "enabled": true,
+      "focused": false,
+      "bounds": {
+        "x": 610,
+        "y": 718,
+        "width": 180,
+        "height": 44
+      }
+    }
+  ],
+  "webcamParity": {
+    "calibration": {
+      "calibrationGeneration": 7,
+      "displayId": "display-main",
+      "cameraId": "camera-builtin",
+      "accepted": true,
+      "framesUsed": 45,
+      "framesRejected": 0,
+      "validationFramesUsed": 10,
+      "residualCovariance2x2": [
+        [
+          1.6,
+          0.1
+        ],
+        [
+          0.1,
+          1.1
+        ]
+      ],
+      "displayArrangementGeneration": 1,
+      "recordedAt": "2026-09-21T09:59:00.000Z"
+    },
+    "samples": [
+      {
+        "timestamp": "2026-09-21T10:00:04.700Z",
+        "displayId": "display-main",
+        "meanX": 419.6,
+        "meanY": 259.7,
+        "covariance2x2": [
+          [
+            1.2,
+            0.05
+          ],
+          [
+            0.05,
+            0.9
+          ]
+        ],
+        "quality": 0.94,
+        "calibrationGeneration": 7,
+        "displayTransform": {
+          "displayId": "display-main",
+          "originX": 0,
+          "originY": 0,
+          "width": 1600,
+          "height": 1000,
+          "scale": 2,
+          "arrangementGeneration": 1
+        }
+      },
+      {
+        "timestamp": "2026-09-21T10:00:04.850Z",
+        "displayId": "display-main",
+        "meanX": 420.4,
+        "meanY": 260.6,
+        "covariance2x2": [
+          [
+            1.2,
+            0.05
+          ],
+          [
+            0.05,
+            0.9
+          ]
+        ],
+        "quality": 0.94,
+        "calibrationGeneration": 7,
+        "displayTransform": {
+          "displayId": "display-main",
+          "originX": 0,
+          "originY": 0,
+          "width": 1600,
+          "height": 1000,
+          "scale": 2,
+          "arrangementGeneration": 1
+        }
+      },
+      {
+        "timestamp": "2026-09-21T10:00:05.000Z",
+        "displayId": "display-main",
+        "meanX": 419.9,
+        "meanY": 260.1,
+        "covariance2x2": [
+          [
+            1.2,
+            0.05
+          ],
+          [
+            0.05,
+            0.9
+          ]
+        ],
+        "quality": 0.94,
+        "calibrationGeneration": 7,
+        "displayTransform": {
+          "displayId": "display-main",
+          "originX": 0,
+          "originY": 0,
+          "width": 1600,
+          "height": 1000,
+          "scale": 2,
+          "arrangementGeneration": 1
+        }
+      }
+    ]
+  },
+  "canary": {
+    "observationField": "frameCanary",
+    "value": "g03-oracle-canary-observation"
+  }
+}
