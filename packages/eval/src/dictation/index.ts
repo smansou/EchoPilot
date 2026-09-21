@@ -361,10 +361,14 @@ type BridgeObservation = {
 
 /**
  * Wraps the native double so every call the rules layer makes is observed: writes, keys, focus
- * activations, clipboard reads/writes and the change count around the paste keystroke. The bridge's
- * behavior is untouched — the wrapper only records.
+ * activations, clipboard reads/writes and the change count around the paste keystroke. The matrix's
+ * native profile also supplies IME and Accessibility-trust facts that the target double does not
+ * otherwise expose, so the real controller can enforce those preview-only states.
  */
-function instrumentBridge(raw: CaptureBridge): Readonly<{ bridge: CaptureBridge; observation: BridgeObservation }> {
+function instrumentBridge(
+  raw: CaptureBridge,
+  surface: A04SurfaceProfile,
+): Readonly<{ bridge: CaptureBridge; observation: BridgeObservation }> {
   const observation: BridgeObservation = {
     inserts: [],
     keys: [],
@@ -374,7 +378,16 @@ function instrumentBridge(raw: CaptureBridge): Readonly<{ bridge: CaptureBridge;
     textAfterPasteKey: null,
   };
   const bridge: CaptureBridge = {
-    currentTarget: (): Promise<CaptureTarget | null> => raw.currentTarget(),
+    currentTarget: async (): Promise<CaptureTarget | null> => {
+      const target = await raw.currentTarget();
+      return target === null
+        ? null
+        : {
+          ...target,
+          imeComposing: surface.imeComposing,
+          accessibilityTrust: surface.accessibilityTrust,
+        };
+    },
     captureContext: (request: CaptureRequest): Promise<CaptureOutcome> => raw.captureContext(request),
     insertText: async (request: InsertRequest): Promise<InsertOutcome> => {
       const submitted = (request as { submit?: unknown }).submit;
@@ -510,7 +523,7 @@ export async function runDictationCompatibilityMatrix(input: A04MatrixInput): Pr
       throw new TypeError('runDictationCompatibilityMatrix requires surfaces with a key and an app name');
     }
     const rawBridge = createBridge(surface);
-    const { bridge, observation } = instrumentBridge(rawBridge);
+    const { bridge, observation } = instrumentBridge(rawBridge, surface);
     const controller = createController({ bridge, excludedBundleIds });
     const previousClipboardText = rawBridge.clipboard.readText();
 
@@ -522,30 +535,22 @@ export async function runDictationCompatibilityMatrix(input: A04MatrixInput): Pr
 
     await controller.commitTranscript(transcript);
 
-    // The surface's own limits refuse the write before the attempt: a secure field, an active IME
-    // composition and revoked Accessibility trust keep the words in the preview, never in the
-    // field. Everything else is decided by the controller's fingerprint revalidation.
-    const previewOnly = surface.secure
-      || surface.imeComposing
-      || surface.accessibilityTrust !== 'granted'
-      || !surface.editable;
-
+    // Exercise the actual rules layer for every surface. The bridge supplies the native focus,
+    // secure-field, IME and permission facts; the controller decides whether the draft can land.
     let behavior: A04SurfaceBehavior = 'preview_only';
     let method: 'accessibility' | 'clipboard' | null = null;
     let insertedText: string | null = null;
     let insertionMs: number | null = null;
-    if (!previewOnly) {
-      const writeStartedAt = now();
-      const result = await controller.insert();
-      if (result.status === 'inserted') {
-        behavior = 'insert';
-        method = result.method;
-        insertedText = result.text;
-        insertionMs = Math.max(0, now() - writeStartedAt);
-        insertedWrites += 1;
-      } else if (result.status === 'focus_changed') {
-        behavior = 'focus_changed';
-      }
+    const writeStartedAt = now();
+    const result = await controller.insert();
+    if (result.status === 'inserted') {
+      behavior = 'insert';
+      method = result.method;
+      insertedText = result.text;
+      insertionMs = Math.max(0, now() - writeStartedAt);
+      insertedWrites += 1;
+    } else if (result.status === 'focus_changed') {
+      behavior = 'focus_changed';
     }
 
     // Undo is called once per surface so `nothing_to_undo` is an observation; a surface that wrote

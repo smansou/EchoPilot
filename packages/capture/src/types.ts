@@ -27,6 +27,10 @@ export type CaptureTarget = Readonly<{
   role: string;
   secure: boolean;
   editable: boolean;
+  /** Native IME state at the focused element; a composing field must not receive dictation. */
+  imeComposing?: boolean;
+  /** Native Accessibility trust state; `prompt` and `revoked` are both preview-only. */
+  accessibilityTrust?: 'granted' | 'revoked' | 'prompt';
 }>;
 
 export type CaptureRequest = Readonly<{
@@ -137,6 +141,11 @@ export type InsertionResult =
       method: 'accessibility' | 'clipboard';
       transactionId: string;
       text: string;
+    }>
+  | Readonly<{
+      status: 'preview_only';
+      draftPreserved: true;
+      reason: 'secure_field' | 'ime_composing' | 'accessibility_unavailable';
     }>
   | Readonly<{ status: 'focus_changed'; draftPreserved: true }>
   | Readonly<{ status: 'nothing_to_insert' }>;

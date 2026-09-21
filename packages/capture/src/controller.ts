@@ -53,11 +53,18 @@ export function createDictationController(options: DictationControllerOptions): 
     return `a01-dictation-${utteranceCount}-${transactionCount}`;
   };
 
-  /** Focus moved away (or the element stopped being editable): write nothing, keep the draft. */
-  const targetStillFocused = async (fingerprint: TargetFingerprint): Promise<boolean> => {
-    const current: CaptureTarget | null = await bridge.currentTarget();
-    if (!current || !current.editable) return false;
-    return sameFingerprint(current.fingerprint, fingerprint);
+  /** A live target may be focused but still unsafe for insertion. */
+  const insertionBlockReason = (target: CaptureTarget):
+    | 'secure_field'
+    | 'ime_composing'
+    | 'accessibility_unavailable'
+    | null => {
+    if (target.secure || isSecureRole(target.role)) return 'secure_field';
+    if (target.imeComposing) return 'ime_composing';
+    if (target.accessibilityTrust !== undefined && target.accessibilityTrust !== 'granted') {
+      return 'accessibility_unavailable';
+    }
+    return null;
   };
 
   async function beginUtterance(input?: Readonly<{ screenshot?: boolean }>): Promise<CapturePreview> {
@@ -137,9 +144,12 @@ export function createDictationController(options: DictationControllerOptions): 
     if (!committed) return { status: 'nothing_to_insert' };
 
     // Revalidate immediately before writing: the helper writes into whatever is focused now.
-    if (!(await targetStillFocused(committed.target))) {
+    const current = await bridge.currentTarget();
+    if (!current || !current.editable || !sameFingerprint(current.fingerprint, committed.target)) {
       return { status: 'focus_changed', draftPreserved: true };
     }
+    const blocked = insertionBlockReason(current);
+    if (blocked) return { status: 'preview_only', draftPreserved: true, reason: blocked };
 
     const transactionId = nextTransactionId();
     const outcome = await bridge.insertText({
@@ -159,8 +169,13 @@ export function createDictationController(options: DictationControllerOptions): 
 
     // Accessibility insertion is unsupported here, so borrow the clipboard transactionally into
     // the element the fingerprint still points at.
-    if (!(await targetStillFocused(committed.target))) {
+    const fallbackTarget = await bridge.currentTarget();
+    if (!fallbackTarget || !fallbackTarget.editable || !sameFingerprint(fallbackTarget.fingerprint, committed.target)) {
       return { status: 'focus_changed', draftPreserved: true };
+    }
+    const fallbackBlocked = insertionBlockReason(fallbackTarget);
+    if (fallbackBlocked) {
+      return { status: 'preview_only', draftPreserved: true, reason: fallbackBlocked };
     }
     await pasteWithClipboardTransaction(bridge, committed.text);
     return completeInsertion(committed.text, 'clipboard', transactionId);
