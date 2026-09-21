@@ -118,6 +118,50 @@ test("wake attention never grants action authority and TV/background false trigg
   });
 });
 
+test("a queued wake cannot reopen the microphone after voice is disabled", async () => {
+  let now = 0;
+  const host = new FakeHost();
+  const controller = new ConversationActivationController({
+    host,
+    clock: { now: () => now },
+    idleTimeoutMs: 1,
+    standby: true,
+  });
+  await controller.enable();
+  now = 2;
+  await controller.tick();
+  const conversationOpensBeforeDisable = host.calls.filter((call) => call === "mic:open:conversation").length;
+
+  const disabling = controller.disable();
+  const wake = controller.detectWake({ confidence: 0.99, environment: "tv", observationMs: 1_000 });
+  const [, outcome] = await Promise.all([disabling, wake]);
+
+  assert.equal(outcome.detected, true);
+  assert.equal(outcome.conversationActivated, false);
+  assert.equal(outcome.actionAuthorized, false);
+  assert.equal(controller.snapshot().state, "disabled");
+  assert.equal(host.calls.filter((call) => call === "mic:open:conversation").length, conversationOpensBeforeDisable);
+  assert.equal(controller.snapshot().microphoneOpen, false);
+});
+
+test("invalid wake confidence cannot activate standby", async () => {
+  let now = 0;
+  const controller = new ConversationActivationController({
+    host: new FakeHost(),
+    clock: { now: () => now },
+    idleTimeoutMs: 1,
+    standby: true,
+  });
+  await controller.enable();
+  now = 2;
+  await controller.tick();
+
+  const outcome = await controller.detectWake({ confidence: Number.POSITIVE_INFINITY, environment: "background_speech" });
+  assert.equal(outcome.detected, false);
+  assert.equal(outcome.conversationActivated, false);
+  assert.equal(controller.snapshot().state, "standby");
+});
+
 test("the standalone energy meter rejects an over-budget standby trace", () => {
   const meter = new StandbyEnergyMeter();
   meter.record({ durationMs: 60_000, cpuPercent: 3, wakeups: 40, residentMemoryMb: 120 });

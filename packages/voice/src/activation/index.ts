@@ -274,18 +274,34 @@ export class ConversationActivationController {
 
   detectWake(candidate: WakeCandidate): Promise<WakeOutcome> {
     const threshold = clamp(candidate.threshold ?? this.#wakeThreshold, 0, 1);
-    const detected = this.#state === "standby" && candidate.confidence >= threshold;
+    // A malformed score must never be promoted into a wake. The detector is an
+    // attention signal only, but accepting an out-of-range value could still
+    // unexpectedly reopen the microphone and conversation models.
+    const confidenceIsValid = Number.isFinite(candidate.confidence)
+      && candidate.confidence >= 0
+      && candidate.confidence <= 1;
+    const detected = this.#enabled
+      && this.#state === "standby"
+      && confidenceIsValid
+      && candidate.confidence >= threshold;
     this.falseTriggers.record({
       environment: candidate.environment,
       durationMs: candidate.observationMs ?? 0,
       detected,
       expectedWake: candidate.expectedWake ?? false,
     });
+    let activated = false;
     return this.#serialize(async () => {
-      if (detected) await this.#enterActive();
+      // State can change between recognition and this queued operation (for
+      // example, the user can disable voice). Recheck the trust boundary at
+      // execution time so a stale wake cannot turn capture back on.
+      if (detected && this.#enabled && this.#state === "standby") {
+        await this.#enterActive();
+        activated = true;
+      }
     }).then(() => ({
       detected,
-      conversationActivated: detected && this.#state === "active",
+      conversationActivated: activated,
       actionAuthorized: false as const,
       requiresExplicitActionConfirmation: true as const,
     }));
