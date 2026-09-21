@@ -1,0 +1,660 @@
+{
+  "fixtureId": "g01-webcam-session",
+  "provenance": "Fully synthetic webcam-gaze session authored for the G01 acceptance oracle (IMPLEMENTATION_PLAN.md 5.11). No user data, no recordings, no network, no camera frames: every frame is landmark/quality features only.",
+  "displayMain": {
+    "displayId": "display-main",
+    "originX": 0,
+    "originY": 0,
+    "width": 1600,
+    "height": 1000,
+    "scale": 2,
+    "arrangementGeneration": 1
+  },
+  "displaySide": {
+    "displayId": "display-side",
+    "originX": 1600,
+    "originY": 120,
+    "width": 1280,
+    "height": 800,
+    "scale": 2,
+    "arrangementGeneration": 1
+  },
+  "cameraId": "camera-builtin",
+  "calibration": {
+    "displayId": "display-main",
+    "targets": [
+      {
+        "targetId": "cal-1",
+        "x": 200,
+        "y": 140,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:00.300Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9039,"features":{"irisX":0.467882,"irisY":0.477164,"ear":0.27724,"faceX":0.00222,"faceY":0.00163,"faceScale":0.32147,"yaw":0.00075,"pitch":-0.00116,"roll":0.00434}},
+          {"capturedAt":"2026-09-21T09:00:00.540Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9042,"features":{"irisX":0.469923,"irisY":0.478307,"ear":0.27247,"faceX":0.00138,"faceY":0.00089,"faceScale":0.32266,"yaw":-0.00384,"pitch":-0.0035,"roll":0.00151}},
+          {"capturedAt":"2026-09-21T09:00:00.780Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9267,"features":{"irisX":0.470941,"irisY":0.478649,"ear":0.29086,"faceX":-0.00062,"faceY":-0.00097,"faceScale":0.31742,"yaw":-0.00087,"pitch":-0.00354,"roll":0.00168}},
+          {"capturedAt":"2026-09-21T09:00:01.020Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9378,"features":{"irisX":0.471245,"irisY":0.479757,"ear":0.2963,"faceX":0.00105,"faceY":0.00389,"faceScale":0.32091,"yaw":-0.00109,"pitch":-0.00159,"roll":0.00452}},
+          {"capturedAt":"2026-09-21T09:00:01.260Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9702,"features":{"irisX":0.467745,"irisY":0.475407,"ear":0.32586,"faceX":-0.00265,"faceY":-0.00039,"faceScale":0.32257,"yaw":-0.00445,"pitch":-0.00217,"roll":0.0035}}
+        ]
+      },
+      {
+        "targetId": "cal-2",
+        "x": 800,
+        "y": 140,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:01.500Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9165,"features":{"irisX":0.499378,"irisY":0.4782,"ear":0.299,"faceX":-0.00102,"faceY":-0.00501,"faceScale":0.31871,"yaw":-0.00109,"pitch":-0.00144,"roll":0.00499}},
+          {"capturedAt":"2026-09-21T09:00:01.740Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9472,"features":{"irisX":0.500534,"irisY":0.478837,"ear":0.28845,"faceX":0.00706,"faceY":-0.00194,"faceScale":0.31994,"yaw":-0.00423,"pitch":-0.0021,"roll":0.00183}},
+          {"capturedAt":"2026-09-21T09:00:01.980Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9269,"features":{"irisX":0.500345,"irisY":0.478851,"ear":0.27478,"faceX":0.00061,"faceY":-0.00041,"faceScale":0.32624,"yaw":-0.00023,"pitch":-0.00339,"roll":0.00091}},
+          {"capturedAt":"2026-09-21T09:00:02.220Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9014,"features":{"irisX":0.499835,"irisY":0.477149,"ear":0.28132,"faceX":0.00515,"faceY":0.00089,"faceScale":0.32058,"yaw":0.00218,"pitch":-0.00223,"roll":0.00553}},
+          {"capturedAt":"2026-09-21T09:00:02.460Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9405,"features":{"irisX":0.498759,"irisY":0.475515,"ear":0.29499,"faceX":0.00587,"faceY":-0.00306,"faceScale":0.32416,"yaw":-0.00042,"pitch":0.00087,"roll":0.00511}}
+        ]
+      },
+      {
+        "targetId": "cal-3",
+        "x": 1400,
+        "y": 140,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:02.700Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9399,"features":{"irisX":0.52751,"irisY":0.4783,"ear":0.28173,"faceX":-0.00468,"faceY":-0.00521,"faceScale":0.31841,"yaw":0.00125,"pitch":0.00025,"roll":-0.00145}},
+          {"capturedAt":"2026-09-21T09:00:02.940Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9534,"features":{"irisX":0.531691,"irisY":0.476268,"ear":0.29081,"faceX":-0.00439,"faceY":-0.00153,"faceScale":0.31463,"yaw":-0.0036,"pitch":-0.00166,"roll":-0.00038}},
+          {"capturedAt":"2026-09-21T09:00:03.060Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.31,"irisY":0.72,"ear":0.06,"faceX":0.02,"faceY":-0.01,"faceScale":0.33,"yaw":0.004,"pitch":0.003,"roll":0.002}},
+          {"capturedAt":"2026-09-21T09:00:03.180Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9207,"features":{"irisX":0.530998,"irisY":0.477197,"ear":0.28432,"faceX":0.00312,"faceY":-0.00204,"faceScale":0.32106,"yaw":-0.00215,"pitch":-0.0009,"roll":0.00297}},
+          {"capturedAt":"2026-09-21T09:00:03.420Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.916,"features":{"irisX":0.531429,"irisY":0.477916,"ear":0.30126,"faceX":-0.00192,"faceY":-0.00323,"faceScale":0.31606,"yaw":-0.00338,"pitch":-0.0046,"roll":0.00524}},
+          {"capturedAt":"2026-09-21T09:00:03.660Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9065,"features":{"irisX":0.530567,"irisY":0.478977,"ear":0.28449,"faceX":-0.0015,"faceY":-0.0005,"faceScale":0.31767,"yaw":-0.0019,"pitch":-0.00564,"roll":0.00565}}
+        ]
+      },
+      {
+        "targetId": "cal-4",
+        "x": 200,
+        "y": 500,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:03.900Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.924,"features":{"irisX":0.468908,"irisY":0.497869,"ear":0.28164,"faceX":-0.00357,"faceY":0.00667,"faceScale":0.32486,"yaw":0.00343,"pitch":-0.00445,"roll":0.00515}},
+          {"capturedAt":"2026-09-21T09:00:04.140Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9483,"features":{"irisX":0.469692,"irisY":0.49911,"ear":0.25497,"faceX":-0.00062,"faceY":0.00044,"faceScale":0.31992,"yaw":-0.00461,"pitch":-0.0016,"roll":0.00178}},
+          {"capturedAt":"2026-09-21T09:00:04.380Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9353,"features":{"irisX":0.467564,"irisY":0.499734,"ear":0.26718,"faceX":-0.00178,"faceY":-0.00132,"faceScale":0.31645,"yaw":-0.00149,"pitch":-0.00378,"roll":-0.00051}},
+          {"capturedAt":"2026-09-21T09:00:04.620Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9789,"features":{"irisX":0.46895,"irisY":0.497395,"ear":0.27364,"faceX":-0.0017,"faceY":-0.00482,"faceScale":0.32548,"yaw":-0.00028,"pitch":-0.00353,"roll":0.00509}},
+          {"capturedAt":"2026-09-21T09:00:04.860Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.919,"features":{"irisX":0.469671,"irisY":0.500044,"ear":0.27082,"faceX":-0.00326,"faceY":0.00098,"faceScale":0.31737,"yaw":-0.0018,"pitch":-0.00239,"roll":0.00252}}
+        ]
+      },
+      {
+        "targetId": "cal-5",
+        "x": 800,
+        "y": 500,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:05.100Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9649,"features":{"irisX":0.501118,"irisY":0.498239,"ear":0.28739,"faceX":-0.00026,"faceY":0.00083,"faceScale":0.32019,"yaw":-0.00091,"pitch":-0.007,"roll":-0.00075}},
+          {"capturedAt":"2026-09-21T09:00:05.340Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.95,"features":{"irisX":0.500488,"irisY":0.500114,"ear":0.29564,"faceX":0.00053,"faceY":-0.00359,"faceScale":0.32364,"yaw":-0.00226,"pitch":-0.00626,"roll":0.00367}},
+          {"capturedAt":"2026-09-21T09:00:05.580Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9138,"features":{"irisX":0.499739,"irisY":0.501408,"ear":0.2884,"faceX":-0.00677,"faceY":-0.00264,"faceScale":0.32594,"yaw":-0.00424,"pitch":0.00147,"roll":0.00197}},
+          {"capturedAt":"2026-09-21T09:00:05.820Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9454,"features":{"irisX":0.500943,"irisY":0.499864,"ear":0.28088,"faceX":-0.00173,"faceY":0.00474,"faceScale":0.31128,"yaw":-0.00042,"pitch":-0.00237,"roll":0.00428}},
+          {"capturedAt":"2026-09-21T09:00:06.060Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9357,"features":{"irisX":0.499254,"irisY":0.503543,"ear":0.27981,"faceX":-0.00446,"faceY":-0.00377,"faceScale":0.32215,"yaw":-0.00249,"pitch":-0.00051,"roll":-0.00046}}
+        ]
+      },
+      {
+        "targetId": "cal-6",
+        "x": 1400,
+        "y": 500,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:06.300Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9443,"features":{"irisX":0.531613,"irisY":0.501106,"ear":0.29855,"faceX":0.00374,"faceY":0.00134,"faceScale":0.31941,"yaw":-0.00259,"pitch":-0.00013,"roll":0.0023}},
+          {"capturedAt":"2026-09-21T09:00:06.540Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9595,"features":{"irisX":0.528952,"irisY":0.500293,"ear":0.28171,"faceX":-0.00266,"faceY":-0.00571,"faceScale":0.31328,"yaw":-0.00268,"pitch":-0.00481,"roll":0.0005}},
+          {"capturedAt":"2026-09-21T09:00:06.660Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.31,"irisY":0.72,"ear":0.06,"faceX":0.02,"faceY":-0.01,"faceScale":0.33,"yaw":0.004,"pitch":0.003,"roll":0.002}},
+          {"capturedAt":"2026-09-21T09:00:06.780Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9549,"features":{"irisX":0.530521,"irisY":0.500171,"ear":0.27515,"faceX":-0.00076,"faceY":-0.00037,"faceScale":0.32259,"yaw":-0.002,"pitch":-0.00135,"roll":0.00257}},
+          {"capturedAt":"2026-09-21T09:00:07.020Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.91,"features":{"irisX":0.530472,"irisY":0.499834,"ear":0.27681,"faceX":0.00159,"faceY":0.00639,"faceScale":0.32044,"yaw":-0.0026,"pitch":-0.00066,"roll":0.00258}},
+          {"capturedAt":"2026-09-21T09:00:07.260Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9453,"features":{"irisX":0.530359,"irisY":0.500119,"ear":0.26571,"faceX":0.00166,"faceY":-0.00346,"faceScale":0.32125,"yaw":-0.00386,"pitch":-0.00196,"roll":0.00199}}
+        ]
+      },
+      {
+        "targetId": "cal-7",
+        "x": 200,
+        "y": 860,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:07.500Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9352,"features":{"irisX":0.470762,"irisY":0.521383,"ear":0.29722,"faceX":-0.001,"faceY":-0.00753,"faceScale":0.32072,"yaw":-0.00179,"pitch":0.0012,"roll":0.001}},
+          {"capturedAt":"2026-09-21T09:00:07.740Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9105,"features":{"irisX":0.469302,"irisY":0.520651,"ear":0.30485,"faceX":-0.00104,"faceY":-0.00093,"faceScale":0.31965,"yaw":-0.00295,"pitch":-0.00209,"roll":-0.00225}},
+          {"capturedAt":"2026-09-21T09:00:07.980Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9622,"features":{"irisX":0.467179,"irisY":0.522888,"ear":0.27575,"faceX":-0.00106,"faceY":0.00613,"faceScale":0.31932,"yaw":-0.00141,"pitch":-0.00208,"roll":0.0041}},
+          {"capturedAt":"2026-09-21T09:00:08.220Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9735,"features":{"irisX":0.470694,"irisY":0.523022,"ear":0.26978,"faceX":0.00097,"faceY":0.00411,"faceScale":0.31488,"yaw":-0.00123,"pitch":-0.00111,"roll":0.00342}},
+          {"capturedAt":"2026-09-21T09:00:08.460Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9341,"features":{"irisX":0.470511,"irisY":0.521097,"ear":0.29265,"faceX":-0.00121,"faceY":-0.00234,"faceScale":0.3189,"yaw":-0.00439,"pitch":-0.00173,"roll":-0.00141}}
+        ]
+      },
+      {
+        "targetId": "cal-8",
+        "x": 800,
+        "y": 860,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:08.700Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9772,"features":{"irisX":0.499526,"irisY":0.522331,"ear":0.25513,"faceX":-0.00015,"faceY":0.00102,"faceScale":0.31708,"yaw":-0.00434,"pitch":-0.00724,"roll":0.00222}},
+          {"capturedAt":"2026-09-21T09:00:08.940Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9325,"features":{"irisX":0.498253,"irisY":0.520702,"ear":0.28742,"faceX":-0.00187,"faceY":0.00134,"faceScale":0.32311,"yaw":-0.00563,"pitch":-0.00287,"roll":0.00278}},
+          {"capturedAt":"2026-09-21T09:00:09.180Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9609,"features":{"irisX":0.498854,"irisY":0.522284,"ear":0.28814,"faceX":0.00082,"faceY":0.00213,"faceScale":0.31602,"yaw":-0.00116,"pitch":-0.00265,"roll":0.00196}},
+          {"capturedAt":"2026-09-21T09:00:09.420Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9463,"features":{"irisX":0.49939,"irisY":0.51982,"ear":0.27445,"faceX":0.0007,"faceY":0.00151,"faceScale":0.3213,"yaw":-0.00301,"pitch":-0.00413,"roll":-0.00176}},
+          {"capturedAt":"2026-09-21T09:00:09.660Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9112,"features":{"irisX":0.50011,"irisY":0.520864,"ear":0.27553,"faceX":-0.00325,"faceY":0.00234,"faceScale":0.32088,"yaw":-0.00273,"pitch":-0.0022,"roll":0.00031}}
+        ]
+      },
+      {
+        "targetId": "cal-9",
+        "x": 1400,
+        "y": 860,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:09.900Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9768,"features":{"irisX":0.530607,"irisY":0.520978,"ear":0.28577,"faceX":0.00028,"faceY":0.00318,"faceScale":0.31796,"yaw":-0.00479,"pitch":-0.00393,"roll":0.0018}},
+          {"capturedAt":"2026-09-21T09:00:10.140Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9355,"features":{"irisX":0.529998,"irisY":0.518097,"ear":0.27431,"faceX":0.002,"faceY":-0.00578,"faceScale":0.32141,"yaw":-0.00386,"pitch":-0.00139,"roll":0.00137}},
+          {"capturedAt":"2026-09-21T09:00:10.260Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.31,"irisY":0.72,"ear":0.06,"faceX":0.02,"faceY":-0.01,"faceScale":0.33,"yaw":0.004,"pitch":0.003,"roll":0.002}},
+          {"capturedAt":"2026-09-21T09:00:10.380Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9764,"features":{"irisX":0.530339,"irisY":0.522301,"ear":0.2844,"faceX":-0.00459,"faceY":0.0015,"faceScale":0.31592,"yaw":-0.00478,"pitch":-0.00541,"roll":0.00281}},
+          {"capturedAt":"2026-09-21T09:00:10.620Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9441,"features":{"irisX":0.53139,"irisY":0.522992,"ear":0.28686,"faceX":0.00238,"faceY":0.00294,"faceScale":0.32139,"yaw":-0.00097,"pitch":-0.0032,"roll":0.00264}},
+          {"capturedAt":"2026-09-21T09:00:10.860Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9359,"features":{"irisX":0.528729,"irisY":0.521571,"ear":0.29249,"faceX":0.00386,"faceY":-0.00426,"faceScale":0.32563,"yaw":-0.00489,"pitch":-0.00133,"roll":0.00509}}
+        ]
+      }
+    ],
+    "validationTargets": [
+      {
+        "targetId": "validation-1",
+        "x": 420,
+        "y": 300,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:11.100Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9326,"features":{"irisX":0.480977,"irisY":0.4888,"ear":0.26277,"faceX":-0.00366,"faceY":-0.00237,"faceScale":0.31336,"yaw":-0.00522,"pitch":-0.0027,"roll":0.00484}},
+          {"capturedAt":"2026-09-21T09:00:11.340Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9662,"features":{"irisX":0.480146,"irisY":0.48633,"ear":0.27755,"faceX":-0.00806,"faceY":0.00068,"faceScale":0.31244,"yaw":-0.00525,"pitch":-0.00497,"roll":0.00202}},
+          {"capturedAt":"2026-09-21T09:00:11.580Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9728,"features":{"irisX":0.482308,"irisY":0.487208,"ear":0.26093,"faceX":-0.00537,"faceY":0.00172,"faceScale":0.31086,"yaw":-0.00626,"pitch":-0.00544,"roll":0.00348}},
+          {"capturedAt":"2026-09-21T09:00:11.820Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9146,"features":{"irisX":0.48042,"irisY":0.485725,"ear":0.27128,"faceX":-0.00154,"faceY":-0.00411,"faceScale":0.31113,"yaw":-0.00041,"pitch":-0.00128,"roll":0.00625}},
+          {"capturedAt":"2026-09-21T09:00:12.060Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.915,"features":{"irisX":0.481367,"irisY":0.488445,"ear":0.27719,"faceX":-0.00461,"faceY":0.00167,"faceScale":0.32705,"yaw":-0.00065,"pitch":-0.00015,"roll":-0.00309}}
+        ]
+      },
+      {
+        "targetId": "validation-2",
+        "x": 1180,
+        "y": 300,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:12.300Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.964,"features":{"irisX":0.518853,"irisY":0.488729,"ear":0.27245,"faceX":-0.00058,"faceY":-0.00641,"faceScale":0.32304,"yaw":-0.00415,"pitch":-0.00218,"roll":-0.00085}},
+          {"capturedAt":"2026-09-21T09:00:12.540Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9481,"features":{"irisX":0.518204,"irisY":0.49094,"ear":0.29515,"faceX":-0.001,"faceY":-0.00026,"faceScale":0.31595,"yaw":-0.00546,"pitch":-0.00442,"roll":0.00309}},
+          {"capturedAt":"2026-09-21T09:00:12.780Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9126,"features":{"irisX":0.51989,"irisY":0.4888,"ear":0.2832,"faceX":-0.00246,"faceY":-0.00249,"faceScale":0.31632,"yaw":-0.00316,"pitch":-0.00599,"roll":-0.00031}},
+          {"capturedAt":"2026-09-21T09:00:13.020Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9351,"features":{"irisX":0.518275,"irisY":0.489028,"ear":0.27342,"faceX":-0.0023,"faceY":0.00085,"faceScale":0.32054,"yaw":-0.00272,"pitch":-0.00218,"roll":-0.00151}},
+          {"capturedAt":"2026-09-21T09:00:13.260Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9568,"features":{"irisX":0.518233,"irisY":0.491725,"ear":0.2906,"faceX":-0.00048,"faceY":0.00025,"faceScale":0.31622,"yaw":-0.00214,"pitch":-0.00369,"roll":0.00208}}
+        ]
+      },
+      {
+        "targetId": "validation-3",
+        "x": 800,
+        "y": 640,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:13.500Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9243,"features":{"irisX":0.502058,"irisY":0.508942,"ear":0.28175,"faceX":-0.00117,"faceY":0.0032,"faceScale":0.31838,"yaw":-0.00064,"pitch":-0.00681,"roll":0.00126}},
+          {"capturedAt":"2026-09-21T09:00:13.740Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9136,"features":{"irisX":0.500292,"irisY":0.50917,"ear":0.27736,"faceX":0.00161,"faceY":-0.00015,"faceScale":0.32208,"yaw":-0.00281,"pitch":-0.0038,"roll":0.00323}},
+          {"capturedAt":"2026-09-21T09:00:13.980Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9325,"features":{"irisX":0.501571,"irisY":0.507221,"ear":0.25865,"faceX":0.00306,"faceY":-0.00623,"faceScale":0.32032,"yaw":-0.00331,"pitch":-0.00051,"roll":0.00232}},
+          {"capturedAt":"2026-09-21T09:00:14.220Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9493,"features":{"irisX":0.49819,"irisY":0.507459,"ear":0.28519,"faceX":-0.00028,"faceY":-0.00476,"faceScale":0.3264,"yaw":-0.00429,"pitch":-0.00278,"roll":0.00191}},
+          {"capturedAt":"2026-09-21T09:00:14.460Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9042,"features":{"irisX":0.499306,"irisY":0.50966,"ear":0.29568,"faceX":-0.00249,"faceY":0.00228,"faceScale":0.32201,"yaw":-0.0057,"pitch":0.00214,"roll":0.00208}}
+        ]
+      },
+      {
+        "targetId": "validation-4",
+        "x": 520,
+        "y": 800,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:14.700Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9515,"features":{"irisX":0.484133,"irisY":0.516056,"ear":0.27361,"faceX":0.0021,"faceY":-0.00637,"faceScale":0.32189,"yaw":-0.00405,"pitch":-0.00452,"roll":-0.00093}},
+          {"capturedAt":"2026-09-21T09:00:14.940Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9165,"features":{"irisX":0.487078,"irisY":0.51778,"ear":0.25863,"faceX":0.00033,"faceY":-0.00078,"faceScale":0.31386,"yaw":-0.00469,"pitch":-0.00298,"roll":0.00022}},
+          {"capturedAt":"2026-09-21T09:00:15.180Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9429,"features":{"irisX":0.485254,"irisY":0.518707,"ear":0.26685,"faceX":-0.00511,"faceY":-0.00361,"faceScale":0.32371,"yaw":-0.00502,"pitch":-0.00267,"roll":-0.00001}},
+          {"capturedAt":"2026-09-21T09:00:15.420Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9715,"features":{"irisX":0.485399,"irisY":0.521087,"ear":0.27979,"faceX":0.00074,"faceY":0.00251,"faceScale":0.32459,"yaw":-0.0036,"pitch":-0.0048,"roll":0.00149}},
+          {"capturedAt":"2026-09-21T09:00:15.660Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9094,"features":{"irisX":0.48634,"irisY":0.519725,"ear":0.2892,"faceX":0.00324,"faceY":0.00412,"faceScale":0.32398,"yaw":-0.00393,"pitch":-0.00384,"roll":0.00206}}
+        ]
+      },
+      {
+        "targetId": "validation-5",
+        "x": 1300,
+        "y": 780,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:15.900Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9704,"features":{"irisX":0.52511,"irisY":0.512906,"ear":0.26949,"faceX":0.00135,"faceY":0.0017,"faceScale":0.32478,"yaw":-0.00522,"pitch":-0.0017,"roll":0.00147}},
+          {"capturedAt":"2026-09-21T09:00:16.140Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9363,"features":{"irisX":0.526076,"irisY":0.5155,"ear":0.26217,"faceX":-0.00202,"faceY":-0.00046,"faceScale":0.31381,"yaw":-0.00307,"pitch":-0.00504,"roll":0.00065}},
+          {"capturedAt":"2026-09-21T09:00:16.380Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9117,"features":{"irisX":0.52627,"irisY":0.516916,"ear":0.29911,"faceX":-0.00264,"faceY":0.00154,"faceScale":0.32083,"yaw":-0.00566,"pitch":-0.0039,"roll":-0.00206}},
+          {"capturedAt":"2026-09-21T09:00:16.620Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9005,"features":{"irisX":0.525804,"irisY":0.51591,"ear":0.28419,"faceX":0.00231,"faceY":-0.00177,"faceScale":0.33012,"yaw":-0.00554,"pitch":-0.00129,"roll":0.00578}},
+          {"capturedAt":"2026-09-21T09:00:16.860Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9244,"features":{"irisX":0.524066,"irisY":0.515684,"ear":0.30262,"faceX":-0.0051,"faceY":0.00031,"faceScale":0.32789,"yaw":-0.00394,"pitch":-0.00065,"roll":0.00721}}
+        ]
+      }
+    ]
+  },
+  "failedCalibration": {
+    "displayId": "display-main",
+    "targets": [
+      {
+        "targetId": "failed-1",
+        "x": 200,
+        "y": 140,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:00:59.800Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:00:59.930Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:00.060Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:00.190Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}}
+        ]
+      },
+      {
+        "targetId": "failed-2",
+        "x": 800,
+        "y": 140,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:01:01.000Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:01.130Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:01.260Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:01.390Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}}
+        ]
+      },
+      {
+        "targetId": "failed-3",
+        "x": 1400,
+        "y": 140,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:01:02.200Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:02.330Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:02.460Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:02.590Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}}
+        ]
+      },
+      {
+        "targetId": "failed-4",
+        "x": 200,
+        "y": 500,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:01:03.400Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:03.530Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:03.660Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:03.790Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}}
+        ]
+      },
+      {
+        "targetId": "failed-5",
+        "x": 800,
+        "y": 500,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:01:04.600Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:04.730Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:04.860Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:04.990Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}}
+        ]
+      },
+      {
+        "targetId": "failed-6",
+        "x": 1400,
+        "y": 500,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:01:05.800Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:05.930Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:06.060Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:06.190Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}}
+        ]
+      },
+      {
+        "targetId": "failed-7",
+        "x": 200,
+        "y": 860,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:01:07.000Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:07.130Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:07.260Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:07.390Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}}
+        ]
+      },
+      {
+        "targetId": "failed-8",
+        "x": 800,
+        "y": 860,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:01:08.200Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:08.330Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:08.460Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:08.590Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}}
+        ]
+      },
+      {
+        "targetId": "failed-9",
+        "x": 1400,
+        "y": 860,
+        "frames": [
+          {"capturedAt":"2026-09-21T09:01:09.400Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:09.530Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:09.660Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+          {"capturedAt":"2026-09-21T09:01:09.790Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}}
+        ]
+      }
+    ],
+    "validationTargets": []
+  },
+  "referenceScenes": [
+    {
+      "referenceId": "reference-1",
+      "displayId": "display-main",
+      "wordAt": "2026-09-21T09:00:25.800Z",
+      "phrase": {
+        "text": "why is this disabled",
+        "word": "this"
+      },
+      "expectedTargetId": "s1-deploy",
+      "candidates": [
+        {
+          "candidateId": "s1-deploy",
+          "label": "Deploy button",
+          "bounds": {
+            "x": 330,
+            "y": 238,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        },
+        {
+          "candidateId": "s1-retry",
+          "label": "Retry button",
+          "bounds": {
+            "x": 810,
+            "y": 198,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        },
+        {
+          "candidateId": "s1-close",
+          "label": "Close button",
+          "bounds": {
+            "x": 210,
+            "y": 538,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        }
+      ],
+      "frames": [
+        {"capturedAt":"2026-09-21T09:00:25.200Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9203,"features":{"irisX":0.481894,"irisY":0.486693,"ear":0.26064,"faceX":0.00312,"faceY":0.00381,"faceScale":0.33053,"yaw":0.00094,"pitch":0.00624,"roll":0.00037}},
+        {"capturedAt":"2026-09-21T09:00:25.350Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9096,"features":{"irisX":0.48083,"irisY":0.48673,"ear":0.2683,"faceX":0.00394,"faceY":0.00563,"faceScale":0.32159,"yaw":-0.00031,"pitch":0.00211,"roll":0.00369}},
+        {"capturedAt":"2026-09-21T09:00:25.500Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9635,"features":{"irisX":0.481171,"irisY":0.48437,"ear":0.28722,"faceX":0.00147,"faceY":-0.00274,"faceScale":0.31921,"yaw":0.00279,"pitch":-0.003,"roll":0.00271}},
+        {"capturedAt":"2026-09-21T09:00:25.650Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9043,"features":{"irisX":0.478128,"irisY":0.486509,"ear":0.28001,"faceX":-0.00381,"faceY":-0.00039,"faceScale":0.32283,"yaw":0.00846,"pitch":0.00121,"roll":0.00393}},
+        {"capturedAt":"2026-09-21T09:00:25.800Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9181,"features":{"irisX":0.480565,"irisY":0.485142,"ear":0.28782,"faceX":0.00196,"faceY":-0.0053,"faceScale":0.31341,"yaw":0.0006,"pitch":-0.00178,"roll":-0.00154}},
+        {"capturedAt":"2026-09-21T09:00:25.900Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9298,"features":{"irisX":0.480426,"irisY":0.484879,"ear":0.27197,"faceX":0.00148,"faceY":-0.00033,"faceScale":0.31394,"yaw":0.0014,"pitch":-0.00235,"roll":0.00069}}
+      ]
+    },
+    {
+      "referenceId": "reference-2",
+      "displayId": "display-main",
+      "wordAt": "2026-09-21T09:00:31.800Z",
+      "phrase": {
+        "text": "can you explain this one",
+        "word": "this"
+      },
+      "expectedTargetId": "s2-test-button",
+      "candidates": [
+        {
+          "candidateId": "s2-test-button",
+          "label": "Run tests button",
+          "bounds": {
+            "x": 1090,
+            "y": 318,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        },
+        {
+          "candidateId": "s2-settings",
+          "label": "Settings button",
+          "bounds": {
+            "x": 550,
+            "y": 278,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        },
+        {
+          "candidateId": "s2-dismiss",
+          "label": "Dismiss button",
+          "bounds": {
+            "x": 1150,
+            "y": 638,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        }
+      ],
+      "frames": [
+        {"capturedAt":"2026-09-21T09:00:31.200Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9307,"features":{"irisX":0.518925,"irisY":0.490591,"ear":0.29764,"faceX":-0.00105,"faceY":0.00027,"faceScale":0.32589,"yaw":0.00479,"pitch":-0.00031,"roll":0.00253}},
+        {"capturedAt":"2026-09-21T09:00:31.400Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9554,"features":{"irisX":0.519006,"irisY":0.489193,"ear":0.2777,"faceX":-0.00148,"faceY":0.00175,"faceScale":0.32401,"yaw":0.0016,"pitch":0.00314,"roll":0.00241}},
+        {"capturedAt":"2026-09-21T09:00:31.550Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9548,"features":{"irisX":0.520298,"irisY":0.49021,"ear":0.27915,"faceX":-0.00187,"faceY":-0.00014,"faceScale":0.32692,"yaw":0.00003,"pitch":0.00165,"roll":-0.00042}},
+        {"capturedAt":"2026-09-21T09:00:31.700Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9329,"features":{"irisX":0.518897,"irisY":0.488095,"ear":0.25758,"faceX":-0.00138,"faceY":-0.00129,"faceScale":0.3212,"yaw":-0.00679,"pitch":-0.00175,"roll":0.00272}},
+        {"capturedAt":"2026-09-21T09:00:31.800Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9291,"features":{"irisX":0.51978,"irisY":0.491773,"ear":0.26717,"faceX":-0.00443,"faceY":-0.00104,"faceScale":0.31955,"yaw":-0.00169,"pitch":-0.00238,"roll":0.00214}},
+        {"capturedAt":"2026-09-21T09:00:31.900Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9719,"features":{"irisX":0.51752,"irisY":0.491928,"ear":0.2731,"faceX":0.00152,"faceY":0.00763,"faceScale":0.32264,"yaw":0.00059,"pitch":-0.00169,"roll":0.00269}}
+      ]
+    },
+    {
+      "referenceId": "reference-3",
+      "displayId": "display-main",
+      "wordAt": "2026-09-21T09:00:37.800Z",
+      "phrase": {
+        "text": "what does this do",
+        "word": "this"
+      },
+      "expectedTargetId": "s3-format",
+      "candidates": [
+        {
+          "candidateId": "s3-format",
+          "label": "Format button",
+          "bounds": {
+            "x": 610,
+            "y": 618,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        },
+        {
+          "candidateId": "s3-commit",
+          "label": "Commit button",
+          "bounds": {
+            "x": 990,
+            "y": 578,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        },
+        {
+          "candidateId": "s3-reset",
+          "label": "Reset button",
+          "bounds": {
+            "x": 250,
+            "y": 698,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        }
+      ],
+      "frames": [
+        {"capturedAt":"2026-09-21T09:00:37.200Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9044,"features":{"irisX":0.493584,"irisY":0.509641,"ear":0.26418,"faceX":0.00073,"faceY":0.0023,"faceScale":0.31542,"yaw":-0.00183,"pitch":-0.00073,"roll":0.00002}},
+        {"capturedAt":"2026-09-21T09:00:37.380Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9217,"features":{"irisX":0.494413,"irisY":0.508314,"ear":0.28112,"faceX":0.00417,"faceY":-0.00452,"faceScale":0.32699,"yaw":0.00241,"pitch":0.0022,"roll":0.00094}},
+        {"capturedAt":"2026-09-21T09:00:37.520Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9753,"features":{"irisX":0.495328,"irisY":0.51063,"ear":0.26862,"faceX":0.00222,"faceY":0.0009,"faceScale":0.32202,"yaw":0.00006,"pitch":0.00248,"roll":0.00118}},
+        {"capturedAt":"2026-09-21T09:00:37.660Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9262,"features":{"irisX":0.497208,"irisY":0.507281,"ear":0.29717,"faceX":-0.00299,"faceY":-0.00237,"faceScale":0.31812,"yaw":0.00239,"pitch":0.00124,"roll":0.00119}},
+        {"capturedAt":"2026-09-21T09:00:37.800Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9219,"features":{"irisX":0.49638,"irisY":0.511118,"ear":0.27453,"faceX":0.00027,"faceY":0.0015,"faceScale":0.32751,"yaw":0.00543,"pitch":-0.00457,"roll":0.00215}},
+        {"capturedAt":"2026-09-21T09:00:37.900Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9704,"features":{"irisX":0.493179,"irisY":0.510119,"ear":0.25942,"faceX":0.00486,"faceY":-0.00515,"faceScale":0.31795,"yaw":0.00085,"pitch":-0.00213,"roll":0.00134}}
+      ]
+    },
+    {
+      "referenceId": "reference-4",
+      "displayId": "display-main",
+      "wordAt": "2026-09-21T09:00:43.800Z",
+      "phrase": {
+        "text": "can you take a look at this",
+        "word": "this"
+      },
+      "expectedTargetId": "s4-sync",
+      "candidates": [
+        {
+          "candidateId": "s4-sync",
+          "label": "Sync button",
+          "bounds": {
+            "x": 430,
+            "y": 778,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        },
+        {
+          "candidateId": "s4-archive",
+          "label": "Archive button",
+          "bounds": {
+            "x": 820,
+            "y": 760,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        },
+        {
+          "candidateId": "s4-delete",
+          "label": "Delete button",
+          "bounds": {
+            "x": 210,
+            "y": 398,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        }
+      ],
+      "frames": [
+        {"capturedAt":"2026-09-21T09:00:41.400Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9105,"features":{"irisX":0.5045,"irisY":0.518129,"ear":0.2922,"faceX":0.00338,"faceY":-0.00147,"faceScale":0.32558,"yaw":0.00415,"pitch":-0.00017,"roll":-0.00036}},
+        {"capturedAt":"2026-09-21T09:00:41.550Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9446,"features":{"irisX":0.504957,"irisY":0.516891,"ear":0.26908,"faceX":-0.00147,"faceY":0.00051,"faceScale":0.32411,"yaw":0.00296,"pitch":0.00541,"roll":0.00151}},
+        {"capturedAt":"2026-09-21T09:00:41.700Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9358,"features":{"irisX":0.504794,"irisY":0.515,"ear":0.27988,"faceX":0.00063,"faceY":-0.00274,"faceScale":0.3183,"yaw":-0.00127,"pitch":0.00454,"roll":0.00088}},
+        {"capturedAt":"2026-09-21T09:00:41.850Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9221,"features":{"irisX":0.505275,"irisY":0.516453,"ear":0.28314,"faceX":-0.00014,"faceY":0.00258,"faceScale":0.3162,"yaw":-0.00111,"pitch":-0.00013,"roll":0.00597}},
+        {"capturedAt":"2026-09-21T09:00:42.000Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9621,"features":{"irisX":0.503471,"irisY":0.515533,"ear":0.28702,"faceX":-0.00415,"faceY":-0.001,"faceScale":0.31852,"yaw":-0.00041,"pitch":-0.00657,"roll":0.0004}},
+        {"capturedAt":"2026-09-21T09:00:42.150Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9724,"features":{"irisX":0.506919,"irisY":0.517101,"ear":0.29135,"faceX":0.00614,"faceY":0.00491,"faceScale":0.31526,"yaw":0.00259,"pitch":0.00085,"roll":0.00328}},
+        {"capturedAt":"2026-09-21T09:00:43.200Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9277,"features":{"irisX":0.488053,"irisY":0.518809,"ear":0.29863,"faceX":-0.00359,"faceY":0.00055,"faceScale":0.3214,"yaw":0.00031,"pitch":0.00332,"roll":0.00224}},
+        {"capturedAt":"2026-09-21T09:00:43.350Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9025,"features":{"irisX":0.486158,"irisY":0.518669,"ear":0.2913,"faceX":0.00002,"faceY":0.00061,"faceScale":0.32016,"yaw":0.00434,"pitch":-0.00265,"roll":-0.00073}},
+        {"capturedAt":"2026-09-21T09:00:43.500Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9789,"features":{"irisX":0.486138,"irisY":0.518413,"ear":0.28087,"faceX":0.00217,"faceY":-0.00028,"faceScale":0.31865,"yaw":0.00176,"pitch":-0.00111,"roll":0.00197}},
+        {"capturedAt":"2026-09-21T09:00:43.650Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9603,"features":{"irisX":0.485957,"irisY":0.516292,"ear":0.2607,"faceX":-0.0045,"faceY":-0.00191,"faceScale":0.3147,"yaw":0.00239,"pitch":-0.00347,"roll":0.00661}},
+        {"capturedAt":"2026-09-21T09:00:43.800Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9612,"features":{"irisX":0.486334,"irisY":0.515708,"ear":0.2737,"faceX":0.00078,"faceY":0.00174,"faceScale":0.3201,"yaw":-0.00154,"pitch":-0.00209,"roll":0.00528}},
+        {"capturedAt":"2026-09-21T09:00:43.900Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9083,"features":{"irisX":0.484434,"irisY":0.519249,"ear":0.28681,"faceX":-0.00077,"faceY":-0.00408,"faceScale":0.32296,"yaw":-0.00407,"pitch":-0.0016,"roll":0.0018}}
+      ]
+    },
+    {
+      "referenceId": "reference-5",
+      "displayId": "display-main",
+      "wordAt": "2026-09-21T09:00:49.800Z",
+      "phrase": {
+        "text": "why is this greyed out",
+        "word": "this"
+      },
+      "expectedTargetId": "s5-share",
+      "candidates": [
+        {
+          "candidateId": "s5-share",
+          "label": "Share button",
+          "bounds": {
+            "x": 1210,
+            "y": 738,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        },
+        {
+          "candidateId": "s5-invite",
+          "label": "Invite button",
+          "bounds": {
+            "x": 710,
+            "y": 678,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        },
+        {
+          "candidateId": "s5-remove",
+          "label": "Remove button",
+          "bounds": {
+            "x": 1310,
+            "y": 298,
+            "width": 180,
+            "height": 44
+          },
+          "semanticScore": 0.5,
+          "enabled": true
+        }
+      ],
+      "frames": [
+        {"capturedAt":"2026-09-21T09:00:49.200Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9032,"features":{"irisX":0.523573,"irisY":0.515397,"ear":0.27253,"faceX":-0.00346,"faceY":0.00393,"faceScale":0.32569,"yaw":-0.00227,"pitch":0.00377,"roll":0.00163}},
+        {"capturedAt":"2026-09-21T09:00:49.350Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9073,"features":{"irisX":0.525212,"irisY":0.512962,"ear":0.28979,"faceX":0.00163,"faceY":0.00058,"faceScale":0.32225,"yaw":0.00285,"pitch":0.00296,"roll":0.00276}},
+        {"capturedAt":"2026-09-21T09:00:49.500Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9132,"features":{"irisX":0.523003,"irisY":0.519068,"ear":0.29049,"faceX":0.0004,"faceY":-0.00053,"faceScale":0.32025,"yaw":0.00082,"pitch":-0.00427,"roll":0.00536}},
+        {"capturedAt":"2026-09-21T09:00:49.650Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9718,"features":{"irisX":0.525281,"irisY":0.51547,"ear":0.27473,"faceX":0.00026,"faceY":0.0049,"faceScale":0.31653,"yaw":0.00152,"pitch":-0.00373,"roll":-0.00132}},
+        {"capturedAt":"2026-09-21T09:00:49.800Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9373,"features":{"irisX":0.525782,"irisY":0.515926,"ear":0.26784,"faceX":0.00118,"faceY":-0.0011,"faceScale":0.32023,"yaw":-0.00377,"pitch":-0.00365,"roll":0.00079}},
+        {"capturedAt":"2026-09-21T09:00:49.900Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.975,"features":{"irisX":0.525579,"irisY":0.515684,"ear":0.28726,"faceX":-0.00312,"faceY":0.00094,"faceScale":0.32721,"yaw":-0.00025,"pitch":-0.0002,"roll":0.00085}}
+      ]
+    }
+  ],
+  "namedTurn": {
+    "phrase": {
+      "text": "why is the Deploy button disabled",
+      "word": "Deploy button"
+    },
+    "candidates": [
+      {
+        "candidateId": "named-deploy",
+        "label": "Deploy button",
+        "bounds": {
+          "x": 330,
+          "y": 238,
+          "width": 180,
+          "height": 44
+        },
+        "semanticScore": 0.92,
+        "enabled": true
+      },
+      {
+        "candidateId": "named-environment",
+        "label": "environment selector",
+        "bounds": {
+          "x": 610,
+          "y": 178,
+          "width": 180,
+          "height": 44
+        },
+        "semanticScore": 0.2,
+        "enabled": true
+      },
+      {
+        "candidateId": "named-stop",
+        "label": "Stop button",
+        "bounds": {
+          "x": 810,
+          "y": 478,
+          "width": 180,
+          "height": 44
+        },
+        "semanticScore": 0.2,
+        "enabled": true
+      }
+    ]
+  },
+  "trackingLoss": {
+    "displayId": "display-main",
+    "frames": [
+      {"capturedAt":"2026-09-21T09:02:00.000Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:00.130Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:00.260Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:00.390Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:00.520Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:00.650Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:00.780Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:00.910Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:01.040Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:01.170Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:01.300Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:01.430Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:01.560Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:01.690Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}},
+      {"capturedAt":"2026-09-21T09:02:01.820Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":false,"quality":0.02,"features":{"irisX":0.5,"irisY":0.5,"ear":0.05,"faceX":0,"faceY":0,"faceScale":0.32,"yaw":0,"pitch":0,"roll":0}}
+    ]
+  },
+  "uncalibratedDisplayFrame": {"capturedAt":"2026-09-21T09:02:10.000Z","cameraId":"camera-builtin","displayId":"display-side","eyesVisible":true,"quality":0.9384,"features":{"irisX":0.482018,"irisY":0.492085,"ear":0.27802,"faceX":0.00161,"faceY":0.0017,"faceScale":0.31746,"yaw":0.00026,"pitch":0.00114,"roll":0.00024}},
+  "ringProbeFrame": {"capturedAt":"2026-09-21T09:03:20.000Z","cameraId":"camera-builtin","displayId":"display-main","eyesVisible":true,"quality":0.9753,"features":{"irisX":0.499723,"irisY":0.498901,"ear":0.26976,"faceX":-0.00355,"faceY":0.00232,"faceScale":0.32125,"yaw":0.00453,"pitch":0.00232,"roll":0.00149}}
+}
