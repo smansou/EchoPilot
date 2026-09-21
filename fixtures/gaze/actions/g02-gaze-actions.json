@@ -1,0 +1,234 @@
+{
+  "fixtureId": "g02-gaze-actions",
+  "provenance": "Fully synthetic G02 session for the acceptance oracle in packages/desktop-tools/src/gaze-actions/g02.acceptance.test.ts (IMPLEMENTATION_PLAN.md 7.2 G02, 5.11 gaze estimation and target fusion, 5.9 action lifecycle). No camera, no pointer, no recordings, no user data: the gaze samples are calibrated logical-point fixations over a synthetic two-control AX tree, and every value written is invented fixture text. The three fixations are chosen so the calibrated gaze mass lands on a control (meanX 490), just inside the read-only confidence band (meanX 578 -> 0.841, i.e. >= 0.80 and < 0.90), and exactly on the shared boundary of the two controls (meanX 580 -> 0.50). The confirmation utterances separate a complete target-and-effect confirmation from a generic, a target-only, and an effect-only one.",
+  "profileId": "profile-g02",
+  "project": {
+    "projectId": "atlas"
+  },
+  "window": {
+    "appBundleId": "com.echopilot.fixture",
+    "windowTitle": "Release Desk"
+  },
+  "display": {
+    "displayId": "display-main",
+    "originX": 0,
+    "originY": 0,
+    "width": 1600,
+    "height": 1000,
+    "scale": 2,
+    "arrangementGeneration": 1
+  },
+  "calibration": {
+    "calibrationGeneration": 7,
+    "displayId": "display-main",
+    "cameraId": "camera-builtin",
+    "accepted": true,
+    "framesUsed": 54,
+    "framesRejected": 3,
+    "validationFramesUsed": 25,
+    "residualCovariance2x2": [
+      [
+        20,
+        0
+      ],
+      [
+        0,
+        20
+      ]
+    ],
+    "displayArrangementGeneration": 1,
+    "recordedAt": "2026-09-21T10:00:00.000Z"
+  },
+  "rejectedCalibration": {
+    "calibrationGeneration": 8,
+    "displayId": "display-main",
+    "cameraId": "camera-builtin",
+    "accepted": false,
+    "reason": "calibration_failed",
+    "framesUsed": 0,
+    "framesRejected": 54,
+    "validationFramesUsed": 0,
+    "residualCovariance2x2": [
+      [
+        20,
+        0
+      ],
+      [
+        0,
+        20
+      ]
+    ],
+    "displayArrangementGeneration": 1,
+    "recordedAt": "2026-09-21T10:00:00.000Z"
+  },
+  "controls": [
+    {
+      "ref": "ax-publish",
+      "windowTitle": "Release Desk",
+      "role": "AXButton",
+      "label": "Publish",
+      "value": "idle",
+      "enabled": true,
+      "focused": true,
+      "bounds": {
+        "x": 400,
+        "y": 300,
+        "width": 180,
+        "height": 120
+      }
+    },
+    {
+      "ref": "ax-discard",
+      "windowTitle": "Release Desk",
+      "role": "AXButton",
+      "label": "Discard",
+      "value": "idle",
+      "enabled": true,
+      "focused": false,
+      "bounds": {
+        "x": 580,
+        "y": 300,
+        "width": 180,
+        "height": 120
+      }
+    }
+  ],
+  "candidates": [
+    {
+      "candidateId": "cand-publish",
+      "targetRef": "ax-publish",
+      "label": "Publish",
+      "bounds": {
+        "x": 400,
+        "y": 300,
+        "width": 180,
+        "height": 120
+      },
+      "semanticScore": 1,
+      "enabled": true
+    },
+    {
+      "candidateId": "cand-discard",
+      "targetRef": "ax-discard",
+      "label": "Discard",
+      "bounds": {
+        "x": 580,
+        "y": 300,
+        "width": 180,
+        "height": 120
+      },
+      "semanticScore": 1,
+      "enabled": true
+    }
+  ],
+  "fixations": {
+    "confident": {
+      "meanX": 490,
+      "meanY": 360,
+      "quality": 1,
+      "offsetsMs": [
+        -300,
+        -240,
+        -180,
+        -120,
+        -60
+      ]
+    },
+    "band": {
+      "meanX": 578,
+      "meanY": 360,
+      "quality": 1,
+      "offsetsMs": [
+        -300,
+        -240,
+        -180,
+        -120,
+        -60
+      ]
+    },
+    "ambiguous": {
+      "meanX": 580,
+      "meanY": 360,
+      "quality": 1,
+      "offsetsMs": [
+        -300,
+        -240,
+        -180,
+        -120,
+        -60
+      ]
+    }
+  },
+  "speech": {
+    "deictic": {
+      "utteranceId": "utt-g02-deictic",
+      "turnId": "turn-g02-1",
+      "text": "Set this one to the release build",
+      "wordAt": "2026-09-21T10:00:01.000Z"
+    },
+    "named": {
+      "utteranceId": "utt-g02-named",
+      "turnId": "turn-g02-named",
+      "text": "Publish the publish release now",
+      "wordAt": "2026-09-21T10:00:01.000Z"
+    },
+    "confirmation": {
+      "utteranceId": "utt-g02-confirm",
+      "text": "Yes, set the Publish control to release-2026-09"
+    },
+    "confirmationTargetOnly": {
+      "utteranceId": "utt-g02-confirm-target",
+      "text": "Yes, the Publish control"
+    },
+    "confirmationEffectOnly": {
+      "utteranceId": "utt-g02-confirm-effect",
+      "text": "Yes, set it to release-2026-09"
+    },
+    "confirmationGeneric": {
+      "utteranceId": "utt-g02-confirm-generic",
+      "text": "Yes, go ahead"
+    },
+    "confirmationSecond": {
+      "utteranceId": "utt-g02-confirm-second",
+      "text": "Yes, set the Publish control to release-2026-10"
+    },
+    "confirmationRepeat": {
+      "utteranceId": "utt-g02-confirm-repeat",
+      "text": "Yes, set the Publish control to release-2026-09"
+    }
+  },
+  "requests": {
+    "primary": {
+      "requestId": "req-g02-1",
+      "stepId": "step-g02-publish",
+      "value": "release-2026-09"
+    },
+    "second": {
+      "requestId": "req-g02-2",
+      "stepId": "step-g02-publish-2",
+      "value": "release-2026-10"
+    },
+    "repeat": {
+      "requestId": "req-g02-3",
+      "stepId": "step-g02-publish-again",
+      "value": "release-2026-09"
+    }
+  },
+  "moves": {
+    "bounds": {
+      "x": 900,
+      "y": 520,
+      "width": 180,
+      "height": 120
+    },
+    "replacement": {
+      "windowTitle": "Release Desk (draft)",
+      "label": "Publish draft"
+    }
+  },
+  "authorizationTtlMs": 30000,
+  "autonomy": {
+    "default": "project-partner",
+    "permissive": "host-autonomy"
+  }
+}
