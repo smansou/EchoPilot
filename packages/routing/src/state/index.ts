@@ -558,8 +558,9 @@ export function createRoutingState(options: RoutingStateOptions): RoutingState {
     },
     setProject(projectId: string): void {
       // Plan §5.6 rule 5: a project change ends Agent Direct mode.
+      const changed = project !== projectId;
       project = projectId;
-      if (currentMode.kind === 'agent_direct') enterMode(companionMode());
+      if (changed && currentMode.kind === 'agent_direct') enterMode(companionMode());
     },
     mode(): RoutingMode {
       refreshAgentDirectStaleness();
