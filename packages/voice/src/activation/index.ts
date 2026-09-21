@@ -520,10 +520,18 @@ export function createConversationActivationRuntime(
       if (controller.snapshot().state === "standby") reports.reportStandbyEnergy(controller.standbyEnergy.report());
     }),
     host.onWakeCandidate((candidate) => {
-      void controller.detectWake(candidate).then((outcome) => {
-        reports.reportWakeFalseTriggers(controller.falseTriggers.report());
-        reports.reportWakeOutcome?.(outcome);
-      });
+      // A wake that cannot reopen the conversation (for example, the conversation worker failed
+      // to load) still leaves a measured false-trigger record behind; publish it, and never let
+      // the rejection escape as an unhandled rejection in the host process.
+      void controller.detectWake(candidate).then(
+        (outcome) => {
+          reports.reportWakeFalseTriggers(controller.falseTriggers.report());
+          reports.reportWakeOutcome?.(outcome);
+        },
+        () => {
+          reports.reportWakeFalseTriggers(controller.falseTriggers.report());
+        },
+      );
     }),
     controller.subscribe((snapshot) => {
       // Leaving standby is a report boundary: the standby session's measured trace is published
@@ -533,7 +541,9 @@ export function createConversationActivationRuntime(
     }),
   ];
   const interval = positive(tickIntervalMs, 1_000);
-  const timer = setInterval(() => { void controller.tick(); }, interval);
+  // A teardown step that fails leaves the controller in its published `failed` state; the
+  // scheduler must keep ticking for the next idle window instead of surfacing a rejection.
+  const timer = setInterval(() => { void controller.tick().catch(() => {}); }, interval);
   const nodeTimer = timer as ReturnType<typeof setInterval> & { unref?: () => void };
   nodeTimer.unref?.();
   let disposed = false;
@@ -548,7 +558,9 @@ export function createConversationActivationRuntime(
       disposed = true;
       clearInterval(timer);
       for (const unsubscribe of unsubscribers) unsubscribe();
-      await controller.disable();
+      // Quit-time teardown is best-effort: the helper may already be gone, and a rejection here
+      // must not surface while the app is exiting.
+      await controller.disable().catch(() => {});
     },
   };
 }
