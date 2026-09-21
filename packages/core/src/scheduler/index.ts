@@ -101,6 +101,7 @@ export function createResourceScheduler(options: SchedulerOptions) {
   let discontinuities = 0;
   let acceptedEvents = 0;
   let shedEvents = 0;
+  let durablePersistFailures = 0;
   let storedBytes = 0;
   let spoolRecords = 0;
   let nextJobOrder = 0;
@@ -166,15 +167,45 @@ export function createResourceScheduler(options: SchedulerOptions) {
 
   const drainEvents = async () => {
     const events = [...pressureRecoveryQueue.splice(0), ...eventQueue.splice(0)];
-    for (const event of events) {
+    for (let index = 0; index < events.length; index += 1) {
+      const event = events[index];
+      if (event === undefined) break;
       if (event.kind !== 'raw_output') {
-        await options.jsWork('durable.persist', event);
+        try {
+          await options.jsWork('durable.persist', event);
+        } catch {
+          // A partition, a closed database, or a full disk must never lose an approval or a
+          // result. Put the undecided event and everything queued behind it back at the front of
+          // the backlog and let the next pump retry. Raw output that arrived while the persist was
+          // in flight is shed first (with a declared gap) so the backlog returns inside its
+          // capacity bound; a pending decision is never dropped, so the backlog is bounded by the
+          // queue capacity plus, at worst, the decisions already accepted behind this persist.
+          durablePersistFailures += 1;
+          const retry = events.slice(index);
+          let overflow = eventQueue.length + retry.length - eventQueueCapacity;
+          for (let queued = eventQueue.length - 1; queued >= 0 && overflow > 0; queued -= 1) {
+            const candidate = eventQueue[queued];
+            if (candidate === undefined || candidate.kind !== 'raw_output') continue;
+            eventQueue.splice(queued, 1);
+            recordGap(candidate, 'queue_overflow');
+            overflow -= 1;
+          }
+          eventQueue.unshift(...retry);
+          return;
+        }
         continue;
       }
 
       const record = { id: event.id, bytes: event.bytes, offset: event.offset };
+      // Enforce the scheduler's hard quota before the spool implementation can
+      // write anything. A quota-aware spool may trust that every call fits.
+      if (storedBytes + event.bytes > spoolQuotaBytes) {
+        recordGap(event, 'disk_quota');
+        continue;
+      }
+
       const stored = options.spool(record);
-      if (stored && storedBytes + event.bytes <= spoolQuotaBytes) {
+      if (stored) {
         storedBytes += event.bytes;
         spoolRecords += 1;
       } else {
@@ -343,6 +374,7 @@ export function createResourceScheduler(options: SchedulerOptions) {
           depth: eventQueue.length,
           accepted: acceptedEvents,
           shed: shedEvents,
+          persistFailures: durablePersistFailures,
         },
         spool: { storedBytes, records: spoolRecords },
         gaps: gaps.map((gap) => ({ ...gap })),

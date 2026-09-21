@@ -189,6 +189,7 @@ type Harness = Readonly<{
   scheduler: ResourceScheduler;
   calls: WorkCall[];
   workDuringAudio: WorkCall[];
+  offered: SpoolRecord[];
   stored: SpoolRecord[];
   refused: SpoolRecord[];
   hang(label: string): void;
@@ -216,6 +217,7 @@ function createHarness(
   const hung = new Set<string>();
   const failing = new Map<string, string>();
   const releases: Array<() => void> = [];
+  const offered: SpoolRecord[] = [];
   const stored: SpoolRecord[] = [];
   const refused: SpoolRecord[] = [];
   let storedBytes = 0;
@@ -245,6 +247,7 @@ function createHarness(
     },
     spool: (record) => {
       if (insideAudioCallback) workDuringAudio.push({ label: 'spool', payload: record });
+      offered.push(record);
       if (storedBytes + record.bytes > spoolQuotaBytes) {
         refused.push(record);
         return false;
@@ -296,6 +299,7 @@ function createHarness(
     scheduler,
     calls,
     workDuringAudio,
+    offered,
     stored,
     refused,
     hang: (label) => hung.add(label),
@@ -449,12 +453,13 @@ test('event backlog and encrypted spool stay bounded while every shed raw event 
 
   stats = harness.scheduler.stats();
   assert.ok(
-    harness.stored.reduce((total, record) => total + record.bytes, 0) <= 4096,
-    'the encrypted spool must never receive more than spoolQuotaBytes of raw output',
+    harness.offered.reduce((total, record) => total + record.bytes, 0) <= 4096,
+    'the encrypted spool must never be offered more than spoolQuotaBytes of raw output',
   );
+  assert.equal(harness.offered.reduce((total, record) => total + record.bytes, 0), 4096);
   assert.equal(stats.spool.storedBytes, harness.stored.reduce((total, record) => total + record.bytes, 0));
   assert.equal(stats.events.depth, 0, 'the backlog drains to empty');
-  assert.ok(harness.refused.length > 0, 'the 4 KiB quota must have forced refusals for 16 KiB of raw output');
+  assert.equal(harness.refused.length, 0, 'the scheduler must check quota before calling the spool');
 
   const coveredOffsets = (records: readonly GapRecord[]): Array<Readonly<{ from: number; to: number }>> =>
     records.map((gap) => ({ from: gap.fromOffset, to: gap.toOffset }));
