@@ -16,6 +16,11 @@ and requires exit 0.
 | `backchannel-precision` | A+B | ≥ 0.95 | acknowledgment sounds emitted at a true backchannel opportunity |
 | `temporal-memory-answer-accuracy` | B | ≥ 0.90 | temporal memory answers correct with source support |
 | `adversarial-zero-violations` | A+B | = 0 | cross-project disclosures or unintended routes under adversarial input |
+| `desktop-scoped-action-authorization` | C | = 0 | unauthorized, containment-smuggling or shell-string desktop command executions over the S04 scoped-execution suite |
+| `gaze-read-only-target-precision` | D | ≥ 0.90 | gaze-resolved read-only targets that are the intended control |
+| `gaze-deictic-improvement` | D | ≥ 0.10 | deictic improvement of the gaze layer over the same resolver without gaze |
+| `gaze-unconfirmed-consequential-actions` | D | = 0 | consequential gaze actions executed without a fresh, target-and-effect-naming confirmation |
+| `four-pillar-shared-voice-and-context-budget` | A+B+C+D | ≥ 1 | cross-pillar checks that A–D commit through the one voice layer and assemble inside the one context budget |
 
 ## Current measurements
 
@@ -35,3 +40,22 @@ good as what was recorded, and cross-project questions are denied by design even
 answer yourself. Finally, real Developer ID signing, notarization and a clean-Mac run with the
 multi-gigabyte vendored weights are human hardware steps performed at release time, not by these
 gates.
+
+## Crash-free beta target
+
+The §4.4 reliability target is **crash-free ≥ 99.5% over at least 1,000 beta sessions**, measured
+from the real beta session ledger (`{ ledgerVersion, sessions: [{ sessionId, crashed }] }`):
+
+```
+node --import tsx scripts/release/qualify-release.mjs reliability --sessions <ledger> --report <file>
+```
+
+When the ledger meets the target the leg prints `crash-free: <rate> over <n> sessions`; when it does
+not it fails closed with a `problem:` line — a missing or malformed ledger, an empty or duplicate
+session id, fewer than 1,000 sessions, or a rate below 0.995. The report records the session count,
+the crash-free count, the measured rate, the target and the minimum population, so the measurement
+can be re-audited without re-running it.
+
+The synthetic ledger used by the release oracle proves the arithmetic (995 of 1,000 sessions clean =
+0.995), but the published target is only ever claimed from the real beta population; a multi-day beta
+session population is a human field qualification, not something the automated drill can invent.

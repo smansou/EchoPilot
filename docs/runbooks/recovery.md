@@ -76,3 +76,54 @@ The bundled **backup** policy keeps at least the two previous versions, and the 
 backup of the memory store is taken before a schema-changing update, so even a successful update
 can be undone. If `verify` fails after a manual edit to the store, do not delete anything —
 capture the `problem:` lines and roll back first.
+
+## Worker crash, low disk, revoked permissions and device removal
+
+The five failure modes below are the ones the release drills on every qualification run:
+
+```
+node --import tsx scripts/release/qualify-release.mjs recovery --root <store> --report <file>
+```
+
+The leg owns a fixture store, drives each fault through the shipped code path, and exits 0 only when
+every finding is `recovered` and a fresh process still passes
+`node scripts/release/install.mjs verify --root <store>`.
+
+### Worker crash
+
+A local worker (ASR, model or spool) can die mid-session without taking the app with it. The session
+keeps the steps that already committed, surfaces the crash as a failed pump receipt carrying the
+worker error, does not silently re-run the crashed step, releases the generation slot so queued work
+proceeds on a fresh worker, and keeps accepting audio while the crash is handled before draining the
+ring. The accelerated replay's `worker_crash` scenario is the deterministic evidence for this path;
+nothing the user already said is lost, and nothing is replayed twice.
+
+### Low disk
+
+The spool has a hard quota (`spoolQuotaBytes`). When the disk fills, ingestion keeps running
+*inside* the quota: it sheds records as explicit `disk_quota` gaps on the timeline — never silently —
+and reports the spool high-water mark and the number of shed records. A disk-full condition therefore
+degrades capture quality loudly instead of failing the session or filling the volume. The recovery
+drill asserts the spool high-water stays at or below the quota and that zero bytes are ever offered
+past it.
+
+### Revoked permissions (TCC)
+
+If you revoke Microphone, Screen Recording or Accessibility for EchoPilot in System Settings →
+Privacy & Security, the running session stops capture immediately: the session reports the
+revocation (`mic_denied` for the microphone grant), commits nothing further, invalidates the
+in-flight utterance, and shows that input is closed rather than failing silently. Re-granting the
+permission and starting a new session resumes capture; transcripts that already committed are
+untouched. macOS TCC revocation on a real user device is a human field qualification — the drill
+drives the same permission code path deterministically with a scripted host.
+
+### Device removal
+
+Unplugging a USB or Bluetooth microphone, or losing a gaze camera, emits `device_removed`: capture
+stops, the in-flight utterance is discarded rather than half-committed, and the app tells you the
+input device is gone. Reconnect the device and start a new session; recovery works as soon as it
+returns. (Test the reconnect path by unplugging the device, waiting for the app to report
+`device_removed`, then reconnecting and starting a new session.)
+
+The five drills and their findings are recorded in the recovery leg's JSON report, one finding per
+fault, so a release can be audited after the fact.

@@ -86,6 +86,56 @@
       "summary": "No adversarial utterance causes a cross-project disclosure, a quoted instruction to be executed, or a companion explanation to reach an unintended session. The threshold is exactly zero violations.",
       "command": ["node", "--import", "tsx", "--test", "packages/routing/src/state/r03.acceptance.test.ts"],
       "evidence": "fixtures/routing/adversarial/r03-adversarial-utterances.json"
+    },
+    {
+      "id": "desktop-scoped-action-authorization",
+      "pillar": "C",
+      "comparator": "eq",
+      "threshold": 0,
+      "measured": "unauthorized, containment-smuggling or shell-string desktop command executions over the S04 scoped-execution suite",
+      "summary": "No tool call can choose its own containment, ask for a shell string, or reach an executor outside the scope it was bound to; the S04 scoped-execution suite must stay green, so zero unauthorized desktop actions reach a host.",
+      "command": ["node", "--import", "tsx", "--test", "packages/desktop-tools/src/commands/s04.acceptance.test.ts"],
+      "evidence": "packages/desktop-tools/src/commands/s04.acceptance.test.ts"
+    },
+    {
+      "id": "gaze-read-only-target-precision",
+      "pillar": "D",
+      "comparator": "gte",
+      "threshold": 0.9,
+      "measured": "share of gaze-resolved read-only targets that are the intended control",
+      "summary": "At least 90% of read-only targets resolved from a calibrated fixation are the control the speaker meant; ambiguous fixations clarify instead of guessing.",
+      "command": ["node", "--import", "tsx", "packages/eval/src/release/index.ts", "--measure", "gaze-read-only-precision"],
+      "evidence": "packages/eval/src/release/index.ts"
+    },
+    {
+      "id": "gaze-deictic-improvement",
+      "pillar": "D",
+      "comparator": "gte",
+      "threshold": 0.1,
+      "measured": "deictic resolution improvement of the gaze layer over the same resolver without gaze",
+      "summary": "Gaze improves deictic resolution by at least 10 percentage points over the identical resolver driven without gaze, so the gaze layer earns its place rather than restating the context.",
+      "command": ["node", "--import", "tsx", "packages/eval/src/release/index.ts", "--measure", "gaze-deictic-improvement"],
+      "evidence": "packages/eval/src/release/index.ts"
+    },
+    {
+      "id": "gaze-unconfirmed-consequential-actions",
+      "pillar": "D",
+      "comparator": "eq",
+      "threshold": 0,
+      "measured": "consequential gaze actions executed without a fresh, target-and-effect-naming confirmation",
+      "summary": "Zero consequential gaze-derived actions execute without a fresh, single-use confirmation that names both the target and the effect; replayed, expired, wrong-target, generic, effect-less, moved-target and host-autonomy confirmations are all refused.",
+      "command": ["node", "--import", "tsx", "packages/eval/src/release/index.ts", "--measure", "gaze-unconfirmed-consequential-actions"],
+      "evidence": "packages/eval/src/release/index.ts"
+    },
+    {
+      "id": "four-pillar-shared-voice-and-context-budget",
+      "pillar": "A+B+C+D",
+      "comparator": "gte",
+      "threshold": 1,
+      "measured": "cross-pillar checks that A–D commit through the one voice layer and assemble inside the one context budget",
+      "summary": "All four pillars share one voice layer (createLocalVoiceSession in packages/voice/src/index.ts) and one context budgeter (createContextAssembler/CONTEXT_CEILING_TOKENS in packages/memory/src/context/index.ts): the cross-pillar probe drives the A–D day through both and fails if a pillar reaches a forked implementation or leaves the shared ceiling.",
+      "command": ["node", "--import", "tsx", "packages/eval/src/release/index.ts", "--cross-pillar"],
+      "evidence": "packages/eval/src/release/index.ts"
     }
   ]
 }
