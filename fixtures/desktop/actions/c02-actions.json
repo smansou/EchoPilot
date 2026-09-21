@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "ticket": "C02",
+  "description": "Deterministic synthetic scenarios for the C02 voice-action tracer: one reversible text edit and one two-step edit in a fixture application, plus the guard mutations that must stop execution before any AX write. Every app name, window title, control, label, fingerprint, and value below is synthetic; nothing here was captured from a real application, and no real user text, credential, or screenshot belongs in this file.",
+  "profileId": "profile-c02",
+  "project": {
+    "projectId": "atlas",
+    "displayName": "Atlas"
+  },
+  "authorizationTtlMs": 30000,
+  "app": {
+    "bundleId": "com.echopilot.fixtures.notes",
+    "name": "Fixture Notes",
+    "windowTitle": "Untitled — Fixture Notes"
+  },
+  "voiceRequest": {
+    "utteranceId": "utt-c02-edit-subject",
+    "text": "Set the subject to Final report",
+    "grantText": "Yes, set the subject to Final report"
+  },
+  "controls": [
+    {
+      "ref": "subjectField",
+      "role": "AXTextField",
+      "label": "Subject",
+      "value": "Quarterly draft",
+      "enabled": true,
+      "focused": true,
+      "fingerprint": "fp-subject-1"
+    },
+    {
+      "ref": "bodyField",
+      "role": "AXTextArea",
+      "label": "Body",
+      "value": "Body text stays put",
+      "enabled": true,
+      "focused": false,
+      "fingerprint": "fp-body-1"
+    }
+  ],
+  "edit": {
+    "actionId": "act-c02-edit-subject",
+    "idempotencyKey": "idem-c02-edit-subject",
+    "stepId": "step-subject",
+    "targetRef": "subjectField",
+    "value": "Final report",
+    "untouchedRef": "bodyField"
+  },
+  "multiStep": {
+    "actionId": "act-c02-retype-subject",
+    "idempotencyKey": "idem-c02-retype-subject",
+    "description": "The same focused field is cleared and retyped: one reversible edit in two steps, so a cancel between them leaves the cleared-but-not-retyped state visible.",
+    "steps": [
+      {
+        "stepId": "step-clear",
+        "targetRef": "subjectField",
+        "value": ""
+      },
+      {
+        "stepId": "step-retype",
+        "targetRef": "subjectField",
+        "value": "Final report"
+      }
+    ]
+  },
+  "guards": [
+    {
+      "key": "focus-changed",
+      "reason": "focus_changed",
+      "description": "The user clicked into another control after granting: the granted target is no longer the focused one.",
+      "patch": [
+        {
+          "ref": "subjectField",
+          "state": {
+            "focused": false
+          }
+        },
+        {
+          "ref": "bodyField",
+          "state": {
+            "focused": true
+          }
+        }
+      ]
+    },
+    {
+      "key": "target-identity-changed",
+      "reason": "target_identity_changed",
+      "description": "The window replaced its control: the live fingerprint and label no longer match the fingerprint the grant bound.",
+      "patch": [
+        {
+          "ref": "subjectField",
+          "state": {
+            "fingerprint": "fp-subject-2",
+            "label": "Subject (replaced control)"
+          }
+        }
+      ]
+    },
+    {
+      "key": "target-disabled",
+      "reason": "target_disabled",
+      "description": "The granted control reports itself disabled at preflight.",
+      "patch": [
+        {
+          "ref": "subjectField",
+          "state": {
+            "enabled": false
+          }
+        }
+      ]
+    },
+    {
+      "key": "grant-expired",
+      "reason": "grant_expired",
+      "description": "The 30-second authorization expired before the step was preflighted; the clock has moved past the grant.",
+      "clockOffsetMs": 30001
+    }
+  ],
+  "verification": {
+    "note": "The app accepts the AX write but does not apply it; the read-back still returns the old value, so the action must not be reported as completed."
+  }
+}
