@@ -5,6 +5,7 @@ import { createPrivacyControl, type PrivacyControl, type PrivacyControlState } f
 import { resolvePrivacyOperations } from './control/privacy/host';
 import { sendShellControl, useShellSnapshot, type ShellSnapshot, type WidgetControl } from './widget/shell-status';
 import { WidgetStatusPanel } from './widget/WidgetStatusPanel';
+import { DesktopQuestionWidget } from './widget/DesktopQuestionWidget';
 import './styles.css';
 import './widget/widget.css';
 
@@ -171,6 +172,10 @@ function App() {
       </> : <>
         <section className="widget-status"><div className={`orb ${state.muted ? 'muted' : ''}`} aria-hidden="true"><span /></div><div><h1>{!ready ? 'Connecting…' : state.muted ? 'Output muted' : 'Alongside you'}</h1><p>Synthetic session · no microphone</p></div></section>
         <p className="widget-event" aria-live="polite">{state.event?.text ?? 'Waiting for the first demo event.'}</p>
+        {/* C01: "what is this?" is answered in the widget conversation itself — never by opening
+            Mission Control. The shell connects the scoped desktop runtime; until then the panel
+            stays at limited context instead of guessing about the screen. */}
+        <DesktopQuestionWidget muted={state.muted} />
         <WidgetStatusPanel snapshot={shell} busy={shellBusy} onControl={(control) => void shellControl(control)} />
         {controls}
         <p className="widget-note">Demo events only · replay re-delivers text</p>

@@ -31,3 +31,16 @@
 .desktop-answer-evidence{list-style:none;display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 0;padding:0}
 .desktop-answer-evidence li{font-size:9px;color:#b9b2cc;border:1px solid #3b3648;border-radius:6px;padding:2px 6px}
 .dashboard .desktop-answer{max-width:640px}
+.desktop-question-widget{margin:14px 0 4px;padding:13px 14px;border:1px solid #2f2c3c;background:#191823;border-radius:12px;-webkit-app-region:no-drag}
+.desktop-question-form label{display:block;margin:0 0 7px;font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:#b9b2cc}
+.desktop-question-controls{display:flex;gap:7px}
+.desktop-question-controls input{flex:1;min-width:0;min-height:34px;padding:7px 9px;border:1px solid #403a4d;border-radius:8px;background:#111019;color:#eee6ff;font-size:12px}
+.desktop-question-controls input:focus{outline:2px solid #8371ad;outline-offset:1px}
+.desktop-question-controls button{min-height:34px;padding:7px 13px;border:1px solid #4a4157;border-radius:8px;background:#2c2736;color:#eee6ff;font-size:11px}
+.desktop-question-controls button:hover:not(:disabled){background:#3a3247}
+.desktop-question-controls button:disabled{opacity:.5}
+.desktop-question-unavailable,.desktop-question-error{font-size:10px;line-height:1.6;margin:8px 0 0}
+.desktop-question-unavailable{color:#ffc98a}
+.desktop-question-error{color:#ffb7c4}
+.desktop-question-widget .desktop-answer{margin-bottom:0}
+.dashboard .desktop-question-widget{max-width:640px}
