@@ -62,6 +62,8 @@ export type R03RoutingDecision = RoutingDecision &
   Readonly<{
     mode?: RoutingMode;
     modeChange?: ModeChange;
+    /** All mode transitions since the previous route result, in occurrence order. */
+    modeChanges?: ReadonlyArray<ModeChange>;
     pending?: Readonly<{ requestId: string; expiresAt: string }>;
     answer?: Readonly<{ requestId: string }>;
     expiredPending?: ReadonlyArray<string>;
@@ -243,7 +245,7 @@ export function createRoutingState(options: RoutingStateOptions): RoutingState {
   let currentMode: RoutingMode = { kind: 'companion', since: clock().toISOString() };
   let lastActivityMs = clock().getTime();
   let project: string | undefined;
-  let pendingModeChange: ModeChange | null = null;
+  let pendingModeChanges: ModeChange[] = [];
   let pendingQuestions: PendingQuestion[] = [];
   let requestSequence = 0;
 
@@ -267,12 +269,12 @@ export function createRoutingState(options: RoutingStateOptions): RoutingState {
     // Inactivity is measured from the last route() call while the mode is displayed; the entry
     // itself counts as activity for the session it binds.
     if (next.kind === 'agent_direct') lastActivityMs = clock().getTime();
-    pendingModeChange = {
+    pendingModeChanges.push({
       from: previous.kind,
       to: next.kind,
       cue: cueFor(previous.kind, next),
       visible: visibleFor(next),
-    };
+    });
   }
 
   function refreshAgentDirectStaleness(): void {
@@ -401,12 +403,14 @@ export function createRoutingState(options: RoutingStateOptions): RoutingState {
     refreshAgentDirectStaleness();
 
     const finish = (decision: R03RoutingDecision): R03RoutingDecision => {
-      const change = pendingModeChange;
-      pendingModeChange = null;
+      const changes = pendingModeChanges;
+      pendingModeChanges = [];
       return {
         ...decision,
         mode: { ...currentMode },
-        ...(change === null ? {} : { modeChange: change }),
+        ...(changes.length === 0
+          ? {}
+          : { modeChange: changes[changes.length - 1]!, modeChanges: changes.map((change) => ({ ...change })) }),
         ...(expiredPending.length === 0 ? {} : { expiredPending: [...expiredPending] }),
       };
     };

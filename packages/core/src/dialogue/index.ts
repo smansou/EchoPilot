@@ -141,6 +141,26 @@ function routingAnnotation(decision: RouteDecision): RoutingAnnotation {
 
 type ControlKind = 'stop_all' | 'stop_speaking' | 'pause' | 'mute';
 
+type ModeChangeCue = Readonly<{ cue: string; visible?: string }>;
+
+/** Extracts R03 mode cues while leaving the base contract independent of the routing package. */
+function modeCuesOf(decision: RouteDecision): ReadonlyArray<string> {
+  const extended = decision as RouteDecision & {
+    readonly modeChange?: unknown;
+    readonly modeChanges?: unknown;
+  };
+  const asCue = (value: unknown): string | undefined => {
+    if (typeof value !== 'object' || value === null) return undefined;
+    const cue = (value as ModeChangeCue).cue;
+    return typeof cue === 'string' && cue.trim().length > 0 ? cue.trim() : undefined;
+  };
+  if (Array.isArray(extended.modeChanges)) {
+    return extended.modeChanges.map(asCue).filter((cue): cue is string => cue !== undefined);
+  }
+  const cue = asCue(extended.modeChange);
+  return cue === undefined ? [] : [cue];
+}
+
 /** Reads the routing package's precedence-1 control kind without depending on its package. */
 function controlOf(decision: RouteDecision): ControlKind | undefined {
   const control = (decision as RouteDecision & { readonly control?: unknown }).control;
@@ -242,6 +262,7 @@ export function createDialogueSession(options: DialogueSessionOptions): Dialogue
     kind: 'answer' | 'clarification' | 'acknowledgment',
     evidenceIds: ReadonlyArray<string>,
     dedupeSuffix: string,
+    modeCues: ReadonlyArray<string> = [],
   ): Promise<void> {
     sequence += 1;
     const planId = `speech-${sequence}`;
@@ -252,15 +273,13 @@ export function createDialogueSession(options: DialogueSessionOptions): Dialogue
       priority: kind === 'acknowledgment' ? 'completion' : 'blocking',
       expiresAt: new Date(clock().getTime() + SPEECH_WINDOW_MS).toISOString(),
       dedupeKey: `${utteranceId}:${kind}:${dedupeSuffix}`,
-      segments: [
-        {
-          id: `${planId}-segment-1`,
-          text,
-          evidenceIds: [...evidenceIds],
-          exact: false,
-          maxSeconds: Math.max(1, Math.ceil(text.length / CHARACTERS_PER_SECOND)),
-        },
-      ],
+      segments: [...modeCues, ...(text.length === 0 ? [] : [text])].map((segmentText, index, all) => ({
+        id: `${planId}-segment-${index + 1}`,
+        text: segmentText,
+        evidenceIds: index === all.length - 1 && text.length > 0 ? [...evidenceIds] : [],
+        exact: false,
+        maxSeconds: Math.max(1, Math.ceil(segmentText.length / CHARACTERS_PER_SECOND)),
+      })),
       resume: 'discard',
     };
     await options.speak(plan);
@@ -270,12 +289,13 @@ export function createDialogueSession(options: DialogueSessionOptions): Dialogue
     utterance: DialogueUtterance,
     decision: RouteDecision,
     sessionId: string,
+    modeCues: ReadonlyArray<string>,
   ): Promise<DialogueTurn> {
     const display = humanizeSessionId(sessionId);
     const adapter = options.adapters.get(sessionId);
     if (adapter === undefined) {
       const notice = `No managed session is connected for ${display}.`;
-      await speak(utterance.utteranceId, notice, 'acknowledgment', [], 'no-session');
+      await speak(utterance.utteranceId, notice, 'acknowledgment', [], 'no-session', modeCues);
       return { decision };
     }
 
@@ -293,6 +313,7 @@ export function createDialogueSession(options: DialogueSessionOptions): Dialogue
         'acknowledgment',
         [],
         existing.deliveryId,
+        modeCues,
       );
       return {
         decision,
@@ -320,7 +341,7 @@ export function createDialogueSession(options: DialogueSessionOptions): Dialogue
     const acknowledgment = receipt.status === 'acknowledged'
       ? `${display} acknowledged the instruction.`
       : `I could not deliver that to ${display}.`;
-    await speak(utterance.utteranceId, acknowledgment, 'acknowledgment', [], deliveryId);
+    await speak(utterance.utteranceId, acknowledgment, 'acknowledgment', [], deliveryId, modeCues);
 
     return { decision, dispatch: { deliveryId, sessionId, instruction }, receipt };
   }
@@ -368,33 +389,46 @@ export function createDialogueSession(options: DialogueSessionOptions): Dialogue
   async function handleUtterance(utterance: DialogueUtterance): Promise<DialogueTurn> {
     const decision = options.router.route(utterance);
     const annotation = routingAnnotation(decision);
+    const modeCues = modeCuesOf(decision);
 
-    // Partial ASR, ambient acknowledgments, and other non-actionable turns are held silently.
-    if (annotation.hold !== undefined) return { decision };
+    // Partial ASR and ambient acknowledgments hold their content; pending mode cues are still spoken.
+    if (annotation.hold !== undefined) {
+      if (modeCues.length > 0) {
+        await speak(utterance.utteranceId, '', 'acknowledgment', [], 'mode-change', modeCues);
+      }
+      return { decision };
+    }
 
     if (decision.requiresClarification) {
       const text = clarificationText(annotation.candidates ?? [...options.adapters.keys()]);
-      await speak(utterance.utteranceId, text, 'clarification', [], 'clarify');
+      await speak(utterance.utteranceId, text, 'clarification', [], 'clarify', modeCues);
       return { decision, clarification: text };
     }
 
     if (decision.destination === 'companion') {
       const bundle = await options.memory.query(utterance.text, options.scope, ANSWER_EVIDENCE_BUDGET);
-      await speak(utterance.utteranceId, groundedAnswer(bundle), 'answer', bundle.evidenceIds, 'answer');
+      await speak(utterance.utteranceId, groundedAnswer(bundle), 'answer', bundle.evidenceIds, 'answer', modeCues);
       return { decision };
     }
 
     if (decision.destination === 'harness' && decision.targetSessionId !== undefined) {
-      return dispatch(utterance, decision, decision.targetSessionId);
+      return dispatch(utterance, decision, decision.targetSessionId, modeCues);
     }
 
     // Stop all is the precedence-1 emergency control: it reaches every managed harness turn in
     // flight and reports what it could not confirm rather than claiming the world went quiet.
     if (controlOf(decision) === 'stop_all') {
-      return { decision, stopAll: await stopAll() };
+      const report = await stopAll();
+      if (modeCues.length > 0) {
+        await speak(utterance.utteranceId, '', 'acknowledgment', [], 'mode-change', modeCues);
+      }
+      return { decision, stopAll: report };
     }
 
     // Dictation, desktop, and control destinations are executed by their own subsystems.
+    if (modeCues.length > 0) {
+      await speak(utterance.utteranceId, '', 'acknowledgment', [], 'mode-change', modeCues);
+    }
     return { decision };
   }
 
