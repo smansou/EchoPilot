@@ -6,8 +6,8 @@ import {
   StandbyEnergyMeter,
   WakeFalseTriggerMeter,
   type ActivationHost,
-} from "./index.ts";
-import { voiceIndicator } from "../../../../apps/desktop/src/renderer/control/voice/index.ts";
+} from "./index";
+import { voiceIndicator } from "../../../../apps/desktop/src/renderer/control/voice/index";
 
 class FakeHost implements ActivationHost {
   readonly calls: string[] = [];
