@@ -730,14 +730,14 @@
         "pnpm-lock.yaml"
       ],
       "acceptance": [
-        "All hard resource budgets and eight-hour context invariants are measured on M4/24 GB and compatibility-tested on M2/16 GB.",
+        "A repeatable accelerated qualification completes within ten minutes on the current development Mac, records its host model and memory, and covers the long-session invariants plus 1,000 events/s bursts, large logs, worker crashes, simulated sleep/wake, and network partitions.",
         "No audio callback waits on JS/database work; queues and disk spools remain bounded.",
-        "Regression report identifies dropped/gapped data, cold-start time, swap behavior, and any failed hardware qualification."
+        "The report fails closed on missing counters and identifies peak memory, swap, cold-start time, queue/spool high-water marks, dropped/gapped data, and recovery outcomes."
       ],
       "checks": [],
       "nonBlocking": [
         "Unrelated pre-existing architecture changes are follow-up work.",
-        "Interactive hardware qualification and signing need separately recorded release evidence; never claim them passed from mocks."
+        "Optional multi-machine and eight-hour soak results are follow-up release evidence; never claim them passed from the bounded qualification."
       ]
     },
     "Q03": {

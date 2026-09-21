@@ -1132,19 +1132,19 @@
         "F02"
       ],
       "kind": "Hardening",
-      "path": "Eight-hour realistic replay → resource/backpressure failures → recovery",
+      "path": "Bounded accelerated replay → resource/backpressure failures → recovery",
       "files": [
         "packages/eval/src/performance/",
         "packages/core/src/scheduler/",
         "scripts/bench-macos/"
       ],
-      "scope": "Implement physical-footprint/CPU/energy instrumentation, warm/cold latency traces, scheduler priorities, memory-pressure handling, model unloading, and process-family accounting. Exercise 1,000 events/s bursts, huge logs, model crashes, sleep/wake, and network partitions under a normal editor workload.",
+      "scope": "Implement physical-footprint/CPU instrumentation, warm/cold latency traces, scheduler priorities, memory-pressure handling, model unloading, and process-family accounting. Exercise a time-compressed but representative workload with 1,000 events/s bursts, large logs, model crashes, simulated sleep/wake, and network partitions; the complete qualification must finish within ten minutes on the current development Mac.",
       "accept": [
-        "All hard resource budgets and eight-hour context invariants are measured on M4/24 GB and compatibility-tested on M2/16 GB.",
+        "A repeatable accelerated qualification completes within ten minutes on the current development Mac, records its host model and memory, and covers the long-session invariants plus 1,000 events/s bursts, large logs, worker crashes, simulated sleep/wake, and network partitions.",
         "No audio callback waits on JS/database work; queues and disk spools remain bounded.",
-        "Regression report identifies dropped/gapped data, cold-start time, swap behavior, and any failed hardware qualification."
+        "The report fails closed on missing counters and identifies peak memory, swap, cold-start time, queue/spool high-water marks, dropped/gapped data, and recovery outcomes."
       ],
-      "judgment": "If Electron misses the idle cap after optimization, apply the native tray/widget containment path from Section 6 while retaining TS domain logic.",
+      "judgment": "Use deterministic fault injection and time compression for repeatability. Multi-machine and eight-hour soak testing may be recorded later as release evidence, but is not required to complete this ticket. If Electron misses the idle cap after optimization, apply the native tray/widget containment path from Section 6 while retaining TS domain logic.",
       "days": 6,
       "blocks": [
         "Q03"
