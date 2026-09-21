@@ -1,6 +1,20 @@
 {
   "manifestVersion": 1,
   "generatedBy": "the V02 packaging step (vendor-pocket-tts), which vendors every asset below from its pinned revision and refuses to write an artifact whose bytes do not hash to the recorded value",
+  "authenticity": {
+    "requiresSignature": true,
+    "signatureFormat": "echopilot-devid-signature/1",
+    "signatureRecord": "signature.json",
+    "signingIdentity": "Developer ID Application: EchoPilot (TEAMID)",
+    "teamIdentifier": "TEAMID",
+    "policy": "scripts/release/installers.json",
+    "verifier": "scripts/release/signature-record.mjs",
+    "issuer": "scripts/release/sign-manifest.mjs",
+    "notes": [
+      "This manifest travels with the pack, so by itself it proves nothing: a substituted pack can carry a rewritten, self-consistent manifest. This block is what makes the release signed instead — it declares that install.mjs must refuse to stage a pack without a valid Developer ID signature record, and the trust anchor (identity, team and pinned public key) lives in scripts/release/installers.json distribution, never in the pack.",
+      "The signature record covers the exact bytes of this manifest and the sha256 of the whole pack directory, so an added, removed or edited file anywhere in the pack invalidates it even when the manifest was rewritten to match. A store that has committed a signed version keeps requiring a signature (policy.json), so an update cannot drop back to unsigned."
+    ]
+  },
   "outputFormat": {
     "sampleRate": 24000,
     "channels": 1,

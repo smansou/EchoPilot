@@ -6,8 +6,9 @@
  *   node scripts/release/install.mjs update   --root <dir> --pack <dir> --manifest <path> --version <v>
  *   node scripts/release/install.mjs verify   --root <dir>
  *   node scripts/release/install.mjs rollback --root <dir>
- *   ... install/update accept `--simulate-crash-after <verify|stage|journal|commit>` and an optional
- *   `--signature <file>` recording the Developer ID signature that travelled with the pack.
+ *   ... install/update accept `--simulate-crash-after <verify|stage|journal|commit>`, the release
+ *   policy that pins the trusted Developer ID key (`--policy <installers.json>`) and the signature
+ *   record that travelled with the pack (`--signature <file>`, or `<pack>/signature.json`).
  *
  * The on-disk store is what makes an interrupted install recoverable:
  *
@@ -16,6 +17,9 @@
  *   <root>/staging/           partial staging areas, never read as an installed version
  *   <root>/journal.json       the in-flight transaction record (present only mid-transaction)
  *   <root>/history.json       committed versions, oldest first, used by `rollback`
+ *   <root>/policy.json        the authenticity policy this store has committed to (once signed,
+ *                             always signed: an update may not silently drop the signature)
+ *   <root>/versions/<v>/signature.json   the verified record, re-checked by `verify` and `rollback`
  *
  * A successful install/update prints `stage: verify`, `stage: stage`, `stage: journal`,
  * `stage: commit`, `stage: cleanup` in that order and exits 0. A pack that fails verification
@@ -25,14 +29,32 @@
  * loss. `verify` re-hashes the stored active version against the manifest recorded at install time
  * from a fresh process, and `rollback` restores the version that was active before the most recent
  * successful install/update.
+ *
+ * Authenticity: the manifest of record travels with the pack, so a self-consistent manifest proves
+ * nothing by itself. When the manifest declares `authenticity.requiresSignature` (models/manifest.json
+ * does) or the store already committed a signed version, a valid Developer ID signature record is
+ * mandatory: it must name the pinned identity/team, bind the exact manifest bytes and the whole pack
+ * digest, and verify against the public key pinned in the release policy. A missing, stale or
+ * substituted record prints `problem: signature: ...`, exits nonzero before `stage: stage`, and
+ * leaves the active version untouched. A pack that ships a record is held to the same check even
+ * when the manifest does not require one, and an install that ends up unsigned is reported as such.
  */
 import { randomUUID } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  SIGNATURE_FILE_NAME,
+  readSignatureRecord,
+  sha256PackDirectory,
+  trustAnchor,
+  verifySignatureRecord,
+} from './signature-record.mjs';
 import { verifyPack } from './verify-pack.mjs';
 
 const CRASH_STAGES = Object.freeze(['verify', 'stage', 'journal', 'commit']);
 const KEEP_PREVIOUS_VERSIONS = 2;
+const RELEASE_POLICY_PATH = join(dirname(fileURLToPath(import.meta.url)), 'installers.json');
 
 function fail(message, code = 2) {
   console.error(`problem: ${message}`);
@@ -42,15 +64,16 @@ function fail(message, code = 2) {
 
 function parseArgs(argv) {
   const [first, ...rest] = argv;
-  const options = { command: first === '--help' || first === '-h' ? null : first, help: first === '--help' || first === '-h', simulateCrashAfter: null, signature: null };
+  const options = { command: first === '--help' || first === '-h' ? null : first, help: first === '--help' || first === '-h', simulateCrashAfter: null, signature: null, policy: null };
   for (let index = 0; index < rest.length; index += 1) {
     const token = rest[index];
-    if (['--root', '--pack', '--manifest', '--version', '--simulate-crash-after', '--signature'].includes(token)) {
+    if (['--root', '--pack', '--manifest', '--version', '--simulate-crash-after', '--signature', '--policy'].includes(token)) {
       const value = rest[index + 1];
       if (value === undefined || value.startsWith('--')) throw new Error(`${token} needs a value`);
       index += 1;
       if (token === '--simulate-crash-after') options.simulateCrashAfter = value;
       else if (token === '--signature') options.signature = value;
+      else if (token === '--policy') options.policy = value;
       else options[token.slice(2)] = value;
     } else if (token === '--help' || token === '-h') {
       options.help = true;
@@ -121,17 +144,152 @@ async function readJournal(root) {
   }
 }
 
-/** Verifies the stored copy of a version against the manifest recorded with it. */
-async function verifyStoredVersion(root, version) {
+/**
+ * Loads the release policy that pins the trusted Developer ID identity and public key. It ships
+ * with the installer (next to this script, or wherever `--policy` points); it is never read from
+ * the pack, because the pack is exactly what is being checked.
+ */
+async function loadReleasePolicy(policyOption) {
+  const policyPath = policyOption ? resolve(policyOption) : RELEASE_POLICY_PATH;
+  try {
+    const policy = await readJson(policyPath);
+    return { ok: true, policyPath, policy, anchor: trustAnchor(policy), problem: null };
+  } catch (error) {
+    return {
+      ok: false,
+      policyPath,
+      policy: null,
+      anchor: trustAnchor(null),
+      problem: `release policy ${policyPath} could not be read as JSON (${error.message}); without it no signature can be verified`,
+    };
+  }
+}
+
+/** The authenticity policy this store has committed to, written at commit time. */
+async function readStorePolicy(root) {
+  try {
+    const parsed = await readJson(join(root, 'policy.json'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Records the store's authenticity policy. `requiresSignature` is sticky: a store that has
+ * committed a signed version keeps requiring one, so an update cannot silently drop the signature.
+ */
+async function writeStorePolicy(root, { requiresSignature, anchor, signedVersion, signedManifestSha256 }) {
+  const previous = await readStorePolicy(root);
+  const policy = {
+    requiresSignature: requiresSignature === true || previous?.requiresSignature === true,
+    signingIdentity: anchor.signingIdentity ?? previous?.signingIdentity ?? null,
+    teamIdentifier: anchor.teamIdentifier ?? previous?.teamIdentifier ?? null,
+    signatureFormat: anchor.signatureFormat ?? previous?.signatureFormat ?? null,
+    publicKeySha256: anchor.publicKeySha256 ?? previous?.publicKeySha256 ?? null,
+    signedVersion: signedVersion ?? previous?.signedVersion ?? null,
+    signedManifestSha256: signedManifestSha256 ?? previous?.signedManifestSha256 ?? null,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeJson(join(root, 'policy.json'), policy);
+  return policy;
+}
+
+/**
+ * Resolves and verifies the signature that travels with a pack. The requirement comes from the
+ * manifest of record (`authenticity.requiresSignature`) and from the store's own committed policy;
+ * any record that is present — via `--signature` or `<pack>/signature.json` — is always verified,
+ * so a pack cannot present an unverifiable record and slip through as unsigned.
+ */
+async function checkSignature({ packRoot, manifest, manifestBytes, options, anchor, storePolicy, policyProblem }) {
+  const requiredBy = [];
+  if (manifest?.authenticity?.requiresSignature === true) requiredBy.push('the manifest of record requires a Developer ID signature (authenticity.requiresSignature)');
+  if (storePolicy?.requiresSignature === true) requiredBy.push('this store has already committed a signed version, so an update may not drop the signature');
+
+  const recordFileName = anchor.recordFileName;
+  let source = null;
+  if (options.signature) source = resolve(options.signature);
+  else if (await exists(join(packRoot, recordFileName))) source = join(packRoot, recordFileName);
+
+  const summary = { verified: false, source: null, requiredBy: [...requiredBy] };
+  if (source === null) {
+    if (requiredBy.length > 0) {
+      return {
+        ok: false,
+        summary,
+        problems: [`signature: ${requiredBy.join('; ')}; pass --signature <file> or ship ${recordFileName} inside the pack`],
+      };
+    }
+    return { ok: true, summary: { ...summary, reason: 'the manifest of record does not require a signature' }, problems: [] };
+  }
+
+  const problems = [];
+  if (policyProblem) problems.push(`signature: ${policyProblem}`);
+  const read = await readSignatureRecord(source);
+  if (!read.ok) {
+    problems.push(...read.problems);
+    return { ok: false, summary, problems };
+  }
+  const result = await verifySignatureRecord({ record: read.record, manifestBytes, packRoot, anchor });
+  problems.push(...result.problems);
+  if (problems.length > 0) return { ok: false, summary, problems };
+
+  return {
+    ok: true,
+    problems: [],
+    summary: {
+      verified: true,
+      source,
+      format: read.record.format,
+      signingIdentity: read.record.signingIdentity,
+      teamIdentifier: read.record.teamIdentifier ?? null,
+      algorithm: read.record.algorithm,
+      signedAt: read.record.signedAt ?? null,
+      manifestSha256: result.manifestSha256,
+      packSha256: result.packSha256,
+    },
+  };
+}
+
+/**
+ * Verifies the stored copy of a version: every asset against the manifest recorded with it, and —
+ * when the version was installed signed — the stored signature record against those exact manifest
+ * bytes and the stored pack, using the pinned anchor. A store that has committed a signed version
+ * refuses a stored version that records no signature.
+ */
+async function verifyStoredVersion(root, version, { anchor = trustAnchor(null), policyProblem = null } = {}) {
   const versionRoot = join(root, 'versions', version);
   if (!(await exists(versionRoot))) return { ok: false, problems: [`version ${version} is not present under ${versionRoot}`] };
   let manifest;
+  let manifestBytes;
   try {
-    manifest = await readJson(join(versionRoot, 'manifest.json'));
+    manifestBytes = await readFile(join(versionRoot, 'manifest.json'));
+    manifest = JSON.parse(manifestBytes.toString('utf8'));
   } catch (error) {
     return { ok: false, problems: [`version ${version} has no readable manifest of record (${error.message})`] };
   }
-  const { problems } = await verifyPack({ manifest, pack: join(versionRoot, 'pack') });
+  const problems = (await verifyPack({ manifest, pack: join(versionRoot, 'pack') })).problems;
+  const recordPath = join(versionRoot, SIGNATURE_FILE_NAME);
+  const storePolicy = await readStorePolicy(root);
+  if (await exists(recordPath)) {
+    if (policyProblem) {
+      problems.push(`signature: ${policyProblem}`);
+    } else {
+      const read = await readSignatureRecord(recordPath);
+      if (!read.ok) problems.push(...read.problems);
+      else {
+        const verified = await verifySignatureRecord({
+          record: read.record,
+          manifestBytes,
+          packRoot: join(versionRoot, 'pack'),
+          anchor,
+        });
+        problems.push(...verified.problems);
+      }
+    }
+  } else if (storePolicy?.requiresSignature === true) {
+    problems.push(`signature: this store committed signed versions, but ${version} records no ${SIGNATURE_FILE_NAME}`);
+  }
   return { ok: problems.length === 0, problems };
 }
 
@@ -141,11 +299,11 @@ async function verifyStoredVersion(root, version) {
  * `current`. Nothing here touches the active version: recovery only removes the transaction's own
  * partial state, so the previous version stays recoverable (and rollback-able).
  */
-async function recoverInterruptedTransaction(root) {
+async function recoverInterruptedTransaction(root, context) {
   const journal = await readJournal(root);
   if (!journal) return;
   const active = await readActiveVersion(root);
-  const activeLooksSane = active !== null && (await verifyStoredVersion(root, active)).ok;
+  const activeLooksSane = active !== null && (await verifyStoredVersion(root, active, context)).ok;
   if (journal.stagedDir) {
     await rm(journal.stagedDir, { recursive: true, force: true });
   }
@@ -192,8 +350,10 @@ async function installOrUpdate(options) {
 
   const packRoot = resolve(pack);
   let manifest;
+  let manifestBytes;
   try {
-    manifest = await readJson(manifestPath);
+    manifestBytes = await readFile(manifestPath);
+    manifest = JSON.parse(manifestBytes.toString('utf8'));
   } catch (error) {
     return fail(`manifest ${manifestPath} could not be read as JSON (${error.message})`);
   }
@@ -201,7 +361,34 @@ async function installOrUpdate(options) {
   await mkdir(root, { recursive: true });
   await mkdir(join(root, 'versions'), { recursive: true });
   await mkdir(join(root, 'staging'), { recursive: true });
-  await recoverInterruptedTransaction(root);
+
+  const releasePolicy = await loadReleasePolicy(options.policy);
+  const storePolicy = await readStorePolicy(root);
+  const context = { anchor: releasePolicy.anchor, policyProblem: releasePolicy.problem };
+  await recoverInterruptedTransaction(root, context);
+
+  // Authenticity comes before anything else that could touch the store: a substituted pack with a
+  // rewritten, self-consistent manifest must not even reach the staging area.
+  const signature = await checkSignature({
+    packRoot,
+    manifest,
+    manifestBytes,
+    options,
+    anchor: releasePolicy.anchor,
+    storePolicy,
+    policyProblem: releasePolicy.problem,
+  });
+  if (!signature.ok) {
+    for (const problem of signature.problems) console.error(`problem: ${problem}`);
+    console.error(`signature: rejected (${releasePolicy.policyPath}); the active version is unchanged`);
+    process.exitCode = 1;
+    return null;
+  }
+  if (signature.summary.verified) {
+    console.log(`signature: verified ${signature.summary.signingIdentity} (${signature.summary.algorithm})`);
+  } else {
+    console.log(`signature: none presented; ${signature.summary.reason}`);
+  }
 
   const completeStage = stagePrinter(options.simulateCrashAfter);
 
@@ -220,11 +407,20 @@ async function installOrUpdate(options) {
   const stagedDir = join(root, 'staging', `${version}-${transactionId}`);
   await mkdir(stagedDir, { recursive: true });
   await cp(packRoot, join(stagedDir, 'pack'), { recursive: true });
-  await writeFile(join(stagedDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  let signature = null;
-  if (options.signature) {
-    signature = basename(options.signature);
-    await cp(options.signature, join(stagedDir, 'signature'), { force: true });
+  // The manifest of record is stored as the exact bytes that were verified (and, when signed, the
+  // exact bytes the signature covers), never as a re-serialization.
+  await writeFile(join(stagedDir, 'manifest.json'), manifestBytes);
+  if (signature.summary.verified) {
+    await cp(signature.summary.source, join(stagedDir, SIGNATURE_FILE_NAME), { force: true });
+    const [sourceDigest, stagedDigest] = await Promise.all([
+      sha256PackDirectory(packRoot, { exclude: [SIGNATURE_FILE_NAME] }),
+      sha256PackDirectory(join(stagedDir, 'pack'), { exclude: [SIGNATURE_FILE_NAME] }),
+    ]);
+    if (sourceDigest !== stagedDigest) {
+      console.error(`problem: signature: the staged pack hashes to ${stagedDigest}, the signed pack hashes to ${sourceDigest}; nothing was committed`);
+      process.exitCode = 1;
+      return null;
+    }
   }
   await writeJson(join(stagedDir, 'record.json'), {
     version,
@@ -232,7 +428,7 @@ async function installOrUpdate(options) {
     sourcePack: packRoot,
     sourceManifest: resolve(manifestPath),
     transactionId,
-    signature,
+    signature: signature.summary,
     assets: manifest.assets.map((asset) => ({ id: asset.id, kind: asset.kind, sha256: asset.sha256, bytes: asset.bytes })),
   });
   // Re-verify the staged copy: what is committed must be the bytes that were verified.
@@ -253,7 +449,7 @@ async function installOrUpdate(options) {
     previous,
     stagedDir,
     startedAt: new Date().toISOString(),
-    signature,
+    signature: signature.summary,
   };
   await writeJson(join(root, 'journal.json'), journal);
   await completeStage('journal');
@@ -269,6 +465,12 @@ async function installOrUpdate(options) {
   const history = await readHistory(root);
   const nextHistory = history[history.length - 1] === version ? history : [...history, version];
   await writeHistory(root, nextHistory);
+  await writeStorePolicy(root, {
+    requiresSignature: signature.summary.verified,
+    anchor: releasePolicy.anchor,
+    signedVersion: signature.summary.verified ? version : null,
+    signedManifestSha256: signature.summary.verified ? signature.summary.manifestSha256 : null,
+  });
   await completeStage('commit');
 
   // stage: cleanup — drop the partial state and keep the versions rollback may need.
@@ -286,7 +488,8 @@ async function verifyCommand(options) {
   if (!root) return fail('verify needs --root <dir>');
   const version = await readActiveVersion(root);
   if (version === null) return fail(`no active version under ${resolve(root)}: run install before verify`, 1);
-  const { ok, problems } = await verifyStoredVersion(root, version);
+  const releasePolicy = await loadReleasePolicy(options.policy);
+  const { ok, problems } = await verifyStoredVersion(root, version, { anchor: releasePolicy.anchor, policyProblem: releasePolicy.problem });
   if (!ok) {
     for (const problem of problems) console.error(`problem: ${problem}`);
     console.error(`active: ${version}`);
@@ -295,6 +498,9 @@ async function verifyCommand(options) {
     return null;
   }
   console.log(`active: ${version}`);
+  if (await exists(join(root, 'versions', version, SIGNATURE_FILE_NAME))) {
+    console.log(`signature: verified against ${releasePolicy.policyPath}`);
+  }
   console.log('verify: ok');
   return null;
 }
@@ -310,7 +516,8 @@ async function rollbackCommand(options) {
   if (target === null) {
     return fail(`version ${active} has no previous version to roll back to`, 1);
   }
-  const { ok, problems } = await verifyStoredVersion(root, target);
+  const releasePolicy = await loadReleasePolicy(options.policy);
+  const { ok, problems } = await verifyStoredVersion(root, target, { anchor: releasePolicy.anchor, policyProblem: releasePolicy.problem });
   if (!ok) {
     for (const problem of problems) console.error(`problem: ${problem}`);
     console.error(`rollback: ${target} does not verify; keeping ${active} active`);
@@ -331,7 +538,7 @@ async function main() {
     return fail(error.message);
   }
   if (options.help || !options.command) {
-    console.log('usage: node scripts/release/install.mjs <install|update|verify|rollback> [--root <dir>] [--pack <dir>] [--manifest <path>] [--version <v>] [--simulate-crash-after <stage>] [--signature <file>]');
+    console.log('usage: node scripts/release/install.mjs <install|update|verify|rollback> [--root <dir>] [--pack <dir>] [--manifest <path>] [--version <v>] [--simulate-crash-after <stage>] [--signature <file>] [--policy <installers.json>]');
     return null;
   }
   if (options.command === 'install' || options.command === 'update') return installOrUpdate(options);
