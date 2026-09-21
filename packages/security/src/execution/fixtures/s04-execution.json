@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "ticket": "S04",
+  "description": "Deterministic scenario data for the S04 scoped-command oracle: one allowed test workspace, one canonicalization canary outside its mount, a controlled network profile with one allowed and one denied endpoint, and the grant tuples the executor must check immediately before running argv. Everything here is synthetic; no real project, path, host, or user data belongs in this file.",
+  "profileId": "profile-s04",
+  "project": {
+    "projectId": "atlas",
+    "displayName": "Atlas"
+  },
+  "workspace": {
+    "allowedDirectory": "allowed-workspace",
+    "outsideDirectory": "outside",
+    "canaryRelativePath": "outside/canary.txt",
+    "canaryContent": "quartz-canary-s04",
+    "guestRoot": "/workspace",
+    "probeFile": "probe.txt",
+    "injectedFile": "injected"
+  },
+  "grants": {
+    "vmGrantId": "grant-s04-vm",
+    "hostGrantId": "grant-s04-host",
+    "revokedGrantId": "grant-s04-revoked"
+  },
+  "capabilities": {
+    "vm": "execution.vm",
+    "hostAutonomy": "execution.host_autonomy",
+    "shellScript": "execution.shell_script"
+  },
+  "destinations": {
+    "vm": "managed-vm",
+    "host": "native-host"
+  },
+  "network": {
+    "allowedHost": "registry.echopilot.test",
+    "deniedHost": "telemetry.echopilot.test"
+  },
+  "labels": {
+    "vm": "isolated-vm",
+    "host": "host-execution"
+  },
+  "authorizationTtlMs": 30000
+}
