@@ -23,7 +23,6 @@ function harness(payload: unknown) {
     stdin: { write(data) { writes.push(data); onData?.(`${JSON.stringify({ ok: true,
       result: { type: 'json', payload: JSON.stringify(payload) } })}\n`); return true; } },
     stdout: { setEncoding() { return undefined; }, on(_event, listener) { onData = listener; return undefined; } },
-    stderr: null,
     kill() { return true; },
     on() { return this; },
   };
@@ -56,7 +55,7 @@ test('legacy observations without optional geometry remain supported', async () 
 test('local OCR is forwarded only for an explicit true opt in', async () => {
   for (const setting of [undefined, false, true, 'true', 1, null]) {
     const { host, writes } = harness(fixture());
-    const result = await host.observe({ projectId: PROJECT, allowLocalOCR: setting as boolean | undefined });
+    const result = await host.observe({ projectId: PROJECT, ...(setting === undefined ? {} : { allowLocalOCR: setting as boolean }) });
     assert.equal(result.outcome, 'observed');
     const request = JSON.parse(writes[0]!);
     if (setting === true) assert.equal(request.allowLocalOCR, true);
