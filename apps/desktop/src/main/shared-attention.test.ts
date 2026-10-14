@@ -63,3 +63,22 @@ test('pending dwell resets when its region changes; unrelated region changes pre
   assert.equal(t.current(1500).target?.id,'a');
   t.reset(1600);assert.equal(t.resolve('correction',1600).target,null);assert.equal(t.resolve('previous',1600).target,null);
 });
+test('large leaf paragraphs remain useful with noisy webcam evidence without pretending to select a sentence',()=>{
+  for(const sigma of [40,100,175]) {
+    const t=new SharedAttentionTracker();
+    const regions:ScreenRegion[]=[
+      {id:'window',revision:'1',app:'Reader',window:'w',type:'window',label:'Article',bounds:{x:0,y:0,width:1440,height:900}},
+      {id:'paragraph',parentId:'window',revision:'1',app:'Reader',window:'w',type:'paragraph',label:'Large text block',bounds:{x:200,y:150,width:900,height:400}},
+      {id:'sentence',parentId:'paragraph',revision:'1',app:'Reader',window:'w',type:'sentence',label:'One sentence',bounds:{x:250,y:300,width:800,height:24}},
+    ];
+    for(let at=0;at<=400;at+=100){t.observe(regions,at,at);t.update(gaze(at,650,350,sigma),at);}
+    assert.equal(t.current(400).target?.id,'paragraph',`sigma ${sigma}`);
+    assert.notEqual(t.current(400).target?.id,'sentence');
+  }
+});
+test('ambiguous overlapping children settle on their common semantic ancestor',()=>{
+  const t=new SharedAttentionTracker();const regions=[scene[0]!,{...scene[1]!,type:'paragraph'},{...scene[1]!,id:'overlap',type:'paragraph',label:'Overlapping accessibility node'}];
+  for(let at=0;at<=400;at+=100){t.observe(regions,at,at);t.update(gaze(at),at);}
+  assert.equal(t.current(400).target?.id,'area');
+  assert.ok(t.current(400).candidates.some(c=>c.region.id==='a'));
+});

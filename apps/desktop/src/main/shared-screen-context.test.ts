@@ -37,3 +37,10 @@ test('on-demand bounded local snapshot is independent of stream budget and does 
   assert.ok(Buffer.byteLength(JSON.stringify(full))<=700);assert.deepEqual(f.usage(100),usage);
   f.reset();assert.equal(f.snapshot(200),null);assert.equal(f.usage(200).packets,0);
 });
+test('unrelated whole-screen revision churn emits nothing; real region revision updates remain visible',()=>{
+  const f=new SharedScreenContextFeed({intervalMs:1000,maxBytes:1200,bytesPerMinute:8000});f.offer(context(0),0);f.flush(0);
+  for(let at=1000;at<=10000;at+=1000){const c=context(at);c.revision=String(at);f.offer(c,at);assert.equal(f.flush(at),null);}
+  assert.equal(f.usage(10000).packets,1);assert.equal(f.snapshot(10000)?.revision,'10000');
+  const changed=context(11000);changed.attention.target!.revision='2';changed.revision='11000';f.offer(changed,11000);
+  const packet=f.flush(11000)!;assert.equal(packet.revision,'11000');assert.equal(packet.regions[0]?.revision,'2');
+});

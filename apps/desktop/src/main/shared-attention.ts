@@ -91,14 +91,13 @@ export class SharedAttentionTracker {
       .map(region=>({region,probability:probability(region,gaze)})).filter(c=>c.probability>=.08)
       .sort((a,b)=>b.probability-a.probability || a.region.bounds.width*a.region.bounds.height-b.region.bounds.width*b.region.bounds.height);
     const eligible=candidates.filter(c=>c.probability>=.65 && contains(c.region.bounds,gaze.mean.x,gaze.mean.y)
-      && Math.min(c.region.bounds.width,c.region.bounds.height)>=radius*2
+      && Math.min(c.region.bounds.width,c.region.bounds.height)>=radius*(this.coarse(c.region)?1:2)
       && (radius/2<=this.options.maxFineSigma || this.coarse(c.region)));
     // Smallest sufficiently certain semantic area wins; a parent remains the fallback for noisy fine targets.
     eligible.sort((a,b)=>a.region.bounds.width*a.region.bounds.height-b.region.bounds.width*b.region.bounds.height);
-    let winner=eligible[0];
-    const competing=winner ? candidates.filter(c=>c.region.id!==winner!.region.id
-      && !this.related(c.region,winner!.region) && c.probability>=winner!.probability-this.options.switchMargin) : [];
-    if (competing.length) winner=undefined;
+    // If neighboring children overlap statistically, choose their unambiguous containing area.
+    let winner=eligible.find(option=>!candidates.some(c=>c.region.id!==option.region.id
+      && !this.related(c.region,option.region) && c.probability>=option.probability-this.options.switchMargin));
     const current=this.result.target;
     if (winner && current && winner.region.id!==current.id && !this.related(winner.region,current)) {
       const currentScore=candidates.find(c=>c.region.id===current.id)?.probability ?? 0;
@@ -127,7 +126,7 @@ export class SharedAttentionTracker {
     return this.current(now);
   }
   private coarse(region: ScreenRegion) {
-    return /^(region|window|group|area|AXWindow|AXGroup)$/.test(region.type)
+    return /^(region|window|group|area|paragraph|textblock|text-block|text|AXWindow|AXGroup|AXTextArea|AXStaticText)$/.test(region.type)
       || [...this.regions.values()].some(r=>r.parentId===region.id);
   }
   private related(a: ScreenRegion,b: ScreenRegion) {

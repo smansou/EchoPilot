@@ -42,9 +42,10 @@ export class SharedScreenContextFeed {
     const targetId=target&&!target.sensitive?clean(target.id,100):null;
     const common={app:clean(context.app,80),window:clean(context.window,120),revision:clean(context.revision,80),state:expired?'unavailable' as const:context.attention.state,targetId};
     // Dedupe compares semantic state, not timestamps, gaze coordinates, confidence or camera rate.
-    const semantic=JSON.stringify({...common,regions});
+    const {revision: _screenRevision,...meaningful}=common;
+    const semantic=JSON.stringify({...meaningful,regions});
     if (!request.full && this.delivered && semantic===JSON.stringify({app:this.delivered.app,window:this.delivered.window,
-      revision:this.delivered.revision,state:this.delivered.state,targetId:this.delivered.targetId,regions:previous})) return null;
+      state:this.delivered.state,targetId:this.delivered.targetId,regions:previous})) return null;
     const upserts=full?regions:regions.filter(r=>!previous.some(p=>p.id===r.id&&JSON.stringify(p)===JSON.stringify(r)));
     const packet: ContextPacket={sequence:this.sequence+1,capturedAt:context.capturedAt,full,...common,regions:upserts,
       removed:full?[]:previous.filter(p=>!regions.some(r=>r.id===p.id)).map(r=>r.id),truncated:unique.length>regions.length,
