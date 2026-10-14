@@ -20,3 +20,6 @@ models/asr/.vendor-*/
 models/pocket-tts/
 models/reasoner/
 workers/pocket-tts/python/
+
+# Swift package caches at any native package depth
+**/.build/
