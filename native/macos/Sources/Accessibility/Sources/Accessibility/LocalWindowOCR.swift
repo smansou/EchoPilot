@@ -59,7 +59,7 @@ public enum LocalWindowOCR {
         ForegroundEvidence(observedAtMs: evidence.observedAtMs, projectId: evidence.projectId,
                            application: evidence.application, window: evidence.window, nodes: nodes,
                            quality: evidence.quality, truncated: evidence.truncated, truncations: evidence.truncations,
-                           stats: ForegroundEvidenceStats(visitedNodes: evidence.stats.visitedNodes, emittedNodes: nodes.count,
+                           stats: ForegroundEvidenceStats(visitedNodes: max(evidence.stats.visitedNodes, nodes.count), emittedNodes: nodes.count,
                                   maxDepthReached: evidence.stats.maxDepthReached,
                                   estimatedBytes: (try? JSONEncoder().encode(nodes).count) ?? evidence.stats.estimatedBytes))
     }
