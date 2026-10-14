@@ -1,5 +1,11 @@
 # Live handoff
 
+## Latest installed checkpoint — October 15, 2026
+
+The October14 feature checkpoint `247bd4b` passed final `pnpm check` (697 tests; zero failed/skipped, contracts/types/build passed), cloud-voice packaging, local qualification, and installed startup smoke. `/Applications/EchoPilot.app` now matches `/private/tmp/EchoPilot-shared-screen-20261015.app` for main JS, native desktop helper and bundle record; installed signature verifies and the app was relaunched. Rollback: `/private/tmp/EchoPilot-before-shared-screen-20261015.app`. User data preserved. See [October15 handoff](HANDOFF_2026-10-15.md).
+
+This establishes implementation and installation, not full acceptance. Original user requirements were independently reviewed: stable accurate hands-free gaze connected to natural live conversation, meaningful paragraph/sentence/control highlights, beautiful animated frames, low latency/cost, free/open-source established tracking and safe window behavior. Human webcam accuracy, provider conversation quality/latency/billing, posture/lid-tilt robustness and comparative superiority remain unproven. Explicit pose/tilt compensation is absent. Session sync and cross-app insertion still need end-to-end acceptance. Do not claim done on fixture evidence alone.
+
 ## Latest shared-screen checkpoint — October 14, 2026
 
 Source on `feature/gaze-shared-screen-20261014` includes user-paced calibration, bounded native AX/text-range/local OCR regions, uncertainty-aware semantic targets, animated nonblocking frames, and approved compact live-voice context/corrections. Read [progressive handoff](HANDOFF_2026-10-14.md) and [design/acceptance plan](SHARED_SCREEN_PLAN.md); the earlier October14 “no fix implemented” section is historical.
