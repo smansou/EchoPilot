@@ -34,6 +34,7 @@ import Foundation
 private struct Request: Decodable {
     let operation: String
     let allowLocalOCR: Bool?
+    let preferredRole: String?
     let scope: ActionScope?
     let actionId: String?
     let idempotencyKey: String?
@@ -142,7 +143,7 @@ private func handle(_ line: String) throws -> Data {
     switch request.operation {
     case "target-at-point":
         let driver = SystemAXDriver()
-        guard let target = try driver.targetAtPoint(x: require(request.x, "x"), y: require(request.y, "y")), let state = try driver.inspect(target) else { return try Response.failure("unsupported_target", encoder: encoder) }
+        guard let target = try driver.targetAtPoint(x: require(request.x, "x"), y: require(request.y, "y"), preferredRole: request.preferredRole), let state = try driver.inspect(target) else { return try Response.failure("unsupported_target", encoder: encoder) }
         return try Response.success(FocusedTargetReport(selection: nil, targetRef: target, state: state), encoder: encoder)
     case "focused-target", "focused-control":
         let driver = SystemAXDriver()

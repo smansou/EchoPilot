@@ -147,7 +147,7 @@ public final class SystemAXDriver: AXDriver {
     }
 
     /// Read-only hit testing for a virtual gaze point; never moves the system pointer.
-    public func targetAtPoint(x: Double, y: Double) throws -> AXTargetRef? {
+    public func targetAtPoint(x: Double, y: Double, preferredRole: String? = nil) throws -> AXTargetRef? {
         try requirePermission()
         guard x.isFinite, y.isFinite, let app = NSWorkspace.shared.frontmostApplication,
               !(app.bundleIdentifier ?? "").lowercased().contains("echopilot") else { return nil }
@@ -155,13 +155,18 @@ public final class SystemAXDriver: AXDriver {
         var hit: AXUIElement?
         guard AXUIElementCopyElementAtPosition(application, Float(x), Float(y), &hit) == .success,
               let hit else { return nil }
+        let deadline = Date().addingTimeInterval(2)
+        guard let selected = try SemanticTargetAncestor.select(hit: hit, preferredRole: preferredRole,
+            withinBudget: { Date() < deadline },
+            role: { self.stringAttribute($0, kAXRoleAttribute) },
+            subrole: { self.stringAttribute($0, kAXSubroleAttribute) },
+            parent: { self.elementAttribute($0, kAXParentAttribute) }) else { return nil }
         var pending: [(AXUIElement, [Int])] = [(application, [])]
         var visited = 0
-        let deadline = Date().addingTimeInterval(2)
         while let (element, path) = pending.popLast() {
             visited += 1
             guard visited <= 512, Date() < deadline else { return nil }
-            if CFEqual(element, hit) { return AXTargetAddress(pid: app.processIdentifier, path: path).targetRef }
+            if CFEqual(element, selected) { return AXTargetAddress(pid: app.processIdentifier, path: path).targetRef }
             if path.count < 20, let descendants = children(of: element) {
                 for (index, child) in descendants.prefix(64).enumerated().reversed() { pending.append((child, path + [index])) }
             }
