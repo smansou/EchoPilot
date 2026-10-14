@@ -1,6 +1,8 @@
 import Foundation
 import XCTest
-import DesktopAX
+import CoreGraphics
+import CoreText
+@testable import DesktopAX
 
 final class ObservationRegionsTests: XCTestCase {
     func testRejectsNonfiniteAndEmptyFramesButKeepsNegativeDisplayOrigins() {
@@ -53,5 +55,20 @@ final class ObservationRegionsTests: XCTestCase {
         XCTAssertEqual(spans.filter { $0.kind == "sentence" }.count, 6)
         let unicode = String(repeating: "😀", count: 100)
         XCTAssertTrue(ObservationTextSegmentation.spans(unicode, limit: 2).allSatisfy { $0.text.utf8.count <= 160 })
+    }
+    func testActualLocalVisionRecognitionOnSyntheticImage() throws {
+        let context = try XCTUnwrap(CGContext(data: nil, width: 800, height: 160, bitsPerComponent: 8,
+                           bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 800, height: 160))
+        let text = NSAttributedString(string: "EchoPilot screen target", attributes: [
+            NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName("Helvetica" as CFString, 48, nil),
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(red: 0, green: 0, blue: 0, alpha: 1)])
+        context.textPosition = CGPoint(x: 24, y: 65)
+        CTLineDraw(CTLineCreateWithAttributedString(text), context)
+        let image = try XCTUnwrap(context.makeImage())
+        let nodes = LocalWindowOCR.recognize(image: image, window: ObservationFrame(x: -800, y: 40, width: 800, height: 160))
+        XCTAssertTrue(nodes.contains { $0.value?.contains("screen target") == true }, "Synthetic OCR output: \(nodes.map { $0.value ?? "" })")
+        XCTAssertTrue(nodes.allSatisfy { $0.subrole == "LocalOCRText" && $0.frame?.validated != nil })
     }
 }

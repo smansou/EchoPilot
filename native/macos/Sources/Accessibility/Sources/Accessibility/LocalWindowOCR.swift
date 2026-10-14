@@ -10,26 +10,34 @@ public enum LocalWindowOCR {
               eligible(evidence),
               let frame = evidence.window.frame, stillCurrent(evidence) else { return evidence }
         guard let image = capture(pid: evidence.application.pid, frame: frame), stillCurrent(evidence) else { return evidence }
+        let recognized = recognize(image: image, window: frame)
+        guard stillCurrent(evidence) else { return evidence }
+        var nodes = evidence.nodes
+        let encoder = JSONEncoder()
+        for node in recognized {
+            nodes.append(node)
+            if (try? encoder.encode(copy(evidence, nodes: nodes)).count) ?? Int.max > 32_768 {
+                nodes.removeLast(); break
+            }
+        }
+        return copy(evidence, nodes: nodes)
+    }
+
+    static func recognize(image: CGImage, window: ObservationFrame) -> [ForegroundEvidenceNode] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .fast
         request.usesLanguageCorrection = false
-        guard (try? VNImageRequestHandler(cgImage: image).perform([request])) != nil, stillCurrent(evidence) else { return evidence }
-        var nodes = evidence.nodes
-        let encoder = JSONEncoder()
-        for observation in (request.results ?? []).prefix(40) {
-            guard let candidate = observation.topCandidates(1).first, candidate.confidence >= 0.6 else { continue }
+        guard (try? VNImageRequestHandler(cgImage: image).perform([request])) != nil else { return [] }
+        return (request.results ?? []).prefix(40).compactMap { observation in
+            guard let candidate = observation.topCandidates(1).first, candidate.confidence >= 0.5 else { return nil }
             let bounded = ForegroundObserver.boundedBytes(candidate.string, limit: 160)
-            let text = bounded.value
-            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-            let box = logicalFrame(normalized: observation.boundingBox, window: frame)
-            guard box.validated != nil else { continue }
-            nodes.append(ForegroundEvidenceNode(depth: 1, role: "AXStaticText", subrole: "LocalOCRText",
-                         label: nil, value: text, labelTruncated: false,
-                         valueTruncated: bounded.truncated, redacted: false, frame: box))
-            let result = copy(evidence, nodes: nodes)
-            if (try? encoder.encode(result).count) ?? Int.max > 32_768 { nodes.removeLast(); break }
+            guard !bounded.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            let box = logicalFrame(normalized: observation.boundingBox, window: window)
+            guard box.validated != nil else { return nil }
+            return ForegroundEvidenceNode(depth: 1, role: "AXStaticText", subrole: "LocalOCRText",
+                         label: nil, value: bounded.value, labelTruncated: false,
+                         valueTruncated: bounded.truncated, redacted: false, frame: box)
         }
-        return copy(evidence, nodes: nodes)
     }
 
     /// Fail closed when a bounded AX traversal could have missed a secure subtree. Permission,
@@ -83,6 +91,7 @@ public enum LocalWindowOCR {
         configuration.width = max(1, min(1600, Int(frame.width)))
         configuration.height = max(1, min(1600, Int(Double(configuration.width) * frame.height / frame.width)))
         configuration.showsCursor = false
+        if #available(macOS 14.2, *) { configuration.ignoreShadowsSingleWindow = true }
         let ready = DispatchSemaphore(value: 0)
         let imageBox = LockedOCRBox<CGImage>()
         SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window),
