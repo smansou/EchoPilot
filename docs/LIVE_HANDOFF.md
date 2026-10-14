@@ -1,5 +1,12 @@
 # Live handoff
 
+## Latest shared-screen checkpoint — October 14, 2026
+
+Source on `feature/gaze-shared-screen-20261014` includes user-paced calibration, bounded native AX/text-range/local OCR regions, uncertainty-aware semantic targets, animated nonblocking frames, and approved compact live-voice context/corrections. Read [progressive handoff](HANDOFF_2026-10-14.md) and [design/acceptance plan](SHARED_SCREEN_PLAN.md); the earlier October14 “no fix implemented” section is historical.
+
+The user asked to stop after subagents finished, at a committed/logged checkpoint. All agents finished; new source is not yet packaged or installed. `/Applications/EchoPilot.app` remains October11. Native55 tests, focused integration/selection/search tests and actual Electron smoke checks pass; human gaze, actual app permissions and real-provider conversation quality remain unvalidated.
+
+
 ## October 14, 2026 — user calibration failure; work interrupted before coding
 
 **Read [October 14 handoff](HANDOFF_2026-10-14.md) first.** The October 11 installed build still repeatedly fails human calibration (user reports 175-point error). Its tests established integration and safe window lifecycle, not usable human accuracy. The user requires free/open-source only and a complete proven module. The tracking model is WebGazer, but timed calibration, hidden camera feedback and rejection thresholds are our wrapper; continuous interaction learning is disabled. No explicit head-pose compensation or physical lid-tilt detection is implemented.

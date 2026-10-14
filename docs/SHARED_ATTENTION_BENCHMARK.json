@@ -1,0 +1,137 @@
+{
+  "capturedAt": "2026-10-14T17:15:56.973Z",
+  "machine": {
+    "cpu": "Apple M1 Pro",
+    "arch": "arm64",
+    "node": "v24.11.0"
+  },
+  "method": "1000 deterministic synthetic jitter samples at simulated10Hz; pure local update timing only; hypothetical full synthetic AX-like JSON at1Hz traffic baseline, not a prior-product measurement.",
+  "limitations": "No human gaze accuracy, calibration, native AX/OCR latency, provider latency, network costs or comparative state-of-the-art claims.",
+  "productionBudget": {
+    "intervalMs": 1000,
+    "maxPacketBytes": 1200,
+    "bytesPerRollingMinute": 8000
+  },
+  "runs": [
+    {
+      "regions": 150,
+      "samples": 1000,
+      "syntheticDurationSeconds": 100,
+      "moving": false,
+      "uncertaintySigmaX": 6,
+      "uncertaintySigmaY": 7,
+      "meanJitterAmplitude": 2,
+      "updateMilliseconds": {
+        "p50": 0.067,
+        "p95": 0.081,
+        "max": 1.283
+      },
+      "stableSamples": 993,
+      "semanticPackets": 2,
+      "semanticBytes": 862,
+      "peakRollingMinuteBytes": 862,
+      "hypotheticalRawSceneAt1HzBytes": 2890100,
+      "hypotheticalTrafficReductionPercent": 99.97
+    },
+    {
+      "regions": 600,
+      "samples": 1000,
+      "syntheticDurationSeconds": 100,
+      "moving": false,
+      "uncertaintySigmaX": 6,
+      "uncertaintySigmaY": 7,
+      "meanJitterAmplitude": 2,
+      "updateMilliseconds": {
+        "p50": 0.259,
+        "p95": 0.278,
+        "max": 0.705
+      },
+      "stableSamples": 993,
+      "semanticPackets": 2,
+      "semanticBytes": 863,
+      "peakRollingMinuteBytes": 863,
+      "hypotheticalRawSceneAt1HzBytes": 11673500,
+      "hypotheticalTrafficReductionPercent": 99.99
+    },
+    {
+      "regions": 150,
+      "samples": 1000,
+      "syntheticDurationSeconds": 100,
+      "moving": true,
+      "uncertaintySigmaX": 6,
+      "uncertaintySigmaY": 7,
+      "meanJitterAmplitude": 2,
+      "updateMilliseconds": {
+        "p50": 0.069,
+        "p95": 0.075,
+        "max": 0.252
+      },
+      "stableSamples": 650,
+      "semanticPackets": 41,
+      "semanticBytes": 15606,
+      "peakRollingMinuteBytes": 8000,
+      "hypotheticalRawSceneAt1HzBytes": 2890100,
+      "hypotheticalTrafficReductionPercent": 99.46
+    },
+    {
+      "regions": 600,
+      "samples": 1000,
+      "syntheticDurationSeconds": 100,
+      "moving": true,
+      "uncertaintySigmaX": 6,
+      "uncertaintySigmaY": 7,
+      "meanJitterAmplitude": 2,
+      "updateMilliseconds": {
+        "p50": 0.265,
+        "p95": 0.282,
+        "max": 0.436
+      },
+      "stableSamples": 650,
+      "semanticPackets": 41,
+      "semanticBytes": 15607,
+      "peakRollingMinuteBytes": 8000,
+      "hypotheticalRawSceneAt1HzBytes": 11673500,
+      "hypotheticalTrafficReductionPercent": 99.87
+    },
+    {
+      "regions": 150,
+      "samples": 1000,
+      "syntheticDurationSeconds": 100,
+      "moving": false,
+      "uncertaintySigmaX": 175,
+      "uncertaintySigmaY": 204.17,
+      "meanJitterAmplitude": 2,
+      "updateMilliseconds": {
+        "p50": 0.066,
+        "p95": 0.076,
+        "max": 0.821
+      },
+      "stableSamples": 997,
+      "semanticPackets": 2,
+      "semanticBytes": 1209,
+      "peakRollingMinuteBytes": 1209,
+      "hypotheticalRawSceneAt1HzBytes": 2890100,
+      "hypotheticalTrafficReductionPercent": 99.96
+    },
+    {
+      "regions": 600,
+      "samples": 1000,
+      "syntheticDurationSeconds": 100,
+      "moving": false,
+      "uncertaintySigmaX": 175,
+      "uncertaintySigmaY": 204.17,
+      "meanJitterAmplitude": 2,
+      "updateMilliseconds": {
+        "p50": 0.256,
+        "p95": 0.282,
+        "max": 0.453
+      },
+      "stableSamples": 997,
+      "semanticPackets": 2,
+      "semanticBytes": 1219,
+      "peakRollingMinuteBytes": 1219,
+      "hypotheticalRawSceneAt1HzBytes": 11673500,
+      "hypotheticalTrafficReductionPercent": 99.99
+    }
+  ]
+}

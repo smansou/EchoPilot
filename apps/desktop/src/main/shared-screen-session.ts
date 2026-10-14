@@ -64,6 +64,7 @@ export function createSharedScreenSession(options:{allowed():boolean;samples():r
     find(input:{query?:string;kind?:string;direction?:string}){if(!enabled||!options.allowed()||!scene||now()-scene.capturedAt>1200)return {targets:[],unavailable:true};
       const words=(input.query??'').toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).slice(0,12);const anchor=this.target();
       const center=(region:ScreenRegion)=>({x:region.bounds.x+region.bounds.width/2,y:region.bounds.y+region.bounds.height/2});const origin=anchor?center(anchor):null;
+      if(input.direction&&input.direction!=='near'&&!origin)return {targets:[],unavailable:true};
       const kind=input.kind??'any';const candidates=scene.regions.filter(region=>kind==='any'||kind==='control'&&/^AX/.test(region.type)||kind==='area'&&['window','area','textblock'].includes(region.type)||region.type===kind).filter(region=>words.every(word=>region.label.toLocaleLowerCase().includes(word)));
       const eligible=candidates.filter(region=>{if(!origin||!input.direction||input.direction==='near')return true;const point=center(region);return input.direction==='above'?point.y<origin.y:input.direction==='below'?point.y>origin.y:input.direction==='left'?point.x<origin.x:input.direction==='right'?point.x>origin.x:false;});
       if(origin)eligible.sort((a,b)=>{const x=center(a),y=center(b);return Math.hypot(x.x-origin.x,x.y-origin.y)-Math.hypot(y.x-origin.x,y.y-origin.y);});
