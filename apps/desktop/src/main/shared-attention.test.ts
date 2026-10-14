@@ -82,3 +82,13 @@ test('ambiguous overlapping children settle on their common semantic ancestor',(
   assert.equal(t.current(400).target?.id,'area');
   assert.ok(t.current(400).candidates.some(c=>c.region.id==='a'));
 });
+test('anisotropic uncertainty permits a wide paragraph when vertical evidence remains precise',()=>{
+  const t=new SharedAttentionTracker();const regions:ScreenRegion[]=[
+    {id:'window',revision:'1',app:'Reader',window:'w',type:'window',label:'Article',bounds:{x:0,y:0,width:1440,height:900}},
+    {id:'paragraph',parentId:'window',revision:'1',app:'Reader',window:'w',type:'paragraph',label:'Wide paragraph',bounds:{x:200,y:200,width:900,height:160}},
+  ];
+  for(let at=0;at<=400;at+=100){t.observe(regions,at,at);t.update({...gaze(at,650,280),covariance:{xx:175**2,xy:0,yy:40**2}},at);}
+  assert.equal(t.current(400).target?.id,'paragraph');
+  for(let at=500;at<=900;at+=100){t.observe(regions,at,at);t.update({...gaze(at,650,280),covariance:{xx:175**2,xy:0,yy:175**2}},at);}
+  assert.equal(t.current(900).target?.id,'window');
+});

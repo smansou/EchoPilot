@@ -91,7 +91,8 @@ export class SharedAttentionTracker {
       .map(region=>({region,probability:probability(region,gaze)})).filter(c=>c.probability>=.08)
       .sort((a,b)=>b.probability-a.probability || a.region.bounds.width*a.region.bounds.height-b.region.bounds.width*b.region.bounds.height);
     const eligible=candidates.filter(c=>c.probability>=.65 && contains(c.region.bounds,gaze.mean.x,gaze.mean.y)
-      && Math.min(c.region.bounds.width,c.region.bounds.height)>=radius*(this.coarse(c.region)?1:2)
+      && c.region.bounds.width>=Math.sqrt(xx)*(this.coarse(c.region)?2:4)
+      && c.region.bounds.height>=Math.sqrt(yy)*(this.coarse(c.region)?2:4)
       && (radius/2<=this.options.maxFineSigma || this.coarse(c.region)));
     // Smallest sufficiently certain semantic area wins; a parent remains the fallback for noisy fine targets.
     eligible.sort((a,b)=>a.region.bounds.width*a.region.bounds.height-b.region.bounds.width*b.region.bounds.height);
