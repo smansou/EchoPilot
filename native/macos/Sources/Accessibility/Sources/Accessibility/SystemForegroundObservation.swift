@@ -129,7 +129,19 @@ private final class AXElementObservationNode: AXObservationNode {
     }
 
     func observationIdentity() -> String? {
-        "ax-\(CFHash(element))"
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(element, &pid) == .success, let frame = frame(),
+              let rawWindows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else { return nil }
+        let windows: [QuartzObservationWindow] = rawWindows.compactMap { metadata in
+            guard let owner = metadata[kCGWindowOwnerPID as String] as? NSNumber, owner.int32Value == pid,
+                  let number = metadata[kCGWindowNumber as String] as? NSNumber,
+                  let bounds = metadata[kCGWindowBounds as String] as? NSDictionary,
+                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { return nil }
+            return QuartzObservationWindow(pid: owner.int32Value, number: number.uint32Value,
+                frame: ObservationFrame(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height),
+                title: metadata[kCGWindowName as String] as? String)
+        }
+        return ObservationWindowIdentity.match(pid: pid, frame: frame, title: title(), windows: windows)
     }
 
     func frame() -> ObservationFrame? {
