@@ -40,7 +40,13 @@ public struct WhisperModelPack: Sendable, Equatable {
 }
 
 public protocol LocalTranscriber: AnyObject, Sendable {
+    func prepareModels() async throws
     func transcribe(_ window: ASRWindow) async throws -> ASRWindowResult
+}
+
+public extension LocalTranscriber {
+    /// Fixture transcribers have no resident model; production overrides this with real loading.
+    func prepareModels() async throws {}
 }
 
 /// The on-disk layout of the WhisperKit pack this build runs. WhisperKit's own
@@ -285,6 +291,9 @@ public final class WhisperKitSmallEN: LocalTranscriber {
     }
 
     public let configuration: Configuration
+    #if canImport(WhisperKit)
+    private let runtime: WhisperSessionRuntime
+    #endif
 
     /// True when this build actually links the pinned WhisperKit backend. The packaged helper must
     /// report `true`; a `false` here means `transcribe(_:)` can only throw `backendUnavailable`.
@@ -308,6 +317,18 @@ public final class WhisperKitSmallEN: LocalTranscriber {
         // tokenizer loader reach the Hub at transcribe time.
         try WhisperModelPackLayout.validate(packFolder: packPath)
         self.configuration = configuration
+        #if canImport(WhisperKit)
+        self.runtime = WhisperSessionRuntime(configuration: configuration)
+        #endif
+    }
+
+    /// Loads CoreML weights and the validated local tokenizer once for this helper session.
+    public func prepareModels() async throws {
+        #if canImport(WhisperKit)
+        try await runtime.prepareModels()
+        #else
+        throw ASRError.backendUnavailable("WhisperKit is not linked into this helper")
+        #endif
     }
 
     public func transcribe(_ window: ASRWindow) async throws -> ASRWindowResult {
@@ -319,7 +340,7 @@ public final class WhisperKitSmallEN: LocalTranscriber {
             throw ASRError.unsupportedLanguage(configuration.pack.language)
         }
         #if canImport(WhisperKit)
-        return try await transcribeWithWhisperKit(window)
+        return try await runtime.transcribe(window)
         #else
         throw ASRError.backendUnavailable(
             "WhisperKit small.en is not linked into this build; run the packaged helper"
@@ -327,42 +348,4 @@ public final class WhisperKitSmallEN: LocalTranscriber {
         #endif
     }
 
-    #if canImport(WhisperKit)
-    /// Pinned WhisperKit API: `WhisperKitConfig(model:modelFolder:download:)` + word timestamps.
-    private func transcribeWithWhisperKit(_ window: ASRWindow) async throws -> ASRWindowResult {
-        let packFolder = configuration.modelDirectory.appendingPathComponent(configuration.pack.name)
-        let kit = try await WhisperKit(WhisperKitConfig(
-            model: configuration.pack.name,
-            modelFolder: packFolder.path,
-            // Pin WhisperKit's tokenizer search to the pack this helper validated. Without it the
-            // loader also searches the machine-level Hub cache (`~/Documents/huggingface`) first,
-            // where a present-but-broken tokenizer would take the same Hub-download fallback the
-            // layout check just closed off.
-            tokenizerFolder: packFolder,
-            download: false
-        ))
-        let samples = SileroVAD.floatSamples(from: window.pcm)
-        let options = DecodingOptions(
-            language: configuration.pack.language,
-            wordTimestamps: configuration.wordTimestamps
-        )
-        let results = try await kit.transcribe(audioArray: samples, decodeOptions: options)
-        let words = results
-            .flatMap(\.allWords)
-            .map { word in
-                ASRWordTimestamp(
-                    text: word.word.trimmingCharacters(in: .whitespacesAndNewlines),
-                    startMs: Int((word.start * 1_000).rounded()),
-                    endMs: Int((word.end * 1_000).rounded())
-                )
-            }
-            .filter { !$0.text.isEmpty }
-        // Trailing-silence endpointing belongs to Silero VAD; the transcriber only reports words.
-        return ASRWindowResult(
-            text: words.map(\.text).joined(separator: " "),
-            words: words,
-            endpoint: false
-        )
-    }
-    #endif
 }

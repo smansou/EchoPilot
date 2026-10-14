@@ -59,19 +59,23 @@ public struct ActionStep: Codable, Equatable, Sendable {
     public let targetFingerprint: String
     /// The requested value for `set_value`; the scroll direction for `scroll`; unused otherwise.
     public let value: String
+    /// Optional compare-before-write guard for reversible edits, bound into authorization.
+    public let expectedValue: String?
 
     public init(
         stepId: String,
         operation: AXOperation,
         targetRef: AXTargetRef,
         targetFingerprint: String,
-        value: String
+        value: String,
+        expectedValue: String? = nil
     ) {
         self.stepId = stepId
         self.operation = operation
         self.targetRef = targetRef
         self.targetFingerprint = targetFingerprint
         self.value = value
+        self.expectedValue = expectedValue
     }
 }
 
@@ -441,6 +445,7 @@ public final class DesktopActionService {
         if state.fingerprint != step.targetFingerprint {
             return .targetIdentityChanged
         }
+        if let expected = step.expectedValue, state.value != expected { return .targetIdentityChanged }
         if step.operation.acts {
             if !state.enabled { return .targetDisabled }
             if !state.focused { return .focusChanged }
@@ -589,13 +594,15 @@ public final class DesktopActionService {
                 "sensitivity": .string(scope.sensitivity.rawValue),
             ]),
             "steps": .array(steps.map { step in
-                .object([
+                var fields: [String: CanonicalJSON] = [
                     "stepId": .string(step.stepId),
                     "operation": .string(step.operation.rawValue),
                     "targetRef": .string(step.targetRef.rawValue),
                     "targetFingerprint": .string(step.targetFingerprint),
                     "value": .string(step.value),
-                ])
+                ]
+                if let expected = step.expectedValue { fields["expectedValue"] = .string(expected) }
+                return .object(fields)
             }),
         ]).encoded)
     }

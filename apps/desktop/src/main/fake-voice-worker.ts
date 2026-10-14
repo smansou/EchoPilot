@@ -47,7 +47,10 @@ input.on('line', (line) => {
           return;
         }
         transcriptIndex += 1;
-        send({ type: 'transcript', text: `hands-free exchange ${transcriptIndex}`, final: false });
+        send({ type: 'transcript', update: {
+          phase: 'final', utteranceId: `fake-utterance-${transcriptIndex}`,
+          text: `hands-free exchange ${transcriptIndex}`, words: [],
+        } });
       }, transcriptIntervalMs);
     }
     return;

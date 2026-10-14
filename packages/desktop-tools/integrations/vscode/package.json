@@ -1,0 +1,16 @@
+{
+  "name": "echopilot-selection",
+  "displayName": "EchoPilot Selection Connector",
+  "description": "Explicit local sharing of one selected editor excerpt with EchoPilot.",
+  "version": "0.1.0",
+  "publisher": "echopilot-local",
+  "engines": {"vscode": "^1.85.0"},
+  "main": "./extension.cjs",
+  "activationEvents": ["onCommand:echopilot.pair", "onCommand:echopilot.shareSelection", "onCommand:echopilot.disconnect"],
+  "capabilities": {"untrustedWorkspaces": {"supported": false}, "virtualWorkspaces": false},
+  "contributes": {"commands": [
+    {"command": "echopilot.pair", "title": "EchoPilot: Pair Local Selection Connector"},
+    {"command": "echopilot.shareSelection", "title": "EchoPilot: Review and Share Selection"},
+    {"command": "echopilot.disconnect", "title": "EchoPilot: Disconnect Selection Connector"}
+  ]}
+}

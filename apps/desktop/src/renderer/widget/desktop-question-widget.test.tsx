@@ -3,11 +3,13 @@
  *
  * The frozen oracle (`packages/desktop-tools/src/context/c01.acceptance.test.ts`) pins the service
  * seam. This file pins the half the finding was about: the widget conversation itself. It drives
- * `createWidgetDesktopRuntime` — the module `main.tsx` renders through `DesktopQuestionWidget` —
- * with the same deterministic fixture corpus, and renders the panel those answers reach, so a user
- * asking a browser-error or IDE-control question in the widget is answered without Mission Control,
- * an excluded app is refused before capture, and missing Accessibility yields the limited-context
- * sentence instead of invented control state.
+ * `createWidgetDesktopRuntime` — the C01 widget runtime main.tsx used to render through the
+ * desktop question surface — with the same deterministic fixture corpus, and renders the panel
+ * those answers reach, so a browser-error or IDE-control question is answered without Mission
+ * Control, an excluded app is refused before capture, and missing Accessibility yields the
+ * limited-context sentence instead of invented control state. The widget's own desktop affordance
+ * is now the C05 one-click inspect flow (explicitly scoped to an active Work project); the C01
+ * runtime behavior below is preserved unchanged.
  */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -30,7 +32,8 @@ import type {
   ForegroundApp,
 } from '../../../../../packages/desktop-tools/src/context/index.js';
 import { DesktopAnswerPanel } from './DesktopAnswerPanel';
-import { DesktopQuestionWidget } from './DesktopQuestionWidget';
+import { DesktopInspectWidget } from './DesktopInspectWidget';
+import type { DesktopInspectClient, DesktopScopeState } from './desktop-inspect';
 import type { DesktopAnswer } from './desktop-answer';
 import {
   createWidgetAttention,
@@ -376,19 +379,20 @@ test('C01 widget: an unconnected runtime stays at limited context and never gues
   assertNoControlStateWords(answer);
 });
 
-test('C01 widget: the widget itself renders the question surface and no Mission Control path', () => {
-  const run = widgetRun('browser-error');
-  const connected = decoded(renderToStaticMarkup(<DesktopQuestionWidget host={run.host} muted={false} />));
-  assert.ok(connected.includes('Ask about the window in front'), 'the widget shows the desktop question box');
-  assert.ok(connected.includes('placeholder="What is this?"'));
-  assert.ok(connected.includes('>Ask</button>'));
-  assert.ok(!connected.includes('Mission Control'), 'asking never routes through Mission Control');
-
-  const unconnected = decoded(renderToStaticMarkup(<DesktopQuestionWidget host={null} muted={false} />));
-  assert.ok(
-    unconnected.includes('Answers stay at limited context'),
-    'an unconnected widget says so instead of implying it can read the screen',
-  );
+test('C05 widget: the desktop affordance is the one-click inspect action, not the old question box', () => {
+  // The unfocusable text question is gone; the widget offers exactly one button instead. The
+  // scope line is the only place Mission Control is named, and only to send the user there to
+  // choose a project — the inspect action itself never routes through it.
+  const readyScope: DesktopScopeState = { kind: 'ready', projectId: 'proj-atlas', label: 'Atlas', source: 'single_active' };
+  const client: DesktopInspectClient = {
+    loadScope: async () => readyScope,
+    inspect: async () => null,
+  };
+  const markup = decoded(renderToStaticMarkup(<DesktopInspectWidget client={client} />));
+  assert.ok(markup.includes('Inspect window'), 'the widget shows the inspect action');
+  assert.ok(markup.includes('local Accessibility preview'), 'the action names what it really is');
+  assert.ok(!markup.includes('What is this?'), 'the unconnected question input is gone');
+  assert.ok(!markup.includes('>Ask</button>'), 'the old Ask button is gone');
 });
 
 test('C01 widget: a muted companion silences the same answer without replacing it', async () => {

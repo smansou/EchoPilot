@@ -40,6 +40,7 @@ export function resolveVoiceWorkerCommand(
 ): VoiceWorkerCommand | null {
   const candidates = [
     env.ECHOPILOT_VOICE_WORKER,
+    resolve(moduleDir, '../native/EchoPilotVoice.app/Contents/MacOS/echopilot-voice'),
     resolve(moduleDir, '../native/echopilot-voice'),
     resolve(process.cwd(), 'native/macos/.build/debug/echopilot-voice'),
   ];
@@ -65,8 +66,15 @@ export type VoiceWorkerHost = Readonly<{
   unload(): Promise<void>;
   /** Transcript activity: the conversation's speech, never a UI keepalive. */
   onActivity(listener: () => void): () => void;
+  onTranscript(listener: (update: VoiceTranscriptUpdate) => void): () => void;
   onFailure(listener: (message: string) => void): () => void;
   dispose(): void;
+}>;
+
+export type VoiceTranscriptUpdate = Readonly<{
+  phase: 'partial' | 'final';
+  utteranceId: string;
+  text: string;
 }>;
 
 export type VoiceWorkerOptions = Readonly<{
@@ -102,6 +110,7 @@ export function createVoiceWorkerHost(options: VoiceWorkerOptions): VoiceWorkerH
   let closing = false;
   let disposed = false;
   const activityListeners = new Set<() => void>();
+  const transcriptListeners = new Set<(update: VoiceTranscriptUpdate) => void>();
   const failureListeners = new Set<(message: string) => void>();
 
   function reportFailure(message: string): void {
@@ -151,6 +160,18 @@ export function createVoiceWorkerHost(options: VoiceWorkerOptions): VoiceWorkerH
       // Any partial or final transcript means the user is talking: that renews the session.
       for (const listener of activityListeners) {
         try { listener(); } catch { /* activity consumers are best-effort */ }
+      }
+      const value = message.update;
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        const update = value as Record<string, unknown>;
+        if ((update.phase === 'partial' || update.phase === 'final')
+          && typeof update.utteranceId === 'string' && update.utteranceId.length > 0 && update.utteranceId.length <= 128
+          && typeof update.text === 'string' && update.text.length <= 8_192) {
+          const parsed: VoiceTranscriptUpdate = { phase: update.phase, utteranceId: update.utteranceId, text: update.text };
+          for (const listener of transcriptListeners) {
+            try { listener(parsed); } catch { /* one observer cannot break microphone capture */ }
+          }
+        }
       }
       return;
     }
@@ -258,6 +279,10 @@ export function createVoiceWorkerHost(options: VoiceWorkerOptions): VoiceWorkerH
     onActivity(listener) {
       activityListeners.add(listener);
       return () => { activityListeners.delete(listener); };
+    },
+    onTranscript(listener) {
+      transcriptListeners.add(listener);
+      return () => { transcriptListeners.delete(listener); };
     },
     onFailure(listener) {
       failureListeners.add(listener);

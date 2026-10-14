@@ -37,6 +37,7 @@ export function targetStopReason(
 ): DesktopActionStopReason | null {
   if (control === null) return 'target_identity_changed';
   if (control.fingerprint !== step.targetFingerprint) return 'target_identity_changed';
+  if (step.expectedValue !== undefined && control.value !== step.expectedValue) return 'target_identity_changed';
   if (!control.enabled) return 'target_disabled';
   if (!control.focused) return 'focus_changed';
   return null;

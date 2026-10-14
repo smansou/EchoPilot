@@ -7,6 +7,10 @@ const root=process.cwd();const output=resolve(process.env.LOOP_STATE_DIR??join(r
 const tracked=spawnSync('git',['ls-files','-z'],{cwd:root,encoding:'utf8'});if(tracked.status!==0)throw new Error('Cannot inventory release sources');
 const plan=await collectChecks(root,{changedFiles:tracked.stdout.split('\0').filter(f=>f.endsWith('.swift'))});
 const report={status:'incomplete',head:spawnSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).stdout.trim(),startedAt:new Date().toISOString(),coverage:plan.coverage,missing:[...plan.missing],checks:[]};
+report.distributable=false;
+report.missing.push('Local pnpm package output is ad-hoc signed and is not a Developer ID signed/notarized/stapled release artifact. Use pnpm package:verify <app> for local app qualification.');
+const releasePolicy=JSON.parse(await readFile(join(root,'scripts/release/installers.json'),'utf8'));
+if(releasePolicy.distribution.teamIdentifier==='TEAMID')report.missing.push('Release Developer ID team and signing trust anchor have not been provisioned.');
 const pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
 if(!pkg.scripts?.package)report.missing.push('No reproducible packaging command is defined (package.json scripts.package).');
 const commands=[['pnpm','install','--frozen-lockfile','--ignore-scripts'],...plan.commands];

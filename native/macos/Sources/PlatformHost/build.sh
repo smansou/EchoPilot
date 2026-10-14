@@ -27,7 +27,9 @@ if ! command -v swift >/dev/null 2>&1; then
 fi
 
 mkdir -p "$(dirname "$output")"
-swift build --package-path "$source_dir" -c release --product PlatformHost
+mkdir -p "$source_dir/.build/module-cache"
+env CLANG_MODULE_CACHE_PATH="$source_dir/.build/module-cache" SWIFT_MODULECACHE_PATH="$source_dir/.build/module-cache" \
+  swift build --package-path "$source_dir" -c release --product PlatformHost --disable-sandbox
 cp "$source_dir/.build/release/PlatformHost" "$output"
 
 codesign --force --options runtime --timestamp=none \

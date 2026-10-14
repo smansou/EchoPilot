@@ -42,7 +42,8 @@ export function createShellTray(options: TrayOptions): ShellTray {
   function menuFor(status: WidgetSnapshot): Menu {
     const conflicts = shell.hotkeys.conflicts;
     const template: MenuItemConstructorOptions[] = [
-      { label: 'Show widget', click: options.onShowWidget },
+      { label: 'Start dictation', ...shortcut('hold-dictation'), click: () => { shell.invoke('hold-dictation'); } },
+      { label: 'Live agent', ...shortcut('toggle-conversation'), click: () => { shell.invoke('toggle-conversation'); } },
       { type: 'separator' },
       {
         label: muteControlLabel(status),

@@ -1,0 +1,33 @@
+{
+  "at": "2026-10-03T08:08:23.505Z",
+  "provider": "openrouter",
+  "speechModel": "openai/whisper-large-v3-turbo",
+  "textModel": "openai/gpt-4.1-mini",
+  "format": "webm/opus",
+  "audioBytes": 82606,
+  "transcript": "The Atlas abuses SQLite so it can work offline.",
+  "refined": "The Atlas app uses SQLite so it can work offline.",
+  "transcriptionMs": 1316,
+  "syntheticOnly": true,
+  "microphoneUsed": false,
+  "projectDataSent": false,
+  "transportPassed": true,
+  "wordingPreserved": true,
+  "initialRefinement": "The Atlas app uses SQLite extensively to enable offline support.",
+  "refinementMs": 1237,
+  "passed": true,
+  "initialPipelineMs": 2292,
+  "combinedMeasuredStageTimeMs": 2553,
+  "initialRequests": [
+    {
+      "path": "/api/v1/audio/transcriptions",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/chat/completions",
+      "status": 200
+    }
+  ],
+  "correctedIssue": "Refinement added an unsupported modifier: extensively.",
+  "strictRefinementProviderSuccess": true
+}

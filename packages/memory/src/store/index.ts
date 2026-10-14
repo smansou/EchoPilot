@@ -229,7 +229,7 @@ class SqliteMemoryStore implements MemoryStore {
    */
   async ingest(batch: NormalizedBatch, options?: IngestOptions): Promise<IngestResult> {
     this.assertOpen();
-    return this.writeBatch(await this.privacy.admit(batch), options);
+    return this.privacy.commitAdmitted(batch, options, admitted => this.writeBatch(admitted, options));
   }
 
   private async writeBatch(batch: NormalizedBatch, options?: IngestOptions): Promise<IngestResult> {
@@ -350,6 +350,33 @@ class SqliteMemoryStore implements MemoryStore {
 
     items.sort(compareTimelineItems);
     return items;
+  }
+
+  /** Dedicated bounded reader: arbitrary encrypted payloads never cross this boundary. */
+  async readDialogue(projectId: string, options: { limit: number; maxQuestionChars: number; maxAnswerChars: number }) {
+    this.assertOpen();
+    if (typeof projectId !== 'string' || !projectId || projectId.length > 256
+      || !Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 4
+      || !Number.isSafeInteger(options.maxQuestionChars) || options.maxQuestionChars < 1 || options.maxQuestionChars > 1_000
+      || !Number.isSafeInteger(options.maxAnswerChars) || options.maxAnswerChars < 1 || options.maxAnswerChars > 2_000) throw new TypeError('Invalid dialogue read bound.');
+    const binding = this.readProject(projectId);
+    if (!binding) return [];
+    const rows = this.query(`SELECT e.event_id, e.occurred_at, e.envelope, p.content FROM ${binding.ref}.events e
+      JOIN ${binding.ref}.payloads p ON p.event_id = e.event_id
+      WHERE e.source_id = 'desktop:companion-dialogue' AND e.trust = 'agent_reported'
+      ORDER BY e.occurred_at DESC, e.event_id DESC LIMIT ?`, options.limit);
+    const result: import('./types.js').StoredDialogue[] = [];
+    for (const row of rows) {
+      const event = this.decryptJson<NormalizedEvent>(binding, row.envelope, 'dialogue envelope');
+      const payload = this.decryptJson<unknown>(binding, row.content, 'dialogue payload');
+      if (event.scope.projectId !== projectId || event.sourceId !== 'desktop:companion-dialogue' || event.trust !== 'agent_reported'
+        || !isRecord(payload) || payload.recordType !== 'companion-dialogue-v1'
+        || typeof payload.question !== 'string' || typeof payload.answer !== 'string'
+        || !payload.question.trim() || !payload.answer.trim()
+        || payload.question.length > options.maxQuestionChars || payload.answer.length > options.maxAnswerChars) continue;
+      result.push({ eventId: String(row.event_id), projectId, occurredAt: String(row.occurred_at), question: payload.question, answer: payload.answer });
+    }
+    return result.reverse();
   }
 
   async durableCursor(): Promise<string> {

@@ -26,109 +26,125 @@ let protocolVersion = 1
 let outputLock = NSLock()
 
 func writeFrame(_ object: [String: Any]) {
-    guard let data = try? JSONSerialization.data(withJSONObject: object),
-          var text = String(data: data, encoding: .utf8)
-    else { return }
-    text.append("\n")
-    outputLock.lock()
-    defer { outputLock.unlock() }
-    FileHandle.standardOutput.write(Data(text.utf8))
+  guard let data = try? JSONSerialization.data(withJSONObject: object),
+    var text = String(data: data, encoding: .utf8)
+  else { return }
+  text.append("\n")
+  outputLock.lock()
+  defer { outputLock.unlock() }
+  FileHandle.standardOutput.write(Data(text.utf8))
 }
 
 func writeError(_ code: String, _ message: String) {
-    writeFrame([
-        "type": "error",
-        "protocolVersion": protocolVersion,
-        "error": ["code": code, "message": message],
-    ])
+  writeFrame([
+    "type": "error",
+    "protocolVersion": protocolVersion,
+    "error": ["code": code, "message": message],
+  ])
 }
 
 func writeStatus(_ session: VoiceTracerBridge) {
-    writeFrame([
-        "type": "status",
-        "protocolVersion": protocolVersion,
-        "status": session.status().jsonObject,
-    ])
+  writeFrame([
+    "type": "status",
+    "protocolVersion": protocolVersion,
+    "status": session.status().jsonObject,
+  ])
 }
 
 /// Runs one async session call to completion on the command thread; the widget is never left
 /// waiting on a capture release that never returns.
 func perform(_ work: @escaping () async -> Void) {
-    let done = DispatchSemaphore(value: 0)
-    Task {
-        await work()
-        done.signal()
-    }
-    done.wait()
+  let done = DispatchSemaphore(value: 0)
+  // Top-level executable code may inherit MainActor. The command thread waits synchronously,
+  // so the async work must start on the cooperative executor instead of that blocked actor.
+  Task.detached {
+    await work()
+    done.signal()
+  }
+  done.wait()
 }
 
-let configuration: VoiceHostConfiguration
-do {
+// Keep async closures out of top-level MainActor inference: this stdio host has no UI actor.
+func runHost() {
+  let configuration: VoiceHostConfiguration
+  do {
     configuration = try VoiceHostConfiguration.fromEnvironment()
-} catch {
+  } catch {
     writeError("model_pack_missing", "\(error)")
     exit(2)
-}
+  }
 
-let session: VoiceTracerBridge
-do {
+  let session: VoiceTracerBridge
+  do {
     session = try VoiceSessionBootstrap.makeLocalSession(configuration)
-} catch {
+  } catch {
     writeError("model_pack_missing", "\(error)")
     exit(2)
-}
+  }
 
-_ = session.subscribe { update in
+  _ = session.subscribe { update in
     writeFrame([
-        "type": "transcript",
-        "protocolVersion": protocolVersion,
-        "update": update.jsonObject,
+      "type": "transcript",
+      "protocolVersion": protocolVersion,
+      "update": update.jsonObject,
     ])
-}
+  }
 
-writeFrame([
+  var modelLoadError: Error?
+  perform {
+    do { try await session.prepareModels() } catch { modelLoadError = error }
+  }
+  if let modelLoadError {
+    writeError("model_load_failed", "\(modelLoadError)")
+    exit(2)
+  }
+
+  writeFrame([
     "type": "hello",
     "protocolVersion": protocolVersion,
     "capabilities": ["voice.session", "voice.mute"],
     "status": session.status().jsonObject,
-])
+  ])
 
-while let line = readLine(strippingNewline: true) {
+  while let line = readLine(strippingNewline: true) {
     let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty { continue }
     guard
-        let data = trimmed.data(using: .utf8),
-        let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let type = object["type"] as? String
+      let data = trimmed.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let type = object["type"] as? String
     else {
-        writeError("invalid_command", "expected a JSON object with a 'type' field")
-        continue
+      writeError("invalid_command", "expected a JSON object with a 'type' field")
+      continue
     }
 
     switch type {
     case "start":
-        perform { await session.start() }
-        writeStatus(session)
+      perform { await session.start() }
+      writeStatus(session)
     case "mute":
-        perform { await session.mute() }
-        writeStatus(session)
+      perform { await session.mute() }
+      writeStatus(session)
     case "status":
-        writeStatus(session)
+      writeStatus(session)
     case "transcript":
-        writeFrame([
-            "type": "transcript",
-            "protocolVersion": protocolVersion,
-            "committed": session.transcript().map(\.jsonObject),
-        ])
+      writeFrame([
+        "type": "transcript",
+        "protocolVersion": protocolVersion,
+        "committed": session.transcript().map(\.jsonObject),
+      ])
     case "close", "quit":
-        perform { await session.close() }
-        writeStatus(session)
-        exit(0)
+      perform { await session.close() }
+      writeStatus(session)
+      exit(0)
     default:
-        writeError("invalid_command", "unknown command '\(type)'")
+      writeError("invalid_command", "unknown command '\(type)'")
     }
+  }
+
+  // stdin closed: release capture and exit cleanly.
+  perform { await session.close() }
+  writeStatus(session)
 }
 
-// stdin closed: release capture and exit cleanly.
-perform { await session.close() }
-writeStatus(session)
+runHost()

@@ -1,0 +1,13 @@
+{
+  "": {
+    "dependencies": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeFeaturesTests.build/GazeFeaturesTests.d",
+    "object": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeFeaturesTests.build/GazeFeaturesTests.o",
+    "swift-dependencies": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeFeaturesTests.build/primary.swiftdeps"
+  },
+  "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/Tests/GazeFeaturesTests/PupilFeaturesTests.swift": {
+    "object": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeFeaturesTests.build/PupilFeaturesTests.swift.o",
+    "swiftmodule": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeFeaturesTests.build/PupilFeaturesTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeFeaturesTests.build/PupilFeaturesTests.swiftdeps",
+    "diagnostics": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeFeaturesTests.build/PupilFeaturesTests.dia"
+  }
+}

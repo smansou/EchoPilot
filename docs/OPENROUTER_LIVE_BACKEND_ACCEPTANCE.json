@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-03T03:44:17.827Z",
+  "model": "openai/gpt-4.1-mini",
+  "provider": "openrouter",
+  "durationMs": 4033,
+  "tools": [
+    "list_sessions",
+    "research_session"
+  ],
+  "answer": "In the Atlas coding session, we selected SQLite over Redis because the app must work offline, which SQLite supports. Redis requires a running server, making it unsuitable for offline use. These facts come from synthetic fixture details in the session. Would you like me to locate any specific code or notes from that session?",
+  "syntheticOnly": true,
+  "microphoneUsed": false,
+  "projectDataSent": false,
+  "passed": true
+}

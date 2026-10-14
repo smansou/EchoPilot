@@ -95,6 +95,11 @@ public final class VoiceTracerBridge: @unchecked Sendable {
         )
     }
 
+    /// Establishes actual model residency before the helper acknowledges its authenticated hello.
+    public func prepareModels() async throws {
+        try await transcriber.prepareModels()
+    }
+
     public func start() async {
         // Mute and close are capture guarantees, not just pipeline pauses: a session that was
         // already muted (or already closed) must never open the microphone graph later, no matter

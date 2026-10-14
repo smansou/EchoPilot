@@ -93,14 +93,22 @@ public final class SileroVAD {
             // with the signed build is used, so production never depends on the test-only energy
             // stand-in.
             if let backend = SileroVADBackendRegistry.makeBackend() {
-                try backend.load(from: directory)
-                self.model = backend
-                return
+                do {
+                    try backend.load(from: directory)
+                    self.model = backend
+                    return
+                } catch {
+                    if !configuration.allowEnergyFallback { throw error }
+                }
             }
             if SileroVADModelPack.isPack(at: directory), let backend = SileroVADProductionBackend.make() {
-                try backend.load(from: directory)
-                self.model = backend
-                return
+                do {
+                    try backend.load(from: directory)
+                    self.model = backend
+                    return
+                } catch {
+                    if !configuration.allowEnergyFallback { throw error }
+                }
             }
         }
         if configuration.allowEnergyFallback {
@@ -218,10 +226,8 @@ public enum SileroVADProductionBackend {
 }
 
 #if canImport(CoreML)
-/// CoreML Silero v5 backend. Inputs: `input` (1 × 512 audio), `state` (2 × 1 × 128 recurrent
-/// state) and `sr` (16 kHz sample rate); outputs: `output` (speech probability) and `stateN`
-/// (next recurrent state). A pack without recurrent state still works: the backend then runs
-/// stateless, exactly like the v4 pack.
+/// CoreML Silero streaming backend, including v5 combined state and the pinned v6.2.1
+/// conversion's 64-sample left context plus separate LSTM hidden/cell tensors.
 public final class SileroVADCoreMLBackend: SileroVADModel {
     private static let stateShape: [NSNumber] = [2, 1, 128]
 
@@ -233,6 +239,10 @@ public final class SileroVADCoreMLBackend: SileroVADModel {
     private var stateInputName: String?
     private var stateOutputName: String?
     private var sampleRateInputName: String?
+    private var audioShape: [NSNumber] = [1, 512]
+    private var audioDataType: MLMultiArrayDataType = .float32
+    private var context: [Float] = []
+    private var splitStates: [String: MLMultiArray] = [:]
 
     public init() {}
 
@@ -258,7 +268,7 @@ public final class SileroVADCoreMLBackend: SileroVADModel {
         else {
             throw SileroVADError.backendUnavailable("the Silero pack declares no audio input")
         }
-        let probabilityOutput = ["output", "prob", "speech"].first(where: { outputs[$0] != nil })
+        let probabilityOutput = ["output", "probability", "prob", "speech"].first(where: { outputs[$0] != nil })
             ?? outputs.keys.sorted().first ?? "output"
         let nextStateOutput = ["stateN", "state_out", "state_out_0"].first(where: { outputs[$0] != nil })
         let recurrentStateInput = ["state", "state_in", "state_in_0"].first(where: { inputs[$0] != nil })
@@ -271,6 +281,23 @@ public final class SileroVADCoreMLBackend: SileroVADModel {
         stateInputName = recurrentStateInput
         stateOutputName = nextStateOutput
         sampleRateInputName = inputs["sr"] != nil ? "sr" : nil
+        if let constraint = inputs[audioInput]?.multiArrayConstraint {
+            audioShape = constraint.shape
+            audioDataType = constraint.dataType
+        }
+        let inputSamples = audioShape.last?.intValue ?? 512
+        guard inputSamples == 512 || inputSamples == 576 else {
+            throw SileroVADError.backendUnavailable("Silero requires a 512-sample streaming model, received \(inputSamples) input samples")
+        }
+        context = Array(repeating: 0, count: max(0, inputSamples - 512))
+        splitStates.removeAll()
+        for name in ["h", "c"] {
+            if let constraint = inputs[name]?.multiArrayConstraint {
+                let fresh = try MLMultiArray(shape: constraint.shape, dataType: constraint.dataType)
+                zero(fresh)
+                splitStates[name] = fresh
+            }
+        }
         if recurrentStateInput != nil {
             let fresh = try MLMultiArray(shape: Self.stateShape, dataType: .float32)
             zero(fresh)
@@ -283,8 +310,9 @@ public final class SileroVADCoreMLBackend: SileroVADModel {
     public func reset() {
         lock.lock()
         defer { lock.unlock() }
-        guard let state else { return }
-        zero(state)
+        if let state { zero(state) }
+        for value in splitStates.values { zero(value) }
+        context = Array(repeating: 0, count: context.count)
     }
 
     public func speechProbability(samples: [Float]) throws -> Double {
@@ -294,14 +322,18 @@ public final class SileroVADCoreMLBackend: SileroVADModel {
             throw SileroVADError.backendUnavailable("the Silero pack is not loaded")
         }
 
-        let audio = try MLMultiArray(shape: [1, NSNumber(value: samples.count)], dataType: .float32)
-        let audioPointer = audio.dataPointer.bindMemory(to: Float32.self, capacity: samples.count)
-        for index in 0..<samples.count { audioPointer[index] = samples[index] }
+        guard samples.count == 512 else {
+            throw SileroVADError.backendUnavailable("Silero streaming frames must contain 512 samples")
+        }
+        let framed = context + samples
+        let audio = try MLMultiArray(shape: audioShape, dataType: audioDataType)
+        for index in framed.indices { audio[index] = NSNumber(value: framed[index]) }
 
         var features: [String: MLFeatureValue] = [inputName: MLFeatureValue(multiArray: audio)]
         if let stateInputName, let state {
             features[stateInputName] = MLFeatureValue(multiArray: state)
         }
+        for (name, value) in splitStates { features[name] = MLFeatureValue(multiArray: value) }
         if let sampleRateInputName {
             let rate = try MLMultiArray(shape: [1], dataType: .int32)
             rate[0] = NSNumber(value: PCMPacket.sampleRate)
@@ -312,6 +344,13 @@ public final class SileroVADCoreMLBackend: SileroVADModel {
         if let stateOutputName, let next = prediction.featureValue(for: stateOutputName)?.multiArrayValue {
             state = next
         }
+        for name in Array(splitStates.keys) {
+            guard let next = prediction.featureValue(for: "\(name)_out")?.multiArrayValue else {
+                throw SileroVADError.backendUnavailable("Silero produced no recurrent \(name) state")
+            }
+            splitStates[name] = next
+        }
+        if !context.isEmpty { context = Array(samples.suffix(context.count)) }
         guard let probability = prediction.featureValue(for: outputName)?.multiArrayValue,
               probability.count > 0
         else {
@@ -321,8 +360,7 @@ public final class SileroVADCoreMLBackend: SileroVADModel {
     }
 
     private func zero(_ array: MLMultiArray) {
-        let pointer = array.dataPointer.bindMemory(to: Float32.self, capacity: array.count)
-        for index in 0..<array.count { pointer[index] = 0 }
+        for index in 0..<array.count { array[index] = 0 }
     }
 }
 #endif

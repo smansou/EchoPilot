@@ -90,7 +90,7 @@ export const WIDGET_FALLBACK_CONTROLS: ReadonlyArray<WidgetControl> = Object.fre
 
 const HOTKEY_ACTION_LABELS: Record<HotkeyAction, string> = Object.freeze({
   'toggle-conversation': 'Toggle conversation',
-  'hold-dictation': 'Hold to dictate',
+  'hold-dictation': 'Toggle dictation capture',
   'mute-microphone': 'Mute microphone',
   'stop-speech': 'Stop speech',
   replay: 'Replay latest',

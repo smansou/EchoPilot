@@ -1,0 +1,25 @@
+{
+  "": {
+    "dependencies": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/GazeCamera.d",
+    "object": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/GazeCamera.o",
+    "swift-dependencies": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/primary.swiftdeps"
+  },
+  "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/Sources/GazeCamera/CameraFrameDelegate.swift": {
+    "object": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/CameraFrameDelegate.swift.o",
+    "swiftmodule": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/CameraFrameDelegate~partial.swiftmodule",
+    "swift-dependencies": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/CameraFrameDelegate.swiftdeps",
+    "diagnostics": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/CameraFrameDelegate.dia"
+  },
+  "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/Sources/GazeCamera/CameraWorker.swift": {
+    "object": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/CameraWorker.swift.o",
+    "swiftmodule": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/CameraWorker~partial.swiftmodule",
+    "swift-dependencies": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/CameraWorker.swiftdeps",
+    "diagnostics": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/CameraWorker.dia"
+  },
+  "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/Sources/GazeCamera/GazeMain.swift": {
+    "object": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/GazeMain.swift.o",
+    "swiftmodule": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/GazeMain~partial.swiftmodule",
+    "swift-dependencies": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/GazeMain.swiftdeps",
+    "diagnostics": "/Users/sobhi/Documents/ChatGPT/EchoPilot/.worktrees/complete-app/native/macos/Sources/Gaze/.build/arm64-apple-macosx/release/GazeCamera.build/GazeMain.dia"
+  }
+}

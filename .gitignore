@@ -7,6 +7,16 @@ dist/
 *.log
 coverage/
 artifacts/
+artifacts/local-app/
 .pnpm-store/
 .runner/
 .loop/
+native/macos/.build/
+native/macos/.swiftpm/
+models/asr/small.en/
+models/asr/silero_vad.mlmodelc/
+models/asr/.cache/
+models/asr/.vendor-*/
+models/pocket-tts/
+models/reasoner/
+workers/pocket-tts/python/

@@ -1,0 +1,47 @@
+{
+  "at": "2026-10-04T17:04:17.845Z",
+  "displays": [
+    {
+      "label": "Built-in display",
+      "internal": true,
+      "width": 1512,
+      "height": 982
+    },
+    {
+      "label": "DELL P2419H",
+      "internal": false,
+      "width": 1920,
+      "height": 1080
+    }
+  ],
+  "checks": [
+    {
+      "name": "failed overlay load stops host and releases window",
+      "passed": true
+    },
+    {
+      "name": "cancel during load cannot install a stale timer or window",
+      "passed": true
+    },
+    {
+      "name": "concurrent start owns one host and one window",
+      "passed": true
+    },
+    {
+      "name": "unexpected window closure releases host",
+      "passed": true
+    },
+    {
+      "name": "missing-pupils shows retry message and releases camera authority",
+      "passed": true
+    },
+    {
+      "name": "rejected-calibration shows retry message and releases camera authority",
+      "passed": true
+    }
+  ],
+  "cameraUsed": false,
+  "microphoneUsed": false,
+  "screenCaptured": false,
+  "passed": true
+}

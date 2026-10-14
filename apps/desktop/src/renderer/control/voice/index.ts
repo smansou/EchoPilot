@@ -268,8 +268,13 @@ export const VOICE_DISABLED_STATUS: VoiceControlStatus = Object.freeze({
 export function createHttpVoicePort(href: string = globalThis.location?.href ?? "echo://app/index.html"): VoiceControlPort {
   async function request(name: string, init?: RequestInit): Promise<VoiceControlStatus> {
     const response = await fetch(new URL(name, href), { cache: "no-store", ...init });
-    if (!response.ok) throw new Error(`Voice route ${name} returned ${response.status}`);
-    return parseVoiceStatus(await response.json());
+    const payload: unknown = await response.json();
+    if (!response.ok) {
+      const reason = typeof payload === 'object' && payload !== null
+        ? (payload as { error?: unknown }).error : undefined;
+      throw new Error(typeof reason === 'string' ? reason : `Voice route ${name} returned ${response.status}`);
+    }
+    return parseVoiceStatus(payload);
   }
   return {
     fetchStatus: () => request("voice-status"),

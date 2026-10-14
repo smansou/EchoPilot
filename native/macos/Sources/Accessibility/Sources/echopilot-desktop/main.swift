@@ -7,7 +7,7 @@ import Foundation
 // request carries the scope and the granted proposal, and `DesktopActionService` applies the
 // lifecycle — proposal, grant, per-step preflight, one AX step, read-back verification, cancel.
 //
-// Requests (one line each, `scope` required on `propose`):
+// Requests (one line each, `scope` required on `propose` and `observe`):
 //   {"operation":"status"}
 //   {"operation":"propose","scope":{...},"actionId":"...","idempotencyKey":"...",
 //    "utterance":{"utteranceId":"...","text":"..."},"effect":"local_write",
@@ -18,7 +18,16 @@ import Foundation
 //   {"operation":"cancel","proposalId":"..."}
 //   {"operation":"inspect","targetRef":"ax:<pid>:<path>"}
 //   {"operation":"argument-hash","scope":{...},"actionId":"...","effect":"local_write","steps":[...]}
+//   {"operation":"observe","scope":{...}}
 // Responses: {"ok":true,"result":...} or {"ok":false,"error":"..."}.
+//
+// `observe` is the read-only foreground seam: it requires an explicit scope with a nonempty
+// projectId, performs one NSWorkspace/AXUIElement read of the frontmost non-EchoPilot window, and
+// returns a bounded evidence snapshot. It never writes AX state, moves the pointer, sends keys,
+// captures pixels, recognizes text, polls, or touches the network. The failing cases keep the
+// current framing and stay distinguishable by their stable prefixes: `observe:accessibility_denied`,
+// `observe:excluded_application:<bundleId>`, `observe:no_window:<reason>`, and
+// `observe:empty_evidence:<bundleId>`.
 
 /// A request line. Unknown fields are ignored; missing fields for an operation are reported as an
 /// error response rather than a crash, so the host always gets one answer per request.
@@ -32,6 +41,8 @@ private struct Request: Decodable {
     let steps: [ActionStep]?
     let proposalId: String?
     let targetRef: AXTargetRef?
+    let x: Double?
+    let y: Double?
 }
 
 private struct Response: Encodable {
@@ -63,6 +74,25 @@ private struct HashReport: Encodable {
     let argumentHash: String
 }
 
+private struct FocusedTargetReport: Encodable {
+    let selection: [String: Int]?
+    let targetRef: AXTargetRef
+    let state: AXControlState
+}
+
+/// The observation policy for this helper: EchoPilot's own bundle identifiers are excluded by
+/// default, and the helper adds its own bundle id plus its own and its parent's process id, so a
+/// frontmost EchoPilot window (including a development Electron run) is never observed.
+private let observationPolicy: ForegroundObservationPolicy = {
+    var policy = ForegroundObservationPolicy()
+    if let ownBundle = Bundle.main.bundleIdentifier?.lowercased(), !ownBundle.isEmpty {
+        policy.excludedBundleIdentifiers.insert(ownBundle)
+    }
+    policy.excludedProcessIdentifiers.insert(ProcessInfo.processInfo.processIdentifier)
+    policy.excludedProcessIdentifiers.insert(getppid())
+    return policy
+}()
+
 /// One service per explicit scope, so a proposal can never be advanced under another project.
 private final class DesktopHost {
     private let driver = SystemAXDriver()
@@ -93,6 +123,10 @@ private let encoder: JSONEncoder = {
 
 private let decoder = JSONDecoder()
 private let host = DesktopHost()
+private let observer = ForegroundObserver(
+    source: SystemForegroundObservationSource(),
+    policy: observationPolicy
+)
 private let maxRequestBytes = 64 * 1024
 
 private func require<T>(_ value: T?, _ field: String) throws -> T {
@@ -105,6 +139,16 @@ private func require<T>(_ value: T?, _ field: String) throws -> T {
 private func handle(_ line: String) throws -> Data {
     let request = try decoder.decode(Request.self, from: Data(line.utf8))
     switch request.operation {
+    case "target-at-point":
+        let driver = SystemAXDriver()
+        guard let target = try driver.targetAtPoint(x: require(request.x, "x"), y: require(request.y, "y")), let state = try driver.inspect(target) else { return try Response.failure("unsupported_target", encoder: encoder) }
+        return try Response.success(FocusedTargetReport(selection: nil, targetRef: target, state: state), encoder: encoder)
+    case "focused-target", "focused-control":
+        let driver = SystemAXDriver()
+        guard let target = try driver.focusedTarget(editableOnly: request.operation == "focused-target"), let state = try driver.inspect(target) else {
+            return try Response.failure("unsupported_target", encoder: encoder)
+        }
+        return try Response.success(FocusedTargetReport(selection: try driver.selectionRange(target), targetRef: target, state: state), encoder: encoder)
     case "status":
         return try Response.success(StatusReport(permission: SystemAXDriver.permissionStatus), encoder: encoder)
     case "propose":
@@ -142,6 +186,15 @@ private func handle(_ line: String) throws -> Data {
             return try Response.failure("target does not exist", encoder: encoder)
         }
         return try Response.success(state, encoder: encoder)
+    case "observe":
+        let scope = try require(request.scope, "scope")
+        let outcome = try observer.observe(scope: scope)
+        switch outcome {
+        case let .evidence(evidence):
+            return try Response.success(evidence, encoder: encoder)
+        default:
+            return try Response.failure(outcome.failureText ?? "observe:failed", encoder: encoder)
+        }
     case "argument-hash":
         let scope = try require(request.scope, "scope")
         let service = host.service(for: scope)

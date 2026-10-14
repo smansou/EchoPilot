@@ -80,6 +80,12 @@ export type CodexHarnessInfo = Readonly<{
 
 export type CodexHarnessAdapter = HarnessAdapter & {
   info(): Promise<CodexHarnessInfo>;
+  accountStatus(): Promise<Readonly<{ authenticated: boolean; mode: string | null }>>;
+  beginChatGPTLogin(): Promise<Readonly<{ loginId: string; authUrl: string }>>;
+  /** Resolve a completed agent-message reference for this managed session only. */
+  readAgentMessage(payloadRef: string): string | null;
+  /** Resolve a bounded server error/warning without exposing arbitrary tool output. */
+  readDiagnosticMessage(payloadRef: string): string | null;
 };
 
 type JsonRpcId = number | string;
@@ -213,6 +219,8 @@ export class CodexAppServerHarnessAdapter implements CodexHarnessAdapter {
   private readonly pendingApprovals = new Map<string, PendingApproval>();
   private readonly managedThreadIds = new Set<string>();
   private readonly diagnosticLog: string[] = [];
+  private readonly agentMessages = new Map<string, string>();
+  private readonly diagnosticMessages = new Map<string, string>();
 
   private child?: ChildProcess;
   private stdoutBuffer = '';
@@ -247,6 +255,35 @@ export class CodexAppServerHarnessAdapter implements CodexHarnessAdapter {
       compatible: this.compatible,
       capabilities: [...(await this.capabilities())],
     };
+  }
+
+  readAgentMessage(payloadRef: string): string | null {
+    return this.agentMessages.get(payloadRef) ?? null;
+  }
+
+  readDiagnosticMessage(payloadRef: string): string | null {
+    return this.diagnosticMessages.get(payloadRef) ?? null;
+  }
+
+  async accountStatus(): Promise<Readonly<{ authenticated: boolean; mode: string | null }>> {
+    const response = asRecord(await this.request(METHODS.accountRead, { refreshToken: false }));
+    const account = asRecord(response.account);
+    const mode = readString(account, 'type') ?? null;
+    return { authenticated: mode !== null || response.requiresOpenaiAuth === false, mode };
+  }
+
+  async beginChatGPTLogin(): Promise<Readonly<{ loginId: string; authUrl: string }>> {
+    const response = asRecord(await this.request(METHODS.accountLoginStart, {
+      type: 'chatgpt', useHostedLoginSuccessPage: true, appBrand: 'codex',
+    }));
+    const loginId = readString(response, 'loginId');
+    const authUrl = readString(response, 'authUrl');
+    if (response.type !== 'chatgpt' || !loginId || !authUrl) throw new Error('Codex did not return a browser sign-in URL.');
+    const parsed = new URL(authUrl);
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'chatgpt.com') {
+      throw new Error('Codex returned an unexpected sign-in destination.');
+    }
+    return { loginId, authUrl };
   }
 
   async capabilities(): Promise<ReadonlySet<HarnessCapability>> {
@@ -430,7 +467,9 @@ export class CodexAppServerHarnessAdapter implements CodexHarnessAdapter {
 
   private async ensureThread(): Promise<string> {
     if (this.threadId !== undefined) return this.threadId;
-    const response = asRecord(await this.request(METHODS.threadStart, { cwd: this.options.cwd }));
+    // The pinned 0.154.0 ThreadStartParams schema advertises ephemeral. Managed conversations
+    // stay in the child process and never create Codex rollout history in the isolated home.
+    const response = asRecord(await this.request(METHODS.threadStart, { cwd: this.options.cwd, ephemeral: true }));
     const threadId = readString(asRecord(response.thread), 'id');
     if (threadId === undefined) {
       throw new Error('The app-server did not return a thread id for thread/start');
@@ -642,6 +681,9 @@ export class CodexAppServerHarnessAdapter implements CodexHarnessAdapter {
   ): void {
     // Known methods that have no normalized shape are preserved too: diagnostics survive, content does not.
     const known = isKnownServerNotification(method) ? 'known-but-unmapped' : 'unknown-to-schema';
+    const message = method === 'error' || method === 'warning'
+      ? readString(asRecord(params.error), 'message') ?? readString(params, 'message')
+      : undefined;
     this.emit({
       kind: 'unsupported',
       unsupportedKind: method,
@@ -650,7 +692,7 @@ export class CodexAppServerHarnessAdapter implements CodexHarnessAdapter {
       turnId: readString(params, 'turnId'),
       sourceEventId: `${method}#${this.receivedMessages}`,
       refSuffix: `unsupported/${encodeURIComponent(method)}`,
-      payload: { method, known },
+      payload: { method, known, ...(message === undefined ? {} : { message }) },
       ...overrides,
     });
   }
@@ -664,6 +706,18 @@ export class CodexAppServerHarnessAdapter implements CodexHarnessAdapter {
     const scope: Scope = event.threadId === undefined
       ? { ...this.scope }
       : { ...this.scope, sessionId: event.threadId };
+    const payloadRef = `codex-app-server://${this.shortId}/${event.refSuffix}`;
+    // The event bus stays reference-only. Only a completed, public agent message can be resolved
+    // by the owning desktop session; reasoning, tool output and user text never enter this map.
+    if (event.kind === 'agent_message' && typeof event.payload.text === 'string') {
+      this.agentMessages.set(payloadRef, event.payload.text.slice(0, 16_000));
+      if (this.agentMessages.size > 80) this.agentMessages.delete(this.agentMessages.keys().next().value!);
+    }
+    if (event.kind === 'unsupported' && (event.unsupportedKind === 'error' || event.unsupportedKind === 'warning')
+      && typeof event.payload.message === 'string') {
+      this.diagnosticMessages.set(payloadRef, event.payload.message.slice(0, 500));
+      if (this.diagnosticMessages.size > 80) this.diagnosticMessages.delete(this.diagnosticMessages.keys().next().value!);
+    }
     const envelope: EventEnvelope = {
       schemaVersion: 1,
       eventId: `${this.sourceId}:${ingestSequence}`,
@@ -675,7 +729,7 @@ export class CodexAppServerHarnessAdapter implements CodexHarnessAdapter {
       observedAt,
       scope,
       kind: event.kind,
-      payloadRef: `codex-app-server://${this.shortId}/${event.refSuffix}`,
+      payloadRef,
       contentHash: createHash('sha256').update(JSON.stringify(event.payload)).digest('hex'),
       trust: event.trust,
       ...(event.turnId === undefined ? {} : { turnId: event.turnId }),

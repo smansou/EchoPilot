@@ -51,6 +51,7 @@ export type DesktopActionStep = Readonly<{
   targetRef: string;
   targetFingerprint: string;
   value: string;
+  expectedValue?: string;
 }>;
 
 /** A voice request becomes this proposal; a proposal never executes by itself. */

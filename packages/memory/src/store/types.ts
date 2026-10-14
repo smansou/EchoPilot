@@ -9,6 +9,8 @@ export interface NormalizedBatch {
 }
 
 export interface IngestOptions {
+  /** Process-private capture scope, separate from the source's real session identity. */
+  privateSessionId?: string | null;
   /** Fault-injection seam: throwing here simulates a crash immediately before COMMIT. */
   onBeforeCommit?: () => void;
 }
@@ -34,7 +36,9 @@ export interface TimelineQuery {
   text?: string;
 }
 
+export type StoredDialogue = Readonly<{ eventId: string; projectId: string; occurredAt: string; question: string; answer: string }>;
 export interface MemoryStore {
+  readDialogue?(projectId: string, options: { limit: number; maxQuestionChars: number; maxAnswerChars: number }): Promise<StoredDialogue[]>;
   ingest(batch: NormalizedBatch, options?: IngestOptions): Promise<IngestResult>;
   timeline(query: TimelineQuery): Promise<TimelineItem[]>;
   durableCursor(): Promise<string>;

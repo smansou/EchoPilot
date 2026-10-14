@@ -2,7 +2,7 @@
 import PackageDescription
 
 // The V01 local-ASR half is a SwiftPM package of its own: Silero VAD, WhisperKit small.en, the
-// rolling window planner and the session bridge. It depends on the Audio package next to it (the
+// rolling window planner, per-session resident WhisperKit runtime and session bridge. It depends on the Audio package next to it (the
 // packetizer and bounded ring live there) and on WhisperKit itself, so the local engine is a real
 // linked backend here and not only behind a `canImport` that never fires.
 //

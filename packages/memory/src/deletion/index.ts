@@ -70,6 +70,8 @@ export type ForgetReceipt = Readonly<{
 }>;
 
 export interface MemoryDeletion {
+  /** Serialize admission and commit with forget, preventing a late admitted batch resurrecting it. */
+  commitAdmitted<T>(batch: NormalizedBatch, options: IngestOptions | undefined, write: (batch: NormalizedBatch) => Promise<T>): Promise<T>;
   /**
    * The profile's private-session registry. Sessions opened here are enforced at the storage
    * boundary (`admit`), so a capture from an open session is buffered in memory and never written
@@ -83,7 +85,7 @@ export interface MemoryDeletion {
    * may reach durable storage. The M01 production store applies this inside its own `ingest`, which
    * is why an ordinary importer or live capture path cannot bypass the user's choice.
    */
-  admit(batch: NormalizedBatch): Promise<NormalizedBatch>;
+  admit(batch: NormalizedBatch, options?: { privateSessionId?: string | null }): Promise<NormalizedBatch>;
   /** Removes the chosen lineage, condenses derived state and records the tombstones. */
   forget(request: ForgetRequest): Promise<ForgetReceipt>;
   /** Every identity this profile suppresses, newest last. */
@@ -298,12 +300,13 @@ function privateText(payload: unknown): string {
   }
 }
 
+const profileMutations = new Map<string, Promise<unknown>>();
+
 class SqliteMemoryDeletion implements MemoryDeletion {
   readonly privateSessions: MemoryPrivateSessions;
   private readonly directory: string;
   private readonly now: () => Date;
   private ledger: TombstoneLedger | null = null;
-  private pending: Promise<unknown> = Promise.resolve();
 
   constructor(options: CreateMemoryDeletionOptions) {
     this.directory = options.directory;
@@ -354,9 +357,15 @@ class SqliteMemoryDeletion implements MemoryDeletion {
 
   /** Serializes mutations so two forgets cannot interleave their ledger read-modify-write. */
   private serialized<T>(job: () => Promise<T>): Promise<T> {
-    const run = this.pending.then(job);
-    this.pending = run.then(() => undefined, () => undefined);
+    const run = (profileMutations.get(this.directory) ?? Promise.resolve()).then(job);
+    const settled = run.then(() => undefined, () => undefined);
+    profileMutations.set(this.directory, settled);
+    void settled.then(() => { if (profileMutations.get(this.directory) === settled) profileMutations.delete(this.directory); });
     return run;
+  }
+
+  commitAdmitted<T>(batch: NormalizedBatch, options: IngestOptions | undefined, write: (batch: NormalizedBatch) => Promise<T>): Promise<T> {
+    return this.serialized(async () => write(await this.admit(batch, options)));
   }
 
   async forget(request: ForgetRequest): Promise<ForgetReceipt> {
@@ -445,7 +454,7 @@ class SqliteMemoryDeletion implements MemoryDeletion {
       && (entry.sourceEventIds.length === 0 || entry.sourceEventIds.includes(sourceEventId)));
   }
 
-  async admit(batch: NormalizedBatch): Promise<NormalizedBatch> {
+  async admit(batch: NormalizedBatch, options?: { privateSessionId?: string | null }): Promise<NormalizedBatch> {
     if (batch === null || typeof batch !== 'object' || !Array.isArray(batch.events)) return batch;
     // The ledger is read once per batch and matched by exact identity, never by content hash, so
     // suppressing one record can never block a different source (or a copy of it at another path).
@@ -453,7 +462,10 @@ class SqliteMemoryDeletion implements MemoryDeletion {
     const kept: NormalizedBatch['events'][number][] = [];
     let diverted = 0;
     for (const event of batch.events) {
-      const sessionId = event.scope?.sessionId;
+      const sessionId = options?.privateSessionId ?? event.scope?.sessionId;
+      if (options?.privateSessionId && !this.privateSessions.wasPrivate(options.privateSessionId)) {
+        throw new TypeError('Unknown private capture scope');
+      }
       if (this.privateSessions.wasPrivate(sessionId)) {
         // A private session's capture is buffered for display and never handed to the store. An
         // ended session id is dropped without buffering: `capture` returns `undefined` once the
@@ -484,7 +496,7 @@ class SqliteMemoryDeletion implements MemoryDeletion {
     }
     const guard: MemoryStore = {
       ingest: async (batch: NormalizedBatch, options?: IngestOptions): Promise<IngestResult> =>
-        store.ingest(await this.admit(batch), options),
+        store.ingest(await this.admit(batch, options), options),
       timeline: (query: TimelineQuery): Promise<TimelineItem[]> => store.timeline(query),
       durableCursor: (): Promise<string> => store.durableCursor(),
       // The guard is a view over the owner's store: closing it must never close the store itself.
@@ -494,7 +506,7 @@ class SqliteMemoryDeletion implements MemoryDeletion {
   }
 
   async close(): Promise<void> {
-    await this.pending;
+    await profileMutations.get(this.directory);
     this.ledger = null;
     this.privateSessions.close();
   }

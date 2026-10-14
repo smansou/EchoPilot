@@ -30,6 +30,8 @@ export const DEICTIC_WINDOW_AFTER_MS = 200;
  * display (the user moved, mirrored or replaced it). */
 export type DisplayTransform = Readonly<{
   displayId: string;
+  label?: string;
+  internal?: boolean;
   originX: number;
   originY: number;
   width: number;

@@ -36,6 +36,8 @@ export const METHODS = {
   threadResume: requireFrom(clientRequests, 'client request', 'thread/resume'),
   turnStart: requireFrom(clientRequests, 'client request', 'turn/start'),
   turnInterrupt: requireFrom(clientRequests, 'client request', 'turn/interrupt'),
+  accountRead: requireFrom(clientRequests, 'client request', 'account/read'),
+  accountLoginStart: requireFrom(clientRequests, 'client request', 'account/login/start'),
 } as const;
 
 /**

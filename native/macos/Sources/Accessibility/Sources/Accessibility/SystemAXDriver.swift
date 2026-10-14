@@ -40,14 +40,21 @@ public final class SystemAXDriver: AXDriver {
             // The element resolved through the tree but no longer reports a role: it is gone.
             return nil
         }
+        // Secure values never cross private stdio, even through the explicit inspect operation.
+        guard role != "AXSecureTextField", stringAttribute(element, kAXSubroleAttribute) != "AXSecureTextField" else {
+            throw AXDriverError.unsupportedOperation("secure_field")
+        }
+        let value = stringAttribute(element, kAXValueAttribute) ?? ""
+        guard value.utf8.count <= 16_384 else { throw AXDriverError.unsupportedOperation("target_too_large") }
         return AXControlState(
             appBundleId: appBundleId(pid: address(of: target)?.pid),
             windowTitle: windowTitle(of: element),
             role: role,
             label: label(of: element),
-            value: stringAttribute(element, kAXValueAttribute) ?? "",
+            value: value,
             enabled: boolAttribute(element, kAXEnabledAttribute) ?? true,
-            focused: boolAttribute(element, kAXFocusedAttribute) ?? false,
+            focused: (boolAttribute(element, kAXFocusedAttribute) ?? false)
+                && NSWorkspace.shared.frontmostApplication?.processIdentifier == address(of: target)?.pid,
             selected: boolAttribute(element, kAXSelectedAttribute) ?? false
         )
     }
@@ -56,6 +63,9 @@ public final class SystemAXDriver: AXDriver {
         try requirePermission()
         guard let element = try element(for: target) else {
             throw AXDriverError.resolutionFailed(target.rawValue)
+        }
+        guard stringAttribute(element, kAXRoleAttribute) != "AXSecureTextField", stringAttribute(element, kAXSubroleAttribute) != "AXSecureTextField" else {
+            throw AXDriverError.unsupportedOperation("secure_field")
         }
         let error = AXUIElementSetAttributeValue(
             element,
@@ -94,6 +104,70 @@ public final class SystemAXDriver: AXDriver {
     }
 
     // MARK: - resolution
+
+    /// Resolves the frontmost app's focused editable control with a bounded child walk.
+    ///
+    /// - Returns: A stable tree address, or nil for unsupported or missing controls.
+    /// - Throws: When Accessibility permission is absent or the focused control is secure.
+    public func focusedTarget(editableOnly: Bool = true) throws -> AXTargetRef? {
+        try requirePermission()
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.processIdentifier != getpid(), app.processIdentifier != getppid(),
+              !(app.bundleIdentifier ?? "").lowercased().contains("echopilot") else { return nil }
+        let application = appElement(pid: app.processIdentifier)
+        guard let focused = elementAttribute(application, kAXFocusedUIElementAttribute) else { return nil }
+        guard stringAttribute(focused, kAXSubroleAttribute) != "AXSecureTextField" else {
+            throw AXDriverError.unsupportedOperation("secure_field")
+        }
+        if editableOnly && !["AXTextField", "AXTextArea"].contains(stringAttribute(focused, kAXRoleAttribute) ?? "") { return nil }
+        var pending: [(AXUIElement, [Int])] = [(application, [])]
+        var visited = 0
+        let deadline = Date().addingTimeInterval(3)
+        while let (element, path) = pending.popLast() {
+            visited += 1
+            guard visited <= 256, Date() < deadline else { return nil }
+            if CFEqual(element, focused) { return AXTargetAddress(pid: app.processIdentifier, path: path).targetRef }
+            if path.count < 16, let descendants = children(of: element) {
+                for (index, child) in descendants.prefix(64).enumerated().reversed() {
+                    pending.append((child, path + [index]))
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Read the insertion range without modifying the user's cursor.
+    public func selectionRange(_ target: AXTargetRef) throws -> [String: Int]? {
+        guard let element = try element(for: target),
+              let raw = copyAttribute(element, kAXSelectedTextRangeAttribute),
+              CFGetTypeID(raw) == AXValueGetTypeID() else { return nil }
+        var range = CFRange()
+        guard AXValueGetValue(raw as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 else { return nil }
+        return ["location": range.location, "length": range.length]
+    }
+
+    /// Read-only hit testing for a virtual gaze point; never moves the system pointer.
+    public func targetAtPoint(x: Double, y: Double) throws -> AXTargetRef? {
+        try requirePermission()
+        guard x.isFinite, y.isFinite, let app = NSWorkspace.shared.frontmostApplication,
+              !(app.bundleIdentifier ?? "").lowercased().contains("echopilot") else { return nil }
+        let application = appElement(pid: app.processIdentifier)
+        var hit: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(application, Float(x), Float(y), &hit) == .success,
+              let hit else { return nil }
+        var pending: [(AXUIElement, [Int])] = [(application, [])]
+        var visited = 0
+        let deadline = Date().addingTimeInterval(2)
+        while let (element, path) = pending.popLast() {
+            visited += 1
+            guard visited <= 512, Date() < deadline else { return nil }
+            if CFEqual(element, hit) { return AXTargetAddress(pid: app.processIdentifier, path: path).targetRef }
+            if path.count < 20, let descendants = children(of: element) {
+                for (index, child) in descendants.prefix(64).enumerated().reversed() { pending.append((child, path + [index])) }
+            }
+        }
+        return nil
+    }
 
     private func address(of target: AXTargetRef) -> AXTargetAddress? {
         AXTargetAddress(targetRef: target)

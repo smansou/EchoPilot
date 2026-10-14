@@ -48,7 +48,7 @@ export type PrivacyOperations = Readonly<{
    */
   readonly bound?: boolean;
   forget(request: PrivacyForgetSelection): Promise<Readonly<{ deleted: number; condensed: number }>>;
-  exportProfile(request: Readonly<{ passphrase: string }>): Promise<Readonly<{ files: readonly string[] }>>;
+  exportProfile(request: Readonly<{ passphrase: string }>): Promise<Readonly<{ files: readonly string[]; destination?: string }>>;
   importProfile(request: Readonly<{ archive: string; passphrase: string }>): Promise<Readonly<{ files: readonly string[] }>>;
   /**
    * Opens the profile's private-session registry — the entry the storage boundary consults before
@@ -205,7 +205,9 @@ export function createPrivacyControl(operations: PrivacyOperations): PrivacyCont
       update({ export: { kind: 'running' } });
       try {
         const receipt = await operations.exportProfile({ passphrase });
-        return update({ export: { kind: 'succeeded', detail: `Sealed ${receipt.files.length} files.` } });
+        return update({ export: { kind: 'succeeded', detail: receipt.destination
+          ? `Sealed ${receipt.files.length} files in ${receipt.destination}.`
+          : `Sealed ${receipt.files.length} files.` } });
       } catch (error) {
         // The passphrase is already out of scope here; only the reason is kept.
         return update({ export: { kind: 'failed', reason: reasonOf(error) } });

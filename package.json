@@ -10,13 +10,19 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "dev": "pnpm build && electron .",
+    "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
+    "package": "node scripts/package-local.mjs --cloud-voice",
+    "package:test": "node --test scripts/package-local.test.mjs",
+    "package:verify": "node scripts/qualify-local-app.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/test-project.mjs",
     "contracts:check": "pnpm --filter @echopilot/contracts check:generated",
     "check": "pnpm contracts:check && pnpm typecheck && pnpm test && pnpm build",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:voice": "node scripts/voice-smoke.mjs",
+    "models:asr": "node scripts/vendor-asr.mjs",
+    "models:vad": "node scripts/vendor-vad.mjs",
     "loop": "node scripts/loop.mjs",
     "loop:cmux": "LOOP_TERMINALS=cmux node scripts/loop.mjs",
     "loop:init": "node scripts/loop.mjs --initialize-only",
@@ -25,16 +31,20 @@
     "loop:self-test": "node scripts/loop.mjs --self-test",
     "loop:start": "node scripts/start-autonomous.mjs",
     "loop:policy-test": "node --test scripts/loop-gates.test.mjs scripts/loop-policy.test.mjs",
-    "release:validate": "node scripts/validate-release.mjs"
+    "release:validate": "node scripts/validate-release.mjs",
+    "progress:board": "node scripts/progress-board.mjs",
+    "progress:task": "node scripts/progress-task.mjs"
   },
   "dependencies": {
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "ws": "8.22.0"
   },
   "devDependencies": {
     "@types/node": "26.5.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
+    "@types/ws": "8.18.2",
     "electron": "44.3.0",
     "esbuild": "0.28.2",
     "tsx": "4.23.13",

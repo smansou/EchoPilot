@@ -1,6 +1,9 @@
 packages:
   - apps/*
   - packages/*
+# Script execution must not implicitly purge/reinstall node_modules after manifest-only edits.
+# Dependency installation remains the explicit pnpm install --frozen-lockfile step.
+verifyDepsBeforeRun: false
 allowBuilds:
   electron: true
   esbuild: true

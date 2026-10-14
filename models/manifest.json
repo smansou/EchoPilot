@@ -22,6 +22,21 @@
   },
   "assets": [
     {
+      "id": "silero-vad-coreml-6.2.1",
+      "kind": "vad",
+      "license": "MIT",
+      "licenseFile": "models/licenses/silero-vad-6.2.1.LICENSE",
+      "repository": "aufklarer/Silero-VAD-v6.2.1-CoreML",
+      "revision": "523876545a57961474fee9df913e833e130560b8",
+      "sha256": "63c7e43a7bffa7c3562cc05187f549537bf8b02a137b4c4af817295c7c239891",
+      "bytes": 640986,
+      "path": "models/asr/silero_vad.mlmodelc",
+      "source": "Public ungated MIT CoreML conversion by aufklarer/soniqo, derived from snakers4/silero-vad v6.2.1 (MIT). Not an Argmax asset.",
+      "pinRecord": "Actual verified directory digest and length; reproduce with pnpm models:vad",
+      "modelCard": "https://huggingface.co/aufklarer/Silero-VAD-v6.2.1-CoreML/blob/523876545a57961474fee9df913e833e130560b8/README.md",
+      "upstreamLicense": "https://github.com/snakers4/silero-vad/blob/v6.2.1/LICENSE"
+    },
+    {
       "id": "pocket-tts-english_2026-04",
       "kind": "model",
       "license": "CC-BY-4.0",
@@ -84,12 +99,12 @@
       "kind": "asr",
       "license": "MIT",
       "licenseFile": "models/licenses/whisper-small-en.LICENSE",
-      "revision": "whisperkit-small.en-2026-04",
-      "sha256": "0d7b2a0b4774f2fc651da9c55047ebae197f826d0987695d50720a5d8e622d21",
-      "bytes": 486539264,
+      "revision": "argmaxinc/whisperkit-coreml@0f63a7800b00dd0226abd051b906c246e1907482 + openai/whisper-small.en@e8727524f962ee844a7319d92be39ac1bd25655a",
+      "sha256": "8c08e5035d86f816d1873f544e204b298ae545ba063e38d1cdf3e3837d757c27",
+      "bytes": 488917446,
       "path": "models/asr/small.en",
-      "pinRecord": "vendor-step artifact record (payload not checked in)",
-      "source": "WhisperKit small.en CoreML pack (English-only, 16 kHz)"
+      "pinRecord": "verified local directory digest; CoreML files from the pinned Argmax commit and tokenizer files from the pinned OpenAI commit",
+      "source": "Argmax WhisperKit openai_whisper-small.en CoreML pack plus OpenAI Whisper small.en local tokenizer (English-only, 16 kHz)"
     },
     {
       "id": "qwen3.5-4b-q4-2026-04",

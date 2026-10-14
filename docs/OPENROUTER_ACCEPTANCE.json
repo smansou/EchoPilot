@@ -1,0 +1,28 @@
+{
+  "syntheticOnly": true,
+  "microphoneUsed": false,
+  "projectFilesSent": false,
+  "nativeRealtimeTested": false,
+  "checks": [
+    {
+      "name": "production_research_adapter",
+      "ok": true,
+      "elapsedMs": 1539,
+      "brief": "SQLite was chosen because the app must function offline on one computer, and SQLite supports local storage with simple deployment. However, the migration test for SQLite has not yet been conducted, so its migration capabilities remain unverified.",
+      "sourceRefs": [
+        "atlas:L1",
+        "atlas:L2"
+      ]
+    },
+    {
+      "name": "openrouter_audio_message_stream",
+      "ok": true,
+      "audioBytes": 76800,
+      "chunks": 4,
+      "firstAudioMs": 1065,
+      "elapsedMs": 1224,
+      "transcript": "Audio test complete.",
+      "nativeRealtime": false
+    }
+  ]
+}

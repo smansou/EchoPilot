@@ -32,6 +32,7 @@ export type ProviderRequest = {
   destination: string;
   dataCategory: string;
   prompt: string;
+  purpose?: 'dictation_correction';
 };
 
 export type MockProvider = {
@@ -77,11 +78,21 @@ export type OperationOutcome = {
 };
 
 export type SecurityKernel = {
+  ready(): Promise<void>;
   submitProviderKey(input: { provider: string; secret: string }): Promise<{ provider: string; keyRef: string; maskedSuffix: string }>;
   grantCapability(grant: GrantTuple): Promise<{ grantId: string; version: number }>;
   revokeCapability(input: { grantId: string; reason: string }): Promise<{ grantId: string; grantVersion: number }>;
   enqueue(operation: Operation): Promise<string>;
   runQueued(): Promise<OperationOutcome[]>;
+  /**
+   * Executes exactly the queued operation with `requestId`, leaving every other queued request
+   * untouched. Returns `undefined` when nothing with that id is queued (for example after a
+   * restart), so a caller can never mistake an unrelated drain for its own outcome.
+   */
+  runTargeted(requestId: string): Promise<OperationOutcome | undefined>;
+  /** Remove in-memory provider prompts when their user confirmation is revoked. */
+  clearProviderRequests(): void;
+  cancelRequest(requestId: string): void;
   getRendererState(): unknown;
   exportSettings(): unknown;
   getAuditReceipts(): ReadonlyArray<Record<string, unknown>>;

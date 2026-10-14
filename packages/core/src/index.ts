@@ -36,6 +36,7 @@ export const BOOTSTRAP_EVENT: Readonly<FixtureEvent> = Object.freeze({
 
 export interface Coordinator {
   getState(): State;
+  clearEvent(): State;
   ingest(event: FixtureEvent): State;
   setMuted(muted: boolean): State;
   /** Re-selects the current event; audio adapters must separately obtain a lease. */
@@ -56,6 +57,7 @@ export function createCoordinator(initialState: State = { muted: false, event: n
 
   return {
     getState: snapshot,
+    clearEvent() { invalidate(); state = { ...state, event: null }; return snapshot(); },
     ingest(event) {
       const parsed = parseFixtureEvent(event);
       invalidate();

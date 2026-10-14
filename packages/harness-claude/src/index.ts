@@ -510,7 +510,8 @@ function buildHookCommand(options: ClaudeHookInstallOptions): string {
   if (options.ingressPath !== undefined) {
     assignments.push(`ECHOPILOT_HOOK_INGRESS=${shellQuote(options.ingressPath)}`);
   }
-  return `${assignments.join(' ')} ${shellQuote(process.execPath)} ${shellQuote(options.hookScriptPath)}`;
+  // Electron's packaged process.execPath must run this enqueue-only script as Node, not launch UI.
+  return `ELECTRON_RUN_AS_NODE=1 ${assignments.join(' ')} ${shellQuote(process.execPath)} ${shellQuote(options.hookScriptPath)}`;
 }
 
 function createManagedHookEntry(options: ClaudeHookInstallOptions): { matcher: string; hooks: Array<{ type: string; command: string }> } {

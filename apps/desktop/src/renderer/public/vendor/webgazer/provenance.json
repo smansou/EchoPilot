@@ -1,0 +1,9 @@
+{
+  "package": "webgazer",
+  "version": "3.5.3",
+  "url": "https://registry.npmjs.org/webgazer/-/webgazer-3.5.3.tgz",
+  "sha256": "ddb577d3b971ce62018cce17e197546fcdc3db9eb51b57cf995b7ca777ca2443",
+  "patch": "Secure-context check accepts Electron secure custom protocol. Inference, regression and Kalman filter unchanged.",
+  "license": "GPL-3.0-or-later",
+  "source": "vendor-webgazer-source"
+}

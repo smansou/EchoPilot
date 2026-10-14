@@ -161,6 +161,8 @@ export interface MemoryRetrieval {
 }
 
 export interface RetrievalOptions {
+  /** Transient desktop previews must never create even a metadata sidecar. */
+  persistManifest?: boolean;
   projectId: string;
   grantedProjectIds?: readonly string[];
   directory: string;
@@ -350,7 +352,7 @@ export async function createMemoryRetrieval(options: RetrievalOptions): Promise<
 
     const vectors = await computeVectors(records);
     const coverage = await readSourceCoverage();
-    try {
+    if (options.persistManifest !== false) try {
       await mkdir(directory, { recursive: true });
       await writeFile(join(directory, 'retrieval-manifest.json'), JSON.stringify({
         generation: generation + 1,

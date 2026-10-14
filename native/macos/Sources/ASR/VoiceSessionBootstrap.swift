@@ -9,12 +9,15 @@ public struct VoiceHostConfiguration: Sendable {
     /// Folder that holds the Silero pack. `nil` resolves the default search paths and then falls
     /// back to `asrModelDirectory`.
     public var vadModelDirectory: URL?
+    /// Explicit local-development fallback when a Silero CoreML pack has not been vendored.
+    public var allowEnergyFallback: Bool
     public var maxQueuedFrames: Int
 
-    public init(asrModelDirectory: URL, vadModelDirectory: URL? = nil, maxQueuedFrames: Int = 100) {
+    public init(asrModelDirectory: URL, vadModelDirectory: URL? = nil, maxQueuedFrames: Int = 100, allowEnergyFallback: Bool = false) {
         self.asrModelDirectory = asrModelDirectory
         self.vadModelDirectory = vadModelDirectory
         self.maxQueuedFrames = max(1, maxQueuedFrames)
+        self.allowEnergyFallback = allowEnergyFallback
     }
 
     /// The helper's launch environment:
@@ -34,7 +37,8 @@ public struct VoiceHostConfiguration: Sendable {
         return VoiceHostConfiguration(
             asrModelDirectory: URL(fileURLWithPath: asrDirectory, isDirectory: true),
             vadModelDirectory: vadDirectory,
-            maxQueuedFrames: queueFrames
+            maxQueuedFrames: queueFrames,
+            allowEnergyFallback: environment["ECHOPILOT_VAD_FALLBACK"] == "energy"
         )
     }
 }
@@ -76,6 +80,7 @@ public enum VoiceSessionBootstrap {
         vadConfiguration.modelDirectory = configuration.vadModelDirectory
             ?? SileroVADModelPack.resolve()
             ?? configuration.asrModelDirectory
+        vadConfiguration.allowEnergyFallback = configuration.allowEnergyFallback
         let vad = try SileroVAD(configuration: vadConfiguration)
         let host = MicrophoneGraph(maxQueuedFrames: configuration.maxQueuedFrames)
         return VoiceTracerBridge(host: host, vad: vad, transcriber: transcriber)

@@ -1,0 +1,332 @@
+{
+  "appName": "EchoPilot",
+  "releaseReady": false,
+  "releaseNote": "EchoPilot is not release-ready.",
+  "progressUpdatedAt": "2026-10-02T01:20:12.802Z",
+  "tasks": [
+    {
+      "id": "progress-board",
+      "title": "Live progress dashboard",
+      "stage": "verified",
+      "scope": "Local read-only Kanban and automatic execution tracking",
+      "evidence": "Independent 14 tests pass, code reviewed, browser search/filter/live transitions verified",
+      "remaining": "Dashboard delivered; product milestones remain on other cards",
+      "caveat": "Tracks recorded task runs, not unattended background orchestration.",
+      "lifecycle": {
+        "status": "succeeded",
+        "phase": "verify",
+        "pid": 99653,
+        "startedAt": "2026-10-01T01:28:35.171Z",
+        "endedAt": "2026-10-01T01:28:38.009Z",
+        "exitCode": 0,
+        "lastRunNote": "verification passed with exit 0 for this specific task"
+      }
+    },
+    {
+      "id": "memory-safety",
+      "title": "Memory safety repair",
+      "stage": "verified",
+      "scope": "Memory / project-answer safety repair",
+      "evidence": "Independently verified: full check + smoke passed",
+      "remaining": "None recorded",
+      "caveat": "",
+      "lifecycle": {
+        "status": "idle",
+        "phase": null,
+        "pid": null,
+        "startedAt": null,
+        "endedAt": null,
+        "exitCode": null,
+        "lastRunNote": null
+      }
+    },
+    {
+      "id": "native-observe",
+      "title": "Native AX foreground observation",
+      "stage": "verified",
+      "scope": "Native Accessibility foreground observation",
+      "evidence": "37 Swift tests pass",
+      "remaining": "Real TCC permission success path still untested (tracked as a distinct task)",
+      "caveat": "Swift tests are not proof of a real permission grant.",
+      "lifecycle": {
+        "status": "idle",
+        "phase": null,
+        "pid": null,
+        "startedAt": null,
+        "endedAt": null,
+        "exitCode": null,
+        "lastRunNote": null
+      }
+    },
+    {
+      "id": "desktop-host",
+      "title": "Desktop host",
+      "stage": "verified",
+      "scope": "Electron desktop host",
+      "evidence": "14 host tests, build, check, and smoke pass",
+      "remaining": "None recorded",
+      "caveat": "",
+      "lifecycle": {
+        "status": "idle",
+        "phase": null,
+        "pid": null,
+        "startedAt": null,
+        "endedAt": null,
+        "exitCode": null,
+        "lastRunNote": null
+      }
+    },
+    {
+      "id": "widget-inspect",
+      "title": "Widget inspection flow",
+      "stage": "review",
+      "scope": "Widget inspection surface (local AX evidence preview)",
+      "evidence": "Independently 21 focused tests passed this turn; code review partial; visual/live pending",
+      "remaining": "Code review, visual review, and a real Accessibility journey",
+      "caveat": "Local evidence preview only — NOT intelligent Q&A.",
+      "lifecycle": {
+        "status": "idle",
+        "phase": null,
+        "pid": null,
+        "startedAt": null,
+        "endedAt": null,
+        "exitCode": null,
+        "lastRunNote": null
+      }
+    },
+    {
+      "id": "live-desktop",
+      "title": "Live desktop journey",
+      "stage": "backlog",
+      "scope": "Real desktop permission and live journey",
+      "evidence": "None recorded yet",
+      "remaining": "Exercise the real permission flow and the live end-to-end journey",
+      "caveat": "",
+      "lifecycle": {
+        "status": "idle",
+        "phase": null,
+        "pid": null,
+        "startedAt": null,
+        "endedAt": null,
+        "exitCode": null,
+        "lastRunNote": null
+      }
+    },
+    {
+      "id": "managed-work",
+      "title": "Managed work mode",
+      "stage": "review",
+      "scope": "Managed work mode journey",
+      "evidence": "None recorded yet",
+      "remaining": "Real signed-in reply and narration journey",
+      "caveat": "",
+      "lifecycle": {
+        "status": "succeeded",
+        "phase": "implement",
+        "pid": 74002,
+        "startedAt": "2026-09-29T23:13:09.787Z",
+        "endedAt": "2026-09-29T23:19:39.417Z",
+        "exitCode": 0,
+        "lastRunNote": "implementation finished with exit 0; review required before any completion claim"
+      }
+    },
+    {
+      "id": "voice-live",
+      "title": "Live voice narration",
+      "stage": "backlog",
+      "scope": "Live voice input and narration",
+      "evidence": "Offline Whisper passes (offline path only)",
+      "remaining": "Human utterance capture and real narration run",
+      "caveat": "Offline Whisper passing does not verify live narration.",
+      "lifecycle": {
+        "status": "idle",
+        "phase": null,
+        "pid": null,
+        "startedAt": null,
+        "endedAt": null,
+        "exitCode": null,
+        "lastRunNote": null
+      }
+    },
+    {
+      "id": "desktop-questions",
+      "title": "Desktop questions",
+      "stage": "review",
+      "scope": "Desktop question answering",
+      "evidence": "None recorded yet",
+      "remaining": "Intelligent grounded answers are absent",
+      "caveat": "",
+      "lifecycle": {
+        "status": "succeeded",
+        "phase": "implement",
+        "pid": 73299,
+        "startedAt": "2026-09-29T23:11:24.192Z",
+        "endedAt": "2026-09-29T23:24:47.175Z",
+        "exitCode": 0,
+        "lastRunNote": "implementation finished with exit 0; review required before any completion claim"
+      }
+    },
+    {
+      "id": "hands-free",
+      "title": "Hands-free flow",
+      "stage": "backlog",
+      "scope": "Hands-free interaction flow",
+      "evidence": "None recorded yet",
+      "remaining": "Routing, confirmation, dictation, and undo journey",
+      "caveat": "",
+      "lifecycle": {
+        "status": "idle",
+        "phase": null,
+        "pid": null,
+        "startedAt": null,
+        "endedAt": null,
+        "exitCode": null,
+        "lastRunNote": null
+      }
+    },
+    {
+      "id": "voice-production",
+      "title": "Production voice stack",
+      "stage": "blocked",
+      "scope": "Production voice dependencies",
+      "evidence": "Dependencies missing",
+      "remaining": "Pocket runtime, gated weights, Silero, and license (Jean)",
+      "caveat": "Blocked until runtime, weights, Silero, and licensing are resolved.",
+      "lifecycle": {
+        "status": "idle",
+        "phase": null,
+        "pid": null,
+        "startedAt": null,
+        "endedAt": null,
+        "exitCode": null,
+        "lastRunNote": null
+      }
+    },
+    {
+      "id": "gaze",
+      "title": "Gaze interaction",
+      "stage": "backlog",
+      "scope": "Gaze / eye-tracking interaction",
+      "evidence": "None recorded yet",
+      "remaining": "Physical calibration required at the end",
+      "caveat": "",
+      "lifecycle": {
+        "status": "idle",
+        "phase": null,
+        "pid": null,
+        "startedAt": null,
+        "endedAt": null,
+        "exitCode": null,
+        "lastRunNote": null
+      }
+    },
+    {
+      "id": "release",
+      "title": "Release readiness",
+      "stage": "review",
+      "scope": "Packaging, signing, and acceptance ledger",
+      "evidence": "None recorded",
+      "remaining": "Packaging, signing, notarization, and the acceptance ledger",
+      "caveat": "Not release-ready: release gates remain open.",
+      "lifecycle": {
+        "status": "succeeded",
+        "phase": "implement",
+        "pid": 74451,
+        "startedAt": "2026-09-29T23:13:14.902Z",
+        "endedAt": "2026-09-29T23:28:07.428Z",
+        "exitCode": 0,
+        "lastRunNote": "implementation finished with exit 0; review required before any completion claim"
+      }
+    },
+    {
+      "id": "premium-integration",
+      "title": "Connect premium voice to the app",
+      "stage": "verified",
+      "scope": "Reviewed text voice service, main routes, Voice UI, output arbitration",
+      "evidence": "Pending current verification",
+      "remaining": "Reviewed text voice service, main routes, Voice UI, output arbitration",
+      "caveat": "No live end-to-end acceptance yet",
+      "lifecycle": {
+        "status": "succeeded",
+        "phase": "verify",
+        "pid": 529,
+        "startedAt": "2026-10-01T01:32:58.313Z",
+        "endedAt": "2026-10-01T01:32:58.512Z",
+        "exitCode": 0,
+        "lastRunNote": "verification passed with exit 0 for this specific task"
+      }
+    },
+    {
+      "id": "context-memory",
+      "title": "Context aware dictation and persistent working memory",
+      "stage": "review",
+      "scope": "Audit and complete project memory retrieval into dictation",
+      "evidence": "Pending current verification",
+      "remaining": "Audit and complete project memory retrieval into dictation",
+      "caveat": "No live end-to-end acceptance yet",
+      "lifecycle": {
+        "status": "succeeded",
+        "phase": "implement",
+        "pid": 12144,
+        "startedAt": "2026-10-02T00:07:50.221Z",
+        "endedAt": "2026-10-02T00:34:11.736Z",
+        "exitCode": 0,
+        "lastRunNote": "implementation finished with exit 0; review required before any completion claim"
+      }
+    },
+    {
+      "id": "core-acceptance",
+      "title": "Core end-to-end app qualification",
+      "stage": "verified",
+      "scope": "Build, package and verify core journeys",
+      "evidence": "Exact local app qualification report: local-qualified; codesign, plist, packaged smoke, voice smoke all pass; local microphone and Whisper loaded/released.",
+      "remaining": "Mission Control pages require visual inspection; paid-provider and actual cross-app insertion/undo acceptance remain user testing.",
+      "caveat": "Verified local package qualification only; not physical acceptance. No paid provider/API or real cross-app insertion/undo test. CUA showed the widget, then a Window dialog with WindowSharingSessionButton, so Mission Control Voice/Dictation pages were not visually verified.",
+      "lifecycle": {
+        "status": "succeeded",
+        "phase": "verify",
+        "pid": 15009,
+        "startedAt": "2026-10-02T01:12:20.533Z",
+        "endedAt": "2026-10-02T01:20:12.802Z",
+        "exitCode": 0,
+        "lastRunNote": "verification passed with exit 0 for this specific task"
+      }
+    },
+    {
+      "id": "natural-agent",
+      "title": "Natural voice companion with memory",
+      "stage": "review",
+      "scope": "Live microphone conversation grounded in screen and project memory",
+      "evidence": "Pending current verification",
+      "remaining": "Live microphone conversation grounded in screen and project memory",
+      "caveat": "No live end-to-end acceptance yet",
+      "lifecycle": {
+        "status": "succeeded",
+        "phase": "implement",
+        "pid": 380,
+        "startedAt": "2026-10-01T01:31:38.674Z",
+        "endedAt": "2026-10-01T01:36:46.026Z",
+        "exitCode": 0,
+        "lastRunNote": "implementation finished with exit 0; review required before any completion claim"
+      }
+    },
+    {
+      "id": "vscode-package",
+      "title": "Optional VS Code connector package",
+      "stage": "review",
+      "scope": "Package existing read-only extension; no app behavior changes",
+      "evidence": "DeepSeek packaging underway",
+      "remaining": "Validate local VSIX contents; actual editor activation remains manual",
+      "caveat": "Secondary feature; does not delay core app delivery",
+      "lifecycle": {
+        "status": "succeeded",
+        "phase": "implement",
+        "pid": 12024,
+        "startedAt": "2026-10-02T00:05:04.993Z",
+        "endedAt": "2026-10-02T00:19:16.871Z",
+        "exitCode": 0,
+        "lastRunNote": "implementation finished with exit 0; review required before any completion claim"
+      }
+    }
+  ]
+}

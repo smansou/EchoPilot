@@ -70,6 +70,7 @@ export async function argumentHashFor(binding: ArgumentBinding): Promise<string>
       targetRef: step.targetRef,
       targetFingerprint: step.targetFingerprint,
       value: step.value,
+      expectedValue: step.expectedValue,
     })),
   }));
 }

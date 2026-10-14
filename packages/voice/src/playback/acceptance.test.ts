@@ -873,8 +873,8 @@ test('the bundled worker needs no system Python or downloads and the model manif
   const assets = rawAssets.filter(isRecord);
   assert.equal(assets.length, rawAssets.length, 'every model-manifest asset entry must be a JSON object');
   assert.ok(
-    assets.every((asset) => asset.kind === 'model' || asset.kind === 'voice'),
-    'every asset entry must declare kind "model" or "voice"',
+    assets.every((asset) => ['model', 'voice', 'asr', 'vad', 'reasoner', 'runtime'].includes(String(asset.kind))),
+    'every asset entry must declare a known model-pack kind',
   );
 
   const models = assets.filter((asset) => asset.kind === 'model');

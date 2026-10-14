@@ -87,7 +87,13 @@ function operationsOf(binding: Binding): PrivacyOperations {
       const receipt = await binding.forget(selection);
       return { deleted: countOf(receipt, 'deleted'), condensed: countOf(receipt, 'condensed') };
     },
-    exportProfile: async ({ passphrase }) => ({ files: filesOf(await binding.exportProfile({ passphrase })) }),
+    exportProfile: async ({ passphrase }) => {
+      const receipt = await binding.exportProfile({ passphrase });
+      return {
+        files: filesOf(receipt),
+        ...(isRecord(receipt) && typeof receipt.destination === 'string' ? { destination: receipt.destination } : {}),
+      };
+    },
     importProfile: async ({ archive, passphrase }) => ({ files: filesOf(await binding.importProfile({ archive, passphrase })) }),
     ...(binding.beginPrivateSession === undefined
       ? {}

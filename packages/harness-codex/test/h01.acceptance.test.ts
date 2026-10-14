@@ -365,6 +365,8 @@ test('a managed session streams a read-only fixture task, reports version/capabi
     const turnStart = await waitForInboundCall(journalPath, 'turn/start', 'turn/start call');
     const methods = inboundMethods(await readJournal(journalPath));
     const threadStartIndex = methods.indexOf('thread/start');
+    assert.equal(paramsOf(await waitForInboundCall(journalPath, 'thread/start', 'ephemeral thread start')).ephemeral, true,
+      'managed conversations must disable durable Codex rollout history');
     assert.ok(
       threadStartIndex >= 0 && threadStartIndex < methods.indexOf('turn/start'),
       'a thread must be started before the first turn',

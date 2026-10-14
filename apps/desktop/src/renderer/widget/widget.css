@@ -15,6 +15,9 @@
 .shell-controls button:hover:not(:disabled){background:#3a3247}
 .shell-controls button:disabled{opacity:.5}
 .dashboard .shell-panel{max-width:640px}
+.live-transcript{flex-basis:100%;border:1px solid #41675f;border-radius:11px;background:#18332f;padding:11px 13px;margin-top:6px;line-height:1.5}
+.live-transcript span{display:block;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:#b8f08b;margin-bottom:5px}
+.live-transcript p{margin:0;color:#e7f7e7;font-size:12px;overflow-wrap:anywhere}
 .desktop-answer{margin:14px 0 4px;padding:13px 14px;border:1px solid #2f2c3c;background:#191823;border-radius:12px}
 .desktop-answer[data-capture='limited']{border-color:#5b4a2e}
 .desktop-answer[data-capture='excluded']{border-color:#5b2f3c}
@@ -31,16 +34,47 @@
 .desktop-answer-evidence{list-style:none;display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 0;padding:0}
 .desktop-answer-evidence li{font-size:9px;color:#b9b2cc;border:1px solid #3b3648;border-radius:6px;padding:2px 6px}
 .dashboard .desktop-answer{max-width:640px}
-.desktop-question-widget{margin:14px 0 4px;padding:13px 14px;border:1px solid #2f2c3c;background:#191823;border-radius:12px;-webkit-app-region:no-drag}
-.desktop-question-form label{display:block;margin:0 0 7px;font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:#b9b2cc}
-.desktop-question-controls{display:flex;gap:7px}
-.desktop-question-controls input{flex:1;min-width:0;min-height:34px;padding:7px 9px;border:1px solid #403a4d;border-radius:8px;background:#111019;color:#eee6ff;font-size:12px}
-.desktop-question-controls input:focus{outline:2px solid #8371ad;outline-offset:1px}
-.desktop-question-controls button{min-height:34px;padding:7px 13px;border:1px solid #4a4157;border-radius:8px;background:#2c2736;color:#eee6ff;font-size:11px}
-.desktop-question-controls button:hover:not(:disabled){background:#3a3247}
-.desktop-question-controls button:disabled{opacity:.5}
-.desktop-question-unavailable,.desktop-question-error{font-size:10px;line-height:1.6;margin:8px 0 0}
-.desktop-question-unavailable{color:#ffc98a}
-.desktop-question-error{color:#ffb7c4}
-.desktop-question-widget .desktop-answer{margin-bottom:0}
-.dashboard .desktop-question-widget{max-width:640px}
+.desktop-inspect-widget{margin:14px 0 4px;padding:13px 14px;border:1px solid #2f2c3c;background:#191823;border-radius:12px;-webkit-app-region:no-drag}
+.desktop-inspect-head h2{font-size:13px;font-weight:600;letter-spacing:.2px;color:#eee6ff;margin:0}
+.desktop-inspect-subtitle{font-size:10px;line-height:1.6;color:#8f8aa4;margin:5px 0 0}
+.desktop-inspect-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:11px}
+.desktop-inspect-action{min-height:34px;padding:7px 13px;border:1px solid #4a4157;border-radius:8px;background:#2c2736;color:#eee6ff;font-size:11px;font-weight:600}
+.desktop-inspect-action:hover:not(:disabled){background:#3a3247}
+.desktop-inspect-action:focus-visible{outline:2px solid #8371ad;outline-offset:2px}
+.desktop-inspect-action:disabled{opacity:.5}
+.desktop-inspect-scope{font-size:10px;line-height:1.5;color:#b9b2cc;overflow-wrap:anywhere}
+.desktop-inspect-caption{font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:#8f8aa4;line-height:1.7;margin:10px 0 0}
+.desktop-inspect-handoff{font-size:10px;line-height:1.6;color:#b8f08b;margin:10px 0 0}
+.desktop-inspect-result{margin-top:10px}
+.desktop-inspect-idle,.desktop-inspect-busy,.desktop-inspect-blocked{font-size:10px;line-height:1.6;color:#8f8aa4;margin:0}
+.desktop-inspect-busy,.desktop-inspect-blocked{color:#e7c98a}
+.desktop-inspect-preview{border:1px solid #2f2c3c;border-radius:10px;padding:11px 12px;background:#141320}
+.desktop-inspect-scope-line{font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f8aa4;margin:0 0 8px}
+.desktop-inspect-identity{display:grid;gap:7px;margin:0}
+.desktop-inspect-identity dt{font-size:9px;letter-spacing:1.1px;text-transform:uppercase;color:#8f8aa4}
+.desktop-inspect-identity dd{margin:3px 0 0;font-size:11px;line-height:1.55;color:#ded9ec;overflow-wrap:anywhere}
+.desktop-inspect-identity dd[data-state='visible']{color:#e7c98a}
+.desktop-inspect-partial{font-size:10px;line-height:1.6;color:#ffc98a;margin:10px 0 0}
+.desktop-inspect-rows{list-style:none;margin:11px 0 0;padding:0;display:grid;gap:7px;max-height:240px;overflow:auto}
+.desktop-inspect-rows li{border-left:2px solid #3b3648;padding:2px 0 2px 9px}
+.desktop-inspect-rows li[data-depth='1']{margin-left:9px}
+.desktop-inspect-rows li[data-depth='2']{margin-left:18px}
+.desktop-inspect-rows li[data-depth='3']{margin-left:27px}
+.desktop-inspect-rows li[data-depth='4']{margin-left:36px}
+.desktop-inspect-rows li[data-depth='5']{margin-left:45px}
+.desktop-inspect-rows li[data-depth='6']{margin-left:54px}
+.desktop-inspect-id{display:inline-block;font-size:9px;color:#b9b2cc;border:1px solid #3b3648;border-radius:6px;padding:1px 5px;margin-right:6px}
+.desktop-inspect-role{font-size:10px;color:#b8d8c4}
+.desktop-inspect-rows p{font-size:11px;line-height:1.55;color:#ded9ec;margin:5px 0 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.desktop-inspect-empty-preview,.desktop-inspect-omitted{font-size:10px;line-height:1.6;color:#8f8aa4;margin:10px 0 0}
+.desktop-inspect-limited{border:1px solid #5b4a2e;border-radius:10px;padding:11px 12px;background:#1d1a12}
+.desktop-inspect-limited-title{font-size:11px;line-height:1.65;color:#ffd9a0;margin:0}
+.desktop-inspect-error{border:1px solid #5b2f3c;border-radius:10px;padding:11px 12px;background:#1f1418}
+.desktop-inspect-error p{font-size:11px;line-height:1.65;color:#ffb7c4;margin:0}
+.desktop-inspect-detail{font-size:10px;line-height:1.6;color:#8f8aa4;margin:7px 0 0}
+.dashboard .desktop-inspect-widget{max-width:640px}
+.widget-details{margin-top:12px;border-top:1px solid #343a42;padding-top:10px;font-size:11px;color:#b8c5cb}
+.widget-details summary{cursor:pointer;min-height:28px;display:list-item;-webkit-app-region:no-drag}
+.widget-dictation{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;font-size:11px;-webkit-app-region:no-drag}
+.widget-dictation>span{flex-basis:100%;overflow-wrap:anywhere;line-height:1.5}
+.widget-dictation button{min-height:32px;border:1px solid #3a4c4a;border-radius:8px;background:#1a302b;color:#dcece5;padding:6px 10px;font-size:10px}

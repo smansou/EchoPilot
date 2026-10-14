@@ -129,6 +129,10 @@ class Kernel implements SecurityKernel {
 
   constructor(private readonly dependencies: KernelDependencies) {}
 
+  ready(): Promise<void> { return this.ensureLoaded(); }
+  clearProviderRequests(): void { this.state.queue = this.state.queue.filter(operation => operation.capability !== 'provider_egress'); }
+  cancelRequest(requestId: string): void { this.state.queue = this.state.queue.filter(operation => operation.requestId !== requestId); }
+
   async submitProviderKey(input: { provider: string; secret: string }): Promise<{ provider: string; keyRef: string; maskedSuffix: string }> {
     await this.ensureLoaded();
     const provider = requireText(input?.provider, 'provider');
@@ -267,6 +271,24 @@ class Kernel implements SecurityKernel {
     return outcomes;
   }
 
+  /**
+   * Targeted execution for callers that own exactly one queued request (for example one user
+   * confirmed Memory question). Only the named request leaves the queue, so unrelated queued work
+   * is never dispatched as a side effect and the caller cannot read another request's outcome.
+   * Grant re-check, receipts and idempotency behavior are identical to `runQueued()`.
+   */
+  async runTargeted(requestId: string): Promise<OperationOutcome | undefined> {
+    await this.ensureLoaded();
+    const id = requireText(requestId, 'requestId');
+    const index = this.state.queue.findIndex((candidate) => candidate.requestId === id);
+    const operation = index === -1 ? undefined : this.state.queue[index];
+    if (!operation) return undefined;
+    this.state.queue.splice(index, 1);
+    const outcome = await this.execute(operation);
+    await this.persist();
+    return outcome;
+  }
+
   getRendererState(): unknown {
     return {
       keyEntryChannel: KEY_ENTRY_CHANNEL,
@@ -274,6 +296,11 @@ class Kernel implements SecurityKernel {
       providers: this.providerViews(),
       egressCategories: this.getEgressCategories(),
       activeGrants: this.state.grants.filter((grant) => grant.status === 'active').length,
+      grants: this.state.grants.filter((grant) => grant.status === 'active').slice(-50).map((grant) => ({
+        grantId: grant.grantId, capability: grant.capability, dataCategory: grant.dataCategory,
+        destination: grant.destination, effect: grant.effect, lifetime: grant.lifetime,
+        projectId: grant.resource.projectId ?? null,
+      })),
       pendingRequests: this.state.queue.length,
     };
   }
@@ -392,6 +419,7 @@ class Kernel implements SecurityKernel {
         destination: operation.destination,
         dataCategory: operation.dataCategory,
         prompt,
+        ...(operation.arguments.purpose === 'dictation_correction' ? {purpose: 'dictation_correction' as const} : {}),
       });
       return { completionLength: completion.text.length };
     }
@@ -494,11 +522,17 @@ class Kernel implements SecurityKernel {
     restored.grants = restored.grants.filter(
       (grant) => grant.status !== 'active' || grant.lifetime === 'durable' || grant.lifetime === 'project',
     );
+    // Provider prompts belong only to the process that received the confirmation. Drop legacy
+    // queued egress on restart and scrub it from the persisted state before ready resolves.
+    const legacyProviderQueue = restored.queue.some(operation => operation.capability === 'provider_egress');
+    restored.queue = restored.queue.filter(operation => operation.capability !== 'provider_egress');
     this.state = restored;
+    if (legacyProviderQueue) await this.persist();
   }
 
   private persist(): Promise<void> {
-    const serialized = JSON.stringify(this.state);
+    // Keep confirmed prompts in this live process only; durable grants/audit need no raw content.
+    const serialized = JSON.stringify({ ...this.state, queue: this.state.queue.filter(operation => operation.capability !== 'provider_egress') });
     const write = this.writes.then(() => this.dependencies.storage.write(serialized));
     this.writes = write.then(
       () => undefined,
