@@ -5,7 +5,7 @@ export function geminiLiveSetup(voice:string,context:string){return {setup:{
   model:`models/${LIVE_MODELS.gemini}`,
   generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:['Kore','Puck','Aoede'].includes(voice)?voice:'Kore'}}}},
   systemInstruction:{parts:[{text:LIVE_INSTRUCTIONS+'\nUse delegate_task for backend assistance. '+context.slice(0,16000)}]},
-  inputAudioTranscription:{},outputAudioTranscription:{},
+  inputAudioTranscription:{},outputAudioTranscription:{},contextWindowCompression:{slidingWindow:{}},
   tools:[{functionDeclarations:[{...DELEGATE_TOOL,behavior:'NON_BLOCKING'}]}],
 }};}
 export async function connectGeminiLive(options:LiveConnectOptions & {socket?:(key:string)=>WebSocket;now?:()=>number}):Promise<LiveConnection>{

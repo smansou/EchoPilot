@@ -6,7 +6,7 @@ import type {BackendRequest} from './agent-backend';
 import type {LiveConnection,LiveConnectOptions,LiveEvent,LivePreferences,LiveState} from './live-types';
 export type TranscriptFragment={speaker:'user'|'assistant';text:string;startMs:number;endMs:number};
 /** Conversation/task semantics belong to EchoPilot; provider wire events stay in adapters. */
-export function createLiveSession(options:{preferences():LivePreferences;key(provider:'openai'|'gemini'):Promise<string|null>;allowed():boolean;connect(provider:'openai'|'gemini',options:LiveConnectOptions):Promise<LiveConnection>;knowledge:ReturnType<typeof createSessionKnowledge>;backend(request:BackendRequest):Promise<string>;clearBackend():void;history():SessionHistory[];remember(item:SessionHistory):Promise<void>;changed(state:LiveState):void;media(event:{sessionId:string;type:'audio'|'interrupt';pcmBase64?:string;sampleRate?:24000}):void}){
+export function createLiveSession(options:{userInput?(text:string):void;screenContext?():unknown;preferences():LivePreferences;key(provider:'openai'|'gemini'):Promise<string|null>;allowed():boolean;connect(provider:'openai'|'gemini',options:LiveConnectOptions):Promise<LiveConnection>;knowledge:ReturnType<typeof createSessionKnowledge>;backend(request:BackendRequest):Promise<string>;clearBackend():void;history():SessionHistory[];remember(item:SessionHistory):Promise<void>;changed(state:LiveState):void;media(event:{sessionId:string;type:'audio'|'interrupt';pcmBase64?:string;sampleRate?:24000}):void}){
   let state:LiveState={id:null,mode:'agent',phase:'idle',message:'',reply:'',transcript:'',recording:false,transport:'webrtc',provider:'openai'};
   let connection:LiveConnection|null=null;let opening=false;let closing:Promise<void>|null=null;let controller=new AbortController();let workController=new AbortController();
   let fragments:TranscriptFragment[]=[];let revision=0;let lastInputAt=0;let inputOffset=0;let userChars=0;let closingHistory=false;
@@ -33,7 +33,7 @@ export function createLiveSession(options:{preferences():LivePreferences;key(pro
   async function join(id:string,sdp?:string){if(state.id!==id||opening||connection||closing)throw Error('Live connection is not pending.');opening=true;const signal=controller.signal;const provider=state.provider;
     try{const key=await options.key(provider);check(id,signal);if(!key)throw Error(`Add your ${provider==='gemini'?'Gemini':'OpenAI'} key in Setup.`);
       const catalog=await options.knowledge.catalog();check(id,signal);
-      const context=buildLiveContext({catalog,briefs:options.knowledge.retained(),history:options.history()});
+      const sharedScreen=options.screenContext?.();const context=buildLiveContext({catalog,briefs:options.knowledge.retained(),history:options.history()})+(sharedScreen?'\nShared screen evidence: '+JSON.stringify(sharedScreen):'');
       const created=await options.connect(provider,{key,...(sdp?{sdp}:{}),voice:options.preferences().voice,context,signal,onEvent:event=>{if(state.id===id&&!signal.aborted)receive(event,id,signal);}});
       try{check(id,signal);}catch(error){await created.close();throw error;}connection=created;opening=false;
       update({message:provider==='gemini'?'Listening':'Connecting audio…',phase:provider==='gemini'?'listening':'starting'});
@@ -51,7 +51,7 @@ export function createLiveSession(options:{preferences():LivePreferences;key(pro
       if(event.id){if(seen.has(event.id))return;seen.add(event.id);if(seen.size>1000)seen.delete(seen.values().next().value!);}
       fragments.push({speaker:event.speaker,text:event.text,startMs:event.startMs,endMs:event.endMs});fragments.sort((a,b)=>a.startMs-b.startMs);
       if(fragments.length>400)fragments.splice(0,fragments.length-400);
-      if(event.speaker==='user'){revision++;userChars+=event.text.length;lastInputAt=Date.now();inputOffset=Math.max(inputOffset,event.endMs);workController.abort();workController=new AbortController();update({transcript:(state.transcript+event.text).slice(-4000),message:'Listening',phase:'listening'});schedule();}
+      if(event.speaker==='user'){revision++;userChars+=event.text.length;lastInputAt=Date.now();inputOffset=Math.max(inputOffset,event.endMs);workController.abort();workController=new AbortController();options.userInput?.(event.text);update({transcript:(state.transcript+event.text).slice(-4000),message:'Listening',phase:'listening'});schedule();}
       else {const previous=fragments.at(-2);update({reply:((previous?.speaker==='assistant'?state.reply:'')+event.text).slice(-700),message:'Live',phase:'listening'});}
     }else if(event.type==='delegation'){
       const key=`work:${event.id}`;if(seen.has(key))return;seen.add(key);if(notices.size>=8){deliver('Please finish one request before starting another.',event.id,true);return;}
@@ -70,7 +70,7 @@ export function createLiveSession(options:{preferences():LivePreferences;key(pro
   async function refresh(id:string,signal:AbortSignal){if(!mediaReady||refreshing||running||closing||Date.now()<refreshAfter||Date.now()-lastInputAt<2500)return;refreshing=true;
     try{const changed=await options.knowledge.changed();check(id,signal);if(changed[0]){const brief=await options.knowledge.research(changed[0],'Refresh goals, decisions, current progress and unresolved issues from changed records.',signal);check(id,signal);connection?.context(JSON.stringify(brief));}}catch{refreshAfter=Date.now()+60000;}finally{refreshing=false;}
   }
-  return {start,stop,join,status:()=>({...state}),active:()=>state.id!==null,revision:()=>revision,inputOffset:()=>inputOffset,userTextAfter:(offset:number)=>fragments.filter(f=>f.speaker==='user'&&f.endMs>offset).map(f=>f.text).join(''),note(content:string){connection?.context(content);},
+  return {start,stop,join,status:()=>({...state}),active:()=>state.id!==null,revision:()=>revision,inputOffset:()=>inputOffset,userTextAfter:(offset:number)=>fragments.filter(f=>f.speaker==='user'&&f.endMs>offset).map(f=>f.text).join(''),note(content:string){if(!connection||closing||!options.allowed())return false;connection.context(content);return true;},
     ready(id:string){if(state.id===id&&!closing){mediaReady=true;update({phase:'listening',message:'Listening'});schedule();}},error(id:string){if(state.id===id&&!closing&&state.phase!=='closing')void fail('Microphone or voice connection failed. Please try again.');},
     audio(id:string,bytes:Uint8Array){if(state.id!==id||closing||state.provider!=='gemini'||!connection?.audio)return;if(!options.allowed()){void stop();return;}try{connection.audio(bytes);}catch{void fail('Audio connection is congested. Please reconnect.');}},
   };

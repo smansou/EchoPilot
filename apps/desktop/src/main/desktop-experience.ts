@@ -1,3 +1,5 @@
+import {createSharedScreenSession} from './shared-screen-session';
+import {createSharedHighlight} from './shared-highlight';
 import { createLiveSession } from './live-session';
 import { createAgentBackend } from './agent-backend';
 import { connectOpenAILive } from './openai-live';
@@ -20,7 +22,9 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
   const cloud=createCloudProvider({secrets:options.secrets});
   const edit=createDesktopEdit(options.bundleDir);
   const observe=createDesktopObserveHost({bundleDir:options.bundleDir,timeoutMs:2500});
-  const overlay=createGazeOverlay({host:options.gaze,bundleDir:options.bundleDir,projectId:()=> 'desktop'});
+  let shared:ReturnType<typeof createSharedScreenSession>|undefined;
+  const highlight=createSharedHighlight();
+  const overlay=createGazeOverlay({onStop:()=>{shared?.enable(false);highlight.hide();},host:options.gaze,bundleDir:options.bundleDir,projectId:()=> 'desktop'});
   const historyPath=join(app.getPath('userData'),'desktop-history.enc');
   let history:SessionHistory[]=[];
   try {if(existsSync(historyPath)&&safeStorage.isEncryptionAvailable())history=JSON.parse(safeStorage.decryptString(readFileSync(historyPath))).slice(-200);}catch{}
@@ -29,6 +33,7 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
   const config=():CloudConfig=>{const setup=resolveProviderSetup(options.setting);return {provider:setup.reasoning,textModel:setup.textModel,speechModel:setup.speechModel};};
   async function observeContext(signal:AbortSignal) {
       const result:ScreenContext={text:''};
+      if(shared?.status().enabled){await shared.read();signal.throwIfAborted();result.text=JSON.stringify(shared.context()??{screen:'unavailable',instruction:'Ask for clarification; older screen references are invalid.'});return result;}
       const samples=options.gaze.recentSamples().filter(s=>Date.now()-Date.parse(s.timestamp)<800&&s.quality>=.6);
       const observation=await observe.observe({projectId:'desktop'});signal.throwIfAborted();
       gazeTarget=null;
@@ -75,13 +80,22 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
     remember,changed,
   });
   const knowledge=createSessionKnowledge({library:coding,summarize:(question,evidence,signal)=>cloud.research(config(),question,evidence,signal)});
-  const backend=createAgentBackend({config,cloud,knowledge,screen:observeContext,prepare:(action,signal)=>edit.prepare(action,gazeTarget,signal),revision:()=>live.revision(),inputOffset:()=>live.inputOffset(),userTextAfter:offset=>live.userTextAfter(offset),contextNote:content=>live.note(content)});
-  const live=createLiveSession({
+  const backend=createAgentBackend({config,cloud,knowledge,screen:observeContext,screenContext:()=>shared?.context(),findScreenTarget:(query,signal)=>{signal.throwIfAborted();return shared?.find(query);},focusScreenTarget:(id,signal)=>{signal.throwIfAborted();return shared?.choose(id);},prepare:async(action,signal)=>{
+      if(action.target==='gaze'&&shared?.status().enabled){const target=shared.actionTarget(action.operation);if(!target)throw Error('Gaze is ambiguous or stale. Name the target so it can be highlighted.');
+        if(['window','area','textblock','paragraph','sentence'].includes(target.type)&&action.operation!=='scroll')throw Error('This is a reading area, not a verified actionable control. Name a button or focused text field.');
+        const control=await edit.atPoint(target.bounds.x+target.bounds.width/2,target.bounds.y+target.bounds.height/2,target.nativeRole??target.type);signal.throwIfAborted();
+        if(control.state.appBundleId!==target.app.split(':')[0]||control.state.role!==(target.nativeRole??target.type))throw Error('The native control does not match the highlighted target. Please clarify.');
+        return edit.prepare(action,control,signal);}
+      return edit.prepare(action,gazeTarget,signal);},revision:()=>live.revision(),inputOffset:()=>live.inputOffset(),userTextAfter:offset=>live.userTextAfter(offset),contextNote:content=>live.note(content)});
+  const live=createLiveSession({userInput:text=>shared?.pin(text),screenContext:()=>shared?.context(),
     key:provider=>options.secrets.get(provider),preferences:()=>{const setup=resolveProviderSetup(options.setting);return {provider:setup.voice,voice:setup.voiceName};},
     allowed:options.allowed,knowledge,backend:request=>backend.run(request),clearBackend:()=>backend.clear(),
     connect:(provider,connection)=>provider==='openai'?connectOpenAILive(connection):connectGeminiLive(connection),
     history:()=>history.filter(h=>h.mode==='agent'),remember,changed,media:event=>options.widget()?.webContents.send('echo:live-media',event),
   });
+  // User approved bounded screen-text sharing with the configured live/reasoning providers.
+  shared=createSharedScreenSession({allowed:options.allowed,samples:()=>options.gaze.recentSamples(),observe:()=>observe.observe({projectId:'desktop',allowLocalOCR:true}),
+    voiceSession:()=>live.status().phase==='listening'?live.status().id:null,send:content=>live.note(content),highlight:attention=>{overlay.suppressMarker(attention.state==='stable'&&attention.target!==null);highlight.update(attention);}});
   function status(){return live.status().phase!=='idle'?live.status():session.status();}
   let transition=Promise.resolve();let transitionVersion=0;
   function toggle(mode:SessionMode){const version=transitionVersion;transition=transition.catch(()=>{}).then(async()=>{if(version!==transitionVersion)return;
@@ -107,6 +121,8 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
       case 'audio':if(event.sender!==options.widget()?.webContents||typeof request.id!=='string'||!(request.bytes instanceof Uint8Array)||request.bytes.byteLength>8_000_000)throw Error('Invalid audio');await session.audio(request.id,request.bytes);return session.status();
       case 'history':return history;
       case 'clear-history':history=[];if(safeStorage.isEncryptionAvailable())writeFileSync(historyPath,safeStorage.encryptString('[]'),{mode:0o600});return [];
+      case 'shared-screen-status':return shared?.status();
+      case 'shared-screen-toggle':if(typeof request.enabled!=='boolean')throw Error('Choose whether to highlight screen context.');return shared?.enable(request.enabled);
       case 'gaze-start':if(typeof request.displayId!=='string')throw Error('Choose a display');await overlay.start(request.displayId);return {ok:true};
       case 'gaze-stop':await overlay.stop();return {ok:true};
       case 'open-permission': {
@@ -118,5 +134,5 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
       default:throw Error('Unknown desktop command');
     }
   });
-  return {toggle,cancel,dispose(){cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
+  return {toggle,cancel,dispose(){shared?.dispose();highlight.dispose();cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
 }

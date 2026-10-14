@@ -70,5 +70,5 @@ export class SharedScreenContextFeed {
     isolated.offer(this.pending,now);return isolated.flush(now,{full:true});
   }
   usage(now: number) {return {bytesInLastMinute:this.costs.filter(c=>now-c.at<60000).reduce((total,c)=>total+c.bytes,0),packets:this.sequence};}
-  reset() {this.pending=null;this.delivered=null;this.lastAt=-Infinity;this.lastOfferedAt=-Infinity;this.costs=[];this.sequence=0;}
+  reset(preserveBudget=false) {this.pending=null;this.delivered=null;this.lastOfferedAt=-Infinity;if(!preserveBudget){this.lastAt=-Infinity;this.costs=[];this.sequence=0;}}
 }

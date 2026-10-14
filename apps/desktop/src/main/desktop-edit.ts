@@ -30,7 +30,7 @@ export function createDesktopEdit(bundleDir:string) {
   }
   return {
     capture:async () => target(await read('focused-target')),
-    atPoint:async (x:number,y:number) => target(await read('target-at-point',{x,y})),
+    atPoint:async (x:number,y:number,preferredRole?:string) => target(await read('target-at-point',{x,y,...(preferredRole?{preferredRole}:{})})),
     async insert(value:unknown,text:string,signal:AbortSignal) {
       const item = target(value);
       if (!['AXTextField','AXTextArea'].includes(item.state.role)) throw Error('Click a text field before starting dictation.');

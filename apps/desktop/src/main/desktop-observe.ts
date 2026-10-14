@@ -42,7 +42,12 @@ export type ForegroundEvidenceApplication = Readonly<{
   nameTruncated: boolean;
 }>;
 
+export type ObservationFrame=Readonly<{x:number;y:number;width:number;height:number}>;
+export type ObservationTextRegion=Readonly<{kind:'sentence'|'paragraph';text:string;frame:ObservationFrame;rangeStart:number;rangeLength:number}>;
+
 export type ForegroundEvidenceWindow = Readonly<{
+  id?:string;
+  frame?:ObservationFrame;
   role: string;
   roleTruncated: boolean;
   title: string;
@@ -50,6 +55,8 @@ export type ForegroundEvidenceWindow = Readonly<{
 }>;
 
 export type ForegroundEvidenceNode = Readonly<{
+  frame?:ObservationFrame;
+  textRegions?:readonly ObservationTextRegion[];
   depth: number;
   role: string;
   subrole: string | null;
@@ -128,7 +135,7 @@ export type DesktopObserveHostOptions = DesktopObserveHelperOptions & Readonly<{
 }>;
 
 export type DesktopObserveHost = Readonly<{
-  observe(request: Readonly<{ projectId: unknown }>): Promise<DesktopObserveResult>;
+  observe(request: Readonly<{ projectId: unknown; allowLocalOCR?:boolean }>): Promise<DesktopObserveResult>;
 }>;
 
 export type DesktopObserveDiagnostics = Readonly<{
@@ -201,6 +208,22 @@ function normalizeProjectId(value: unknown): string | null {
   return trimmed;
 }
 
+function parseFrame(value:unknown):ObservationFrame|null {
+  const r=asRecord(value);if(!r)return null;
+  if(!['x','y','width','height'].every(key=>typeof r[key]==='number'&&Number.isFinite(r[key])&&Math.abs(r[key] as number)<=100000))return null;
+  if((r.width as number)<=0||(r.height as number)<=0)return null;
+  return {x:r.x as number,y:r.y as number,width:r.width as number,height:r.height as number};
+}
+function parseTextRegions(value:unknown):readonly ObservationTextRegion[]|null {
+  if(!Array.isArray(value)||value.length>12)return null;
+  const result:ObservationTextRegion[]=[];
+  for(const item of value){const r=asRecord(item);if(!r||(r.kind!=='sentence'&&r.kind!=='paragraph'))return null;
+    const text=boundedString(r.text,4096),frame=parseFrame(r.frame),rangeStart=count(r,'rangeStart'),rangeLength=count(r,'rangeLength',1);
+    if(text===null||!frame||rangeStart===null||rangeLength===null||rangeStart>10000000||rangeLength>2048)return null;
+    result.push({kind:r.kind,text,frame,rangeStart,rangeLength});}
+  return result;
+}
+
 /** The evidence payload is revalidated field by field; anything unexpected is a malformed answer. */
 function parseEvidence(payload: string, expectedProjectId: string, maxNodes: number): ForegroundEvidence | null {
   let parsed: unknown;
@@ -232,6 +255,10 @@ function parseEvidence(payload: string, expectedProjectId: string, maxNodes: num
   const windowTitleTruncated = flag(windowRecord, 'titleTruncated');
   if (windowRole === null || windowTitle === null || windowRoleTruncated === null || windowTitleTruncated === null) return null;
 
+  const windowFrame=windowRecord.frame===undefined?null:parseFrame(windowRecord.frame);
+  const windowId=windowRecord.id===undefined?null:boundedString(windowRecord.id,128);
+  if(windowRecord.frame!==undefined&&!windowFrame||windowRecord.id!==undefined&&windowId===null)return null;
+
   if (!Array.isArray(record.nodes) || record.nodes.length > maxNodes) return null;
   const nodes: ForegroundEvidenceNode[] = [];
   for (const rawNode of record.nodes) {
@@ -250,8 +277,12 @@ function parseEvidence(payload: string, expectedProjectId: string, maxNodes: num
     if (depth === null || depth > 64 || role === null || !subrole.ok || !label.ok || !value.ok
       || labelTruncated === null || valueTruncated === null || redacted === null
       || roleTruncated === null || subroleTruncated === null) return null;
+    const frame=nodeRecord.frame===undefined?null:parseFrame(nodeRecord.frame);
+    const textRegions=nodeRecord.textRegions===undefined?null:parseTextRegions(nodeRecord.textRegions);
+    if(nodeRecord.frame!==undefined&&!frame||nodeRecord.textRegions!==undefined&&!textRegions)return null;
     nodes.push({
-      depth, role, subrole: subrole.value, label: label.value, value: value.value,
+      ...(!redacted&&frame?{frame}:{}),...(!redacted&&textRegions?{textRegions}:{}),
+      depth, role, subrole: subrole.value, label: redacted?null:label.value, value: redacted?null:value.value,
       labelTruncated, valueTruncated, redacted, roleTruncated, subroleTruncated,
     });
   }
@@ -280,7 +311,7 @@ function parseEvidence(payload: string, expectedProjectId: string, maxNodes: num
     observedAtMs: record.observedAtMs,
     projectId: expectedProjectId,
     application: { pid, bundleId, name, bundleIdTruncated, nameTruncated },
-    window: { role: windowRole, roleTruncated: windowRoleTruncated, title: windowTitle, titleTruncated: windowTitleTruncated },
+    window: { ...(windowFrame?{frame:windowFrame}:{}),...(windowId?{id:windowId}:{}),role: windowRole, roleTruncated: windowRoleTruncated, title: windowTitle, titleTruncated: windowTitleTruncated },
     nodes,
     quality: record.quality,
     truncated,
@@ -363,7 +394,7 @@ export function createDesktopObserveHost(options: DesktopObserveHostOptions): De
   const maxEvidenceNodes = normalizeLimit(options.maxEvidenceNodes, DESKTOP_OBSERVE_MAX_EVIDENCE_NODES);
   const candidates = options.helperPath ? [explicitHelperPath(bundleDir, options.helperPath)] : desktopHelperCandidates(bundleDir, env);
 
-  function runObservation(helper: string, projectId: string): Promise<DesktopObserveResult> {
+  function runObservation(helper: string, projectId: string, allowLocalOCR:boolean): Promise<DesktopObserveResult> {
     return new Promise((resolveResult) => {
       let settled = false;
       let buffer = '';
@@ -428,6 +459,7 @@ export function createDesktopObserveHost(options: DesktopObserveHostOptions): De
       try {
         child.stdin.write(`${JSON.stringify({
           operation: 'observe',
+          ...(allowLocalOCR?{allowLocalOCR:true}:{}),
           scope: { profileId: 'local', projectId, sensitivity: 'normal' },
         })}\n`);
       } catch {
@@ -437,12 +469,12 @@ export function createDesktopObserveHost(options: DesktopObserveHostOptions): De
   }
 
   return Object.freeze({
-    async observe(request: Readonly<{ projectId: unknown }>): Promise<DesktopObserveResult> {
+    async observe(request: Readonly<{ projectId: unknown; allowLocalOCR?:boolean }>): Promise<DesktopObserveResult> {
       const projectId = normalizeProjectId(request.projectId);
       if (projectId === null) return { outcome: 'invalid_scope' };
       const helper = candidates.find((candidate) => exists(candidate));
       if (!helper) return { outcome: 'helper_missing', searched: [...candidates] };
-      return runObservation(helper, projectId);
+      return runObservation(helper, projectId,request.allowLocalOCR===true);
     },
   });
 }

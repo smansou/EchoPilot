@@ -2,7 +2,7 @@
 export interface AttentionBounds { x: number; y: number; width: number; height: number }
 export interface ScreenRegion {
   id: string; revision: string; app: string; window: string; type: string; label: string;
-  bounds: AttentionBounds; parentId?: string; sensitive?: boolean;
+  bounds: AttentionBounds; nativeRole?:string;parentId?: string; sensitive?: boolean;
 }
 export interface GazeDistribution {
   capturedAt: number; mean: {x: number; y: number}; covariance: {xx: number; xy: number; yy: number}; quality: number;
