@@ -33,7 +33,7 @@ export function createWebGazerHost(options: GazeHostOptions) {
       }else if(r.command==='webgazer-calibration'){
         if(!display||calibration?.accepted||!Array.isArray(r.errors)||r.errors.length!==5)return {ok:false,error:'invalid_request'};
         const errors=r.errors as unknown[];
-        if(!errors.every(e=>Array.isArray(e)&&e.length===2&&e.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=2*Math.max(display!.width,display!.height))))return {ok:false,error:'invalid_request'};
+        if(!errors.every(e=>Array.isArray(e)&&e.length===2&&e.every(v=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=2*Math.max(display!.width,display!.height))))return {ok:false,error:'invalid_request'};
         const pairs=errors as [number,number][];
         const rms=Math.sqrt(pairs.reduce((sum,[x,y])=>sum+x*x+y*y,0)/5);
         // Coarse area targeting still needs evidence of tracking in both directions.
