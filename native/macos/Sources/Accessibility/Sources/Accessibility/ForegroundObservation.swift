@@ -34,6 +34,15 @@ public protocol AXObservationNode: AnyObject {
     func value() -> String?
     /// Up to `limit` children in AX order; `truncated` is true when more exist than were returned.
     func children(limit: Int) -> AXObservationChildren
+    func frame() -> ObservationFrame?
+    func observationIdentity() -> String?
+    func textRegions(limit: Int, deadline: Date) -> [ObservationTextRegion]
+}
+
+public extension AXObservationNode {
+    func frame() -> ObservationFrame? { nil }
+    func observationIdentity() -> String? { nil }
+    func textRegions(limit: Int, deadline: Date) -> [ObservationTextRegion] { [] }
 }
 
 public struct AXObservationChildren {
@@ -229,12 +238,16 @@ public struct ForegroundEvidenceWindow: Codable, Equatable, Sendable {
     public let roleTruncated: Bool
     public let title: String
     public let titleTruncated: Bool
+    public let frame: ObservationFrame?
+    public let id: String?
 
-    public init(role: String, roleTruncated: Bool = false, title: String, titleTruncated: Bool) {
+    public init(role: String, roleTruncated: Bool = false, title: String, titleTruncated: Bool, frame: ObservationFrame? = nil, id: String? = nil) {
         self.role = role
         self.roleTruncated = roleTruncated
         self.title = title
         self.titleTruncated = titleTruncated
+        self.frame = frame
+        self.id = id
     }
 }
 
@@ -242,6 +255,8 @@ public struct ForegroundEvidenceWindow: Codable, Equatable, Sendable {
 /// value, and no children were read. Role and subrole are byte-bounded even for redacted nodes, and
 /// every string carries its truncation flag.
 public struct ForegroundEvidenceNode: Codable, Equatable, Sendable {
+    public let frame: ObservationFrame?
+    public let textRegions: [ObservationTextRegion]? 
     public let depth: Int
     public let role: String
     public let subrole: String?
@@ -263,8 +278,12 @@ public struct ForegroundEvidenceNode: Codable, Equatable, Sendable {
         valueTruncated: Bool,
         redacted: Bool,
         roleTruncated: Bool = false,
-        subroleTruncated: Bool = false
+        subroleTruncated: Bool = false,
+        frame: ObservationFrame? = nil,
+        textRegions: [ObservationTextRegion]? = nil
     ) {
+        self.frame = frame
+        self.textRegions = textRegions
         self.depth = depth
         self.role = role
         self.subrole = subrole
@@ -463,7 +482,9 @@ public final class ForegroundObserver {
             role: windowRole,
             roleTruncated: windowRoleTruncated,
             title: windowTitle,
-            titleTruncated: titleTruncated
+            titleTruncated: titleTruncated,
+            frame: windowNode.frame(),
+            id: windowNode.observationIdentity()
         )
         let collected = collect(window: windowNode, deadline: deadline, reasons: &reasons)
 
@@ -618,7 +639,9 @@ public final class ForegroundObserver {
                     valueTruncated: valueTruncated,
                     redacted: false,
                     roleTruncated: roleTruncated,
-                    subroleTruncated: subroleTruncated
+                    subroleTruncated: subroleTruncated,
+                    frame: node.frame(),
+                    textRegions: deadlinePassed(deadline) ? nil : node.textRegions(limit: 12, deadline: deadline)
                 )
             }
 

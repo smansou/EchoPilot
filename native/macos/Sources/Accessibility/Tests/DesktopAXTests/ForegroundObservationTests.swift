@@ -452,7 +452,7 @@ final class ForegroundObservationTests: XCTestCase {
         XCTAssertEqual(evidence.stats.visitedNodes, 1)
         XCTAssertEqual(evidence.nodes.count, 1)
         XCTAssertEqual(evidence.observedAtMs, TestClock.defaultStartMs)
-        XCTAssertEqual(children[0].childrenReads, 1)
+        XCTAssertEqual(children[0].childrenReads, 0, "the extra geometry/text budget check prevents children reads after the deadline")
         XCTAssertEqual(children[1].roleReads, 0, "the second node is never started after the deadline")
     }
 

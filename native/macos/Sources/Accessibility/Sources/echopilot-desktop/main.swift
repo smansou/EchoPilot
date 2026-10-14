@@ -33,6 +33,7 @@ import Foundation
 /// error response rather than a crash, so the host always gets one answer per request.
 private struct Request: Decodable {
     let operation: String
+    let allowLocalOCR: Bool?
     let scope: ActionScope?
     let actionId: String?
     let idempotencyKey: String?
@@ -191,7 +192,7 @@ private func handle(_ line: String) throws -> Data {
         let outcome = try observer.observe(scope: scope)
         switch outcome {
         case let .evidence(evidence):
-            return try Response.success(evidence, encoder: encoder)
+            return try Response.success(request.allowLocalOCR == true ? LocalWindowOCR.enrich(evidence) : evidence, encoder: encoder)
         default:
             return try Response.failure(outcome.failureText ?? "observe:failed", encoder: encoder)
         }

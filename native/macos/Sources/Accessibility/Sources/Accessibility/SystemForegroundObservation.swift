@@ -128,6 +128,49 @@ private final class AXElementObservationNode: AXObservationNode {
         return AXObservationChildren(nodes: nodes, truncated: total > asked)
     }
 
+    func observationIdentity() -> String? {
+        "ax-\(CFHash(element))"
+    }
+
+    func frame() -> ObservationFrame? {
+        guard let position = copyAttribute(kAXPositionAttribute), CFGetTypeID(position) == AXValueGetTypeID(),
+              let size = copyAttribute(kAXSizeAttribute), CFGetTypeID(size) == AXValueGetTypeID() else { return nil }
+        var point = CGPoint.zero
+        var extent = CGSize.zero
+        guard AXValueGetValue(unsafeBitCast(position, to: AXValue.self), .cgPoint, &point),
+              AXValueGetValue(unsafeBitCast(size, to: AXValue.self), .cgSize, &extent) else { return nil }
+        return ObservationFrame(x: point.x, y: point.y, width: extent.width, height: extent.height).validated
+    }
+
+    func textRegions(limit: Int, deadline: Date) -> [ObservationTextRegion] {
+        guard !AXSensitivity.isSensitive(role: role(), subrole: subrole()),
+              let raw = copyAttribute(kAXVisibleCharacterRangeAttribute), CFGetTypeID(raw) == AXValueGetTypeID() else { return [] }
+        var visible = CFRange()
+        guard AXValueGetValue(unsafeBitCast(raw, to: AXValue.self), .cfRange, &visible),
+              visible.location >= 0, visible.length > 0 else { return [] }
+        visible.length = min(visible.length, 2048)
+        guard let parameter = AXValueCreate(.cfRange, &visible) else { return [] }
+        var textValue: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString,
+              parameter, &textValue) == .success, let text = textValue as? String else { return [] }
+        var results: [ObservationTextRegion] = []
+        for span in ObservationTextSegmentation.spans(text, limit: min(limit, 12)) {
+            guard Date() < deadline else { break }
+            var range = CFRange(location: visible.location + span.start, length: span.length)
+            guard let rangeValue = AXValueCreate(.cfRange, &range) else { continue }
+            var boundsValue: CFTypeRef?
+            guard AXUIElementCopyParameterizedAttributeValue(element, kAXBoundsForRangeParameterizedAttribute as CFString,
+                  rangeValue, &boundsValue) == .success, let boundsValue,
+                  CFGetTypeID(boundsValue) == AXValueGetTypeID() else { continue }
+            var rect = CGRect.zero
+            guard AXValueGetValue(unsafeBitCast(boundsValue, to: AXValue.self), .cgRect, &rect),
+                  let box = ObservationFrame(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height).validated else { continue }
+            results.append(ObservationTextRegion(kind: span.kind, text: span.text, frame: box,
+                           rangeStart: range.location, rangeLength: range.length))
+        }
+        return results
+    }
+
     // MARK: - attribute reads
 
     func copyAttribute(_ attribute: String) -> CFTypeRef? {
