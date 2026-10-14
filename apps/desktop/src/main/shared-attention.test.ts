@@ -51,3 +51,14 @@ test('invalid covariance, poor quality, private regions and out-of-order scenes 
   t.observe([],0,300);for(let at=300;at<=1000;at+=100)sample(t,at);
   assert.equal(t.current(1000).target?.id,'a');
 });
+test('pending dwell resets when its region changes; unrelated region changes preserve target',()=>{
+  const t=new SharedAttentionTracker();for(let at=0;at<=600;at+=100)sample(t,at);
+  const changed=scene.map(r=>r.id==='a'?{...r,revision:'2'}:r);
+  t.observe(changed,700,700);t.update(gaze(700),700);
+  assert.equal(t.current(700).target,null);
+  for(let at=800;at<=1400;at+=100){t.observe(changed,at,at);t.update(gaze(at),at);}
+  assert.equal(t.current(1400).target?.id,'a');
+  t.observe(changed.map(r=>r.id==='b'?{...r,label:'new unrelated label',revision:'3'}:r),1500,1500);
+  assert.equal(t.current(1500).target?.id,'a');
+  t.reset(1600);assert.equal(t.resolve('correction',1600).target,null);assert.equal(t.resolve('previous',1600).target,null);
+});

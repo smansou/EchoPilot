@@ -45,7 +45,7 @@ export class SharedAttentionTracker {
   private regions = new Map<string,ScreenRegion>();
   private sceneAt = -Infinity;
   private lastSampleAt = -Infinity;
-  private pending: {id: string; since: number} | null = null;
+  private pending: {id: string; fingerprint: string; since: number} | null = null;
   private history: {region: ScreenRegion; at: number}[] = [];
   private result: AttentionResult = {state:'unavailable',target:null,candidates:[],uncertaintyRadius:0,changedAt:0,observedAt:0};
   constructor(options: Partial<AttentionOptions> = {}) {this.options={...defaults,...options};}
@@ -55,12 +55,19 @@ export class SharedAttentionTracker {
     this.regions=new Map(regions.filter(validRegion).slice(0,this.options.maxRegions).map(r=>[r.id,cloneRegion(r)]));
     const target=this.result.target;
     if (target && !this.validReference(target)) this.clear(now);
-    if (this.pending && !this.regions.has(this.pending.id)) this.pending=null;
+    if (this.pending) {
+      const pendingRegion=this.regions.get(this.pending.id);
+      if (!pendingRegion || fingerprint(pendingRegion)!==this.pending.fingerprint) this.pending=null;
+    }
+    this.result.candidates=this.result.candidates.filter(c=>this.validReference(c.region));
     this.history=this.history.filter(h=>now-h.at<=this.options.historyMs && this.validReference(h.region));
     return this.current(now);
   }
   private validReference(r: ScreenRegion) {const current=this.regions.get(r.id); return !!current && fingerprint(current)===fingerprint(r);}
-  private clear(now: number) {
+  reset(now = 0) {
+    this.regions.clear(); this.history=[]; this.sceneAt=-Infinity; this.lastSampleAt=-Infinity; this.clear(now);
+  }
+  clear(now: number) {
     this.pending=null;
     this.result={state:'unavailable',target:null,candidates:[],uncertaintyRadius:0,changedAt:now,observedAt:now};
   }
@@ -109,7 +116,7 @@ export class SharedAttentionTracker {
       this.result={...this.result,state:'stable',candidates:candidates.slice(0,6),uncertaintyRadius:radius,observedAt:now};
       return this.current(now);
     }
-    if (this.pending?.id!==winner.region.id) this.pending={id:winner.region.id,since:gaze.capturedAt};
+    if (this.pending?.id!==winner.region.id) this.pending={id:winner.region.id,fingerprint:fingerprint(winner.region),since:gaze.capturedAt};
     const dwell=this.coarse(winner.region)?this.options.coarseDwellMs:this.options.fineDwellMs;
     if (gaze.capturedAt-this.pending.since>=dwell) {
       this.history.push({region:cloneRegion(winner.region),at:now});

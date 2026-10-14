@@ -29,3 +29,11 @@ test('fresh full request includes bounded definitions even after deltas; no raw 
   f.offer(c,1000);const full=f.flush(1000,{full:true})!;assert.equal(full.regions.length,2);assert.equal(full.targetId,'a');
   assert.doesNotMatch(JSON.stringify(full),/covariance|uncertaintyRadius|probability|image|base64/);
 });
+test('on-demand bounded local snapshot is independent of stream budget and does not mutate feed',()=>{
+  const f=new SharedScreenContextFeed({bytesPerMinute:700,maxBytes:700});f.offer(context(0),0);f.flush(0);
+  f.offer(context(100,'b'),100);const usage=f.usage(100);
+  assert.equal(f.flush(100,{full:true}),null);
+  const full=f.snapshot(100)!;assert.equal(full.full,true);assert.equal(full.targetId,'b');
+  assert.ok(Buffer.byteLength(JSON.stringify(full))<=700);assert.deepEqual(f.usage(100),usage);
+  f.reset();assert.equal(f.snapshot(200),null);assert.equal(f.usage(200).packets,0);
+});

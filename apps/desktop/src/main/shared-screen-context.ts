@@ -61,6 +61,13 @@ export class SharedScreenContextFeed {
     this.sequence=packet.sequence;this.lastAt=now;this.costs.push({at:now,bytes:bytes(packet)});
     return packet;
   }
+  /** On-demand local snapshot: same per-packet size bound, separate from stream cadence/minute quota.
+   * Caller accounts for explicit turn requests; this does not start an independent periodic cloud feed. */
+  snapshot(now: number): ContextPacket|null {
+    if (!this.pending) return null;
+    const isolated=new SharedScreenContextFeed({...this.options,intervalMs:0,bytesPerMinute:this.options.maxBytes});
+    isolated.offer(this.pending,now);return isolated.flush(now,{full:true});
+  }
   usage(now: number) {return {bytesInLastMinute:this.costs.filter(c=>now-c.at<60000).reduce((total,c)=>total+c.bytes,0),packets:this.sequence};}
   reset() {this.pending=null;this.delivered=null;this.lastAt=-Infinity;this.lastOfferedAt=-Infinity;this.costs=[];this.sequence=0;}
 }
