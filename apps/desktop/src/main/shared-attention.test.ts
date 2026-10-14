@@ -39,6 +39,7 @@ test('revision and window geometry changes invalidate target and correction hist
   for(let at=800;at<=1500;at+=100)sample(t,at,225);
   const correction=t.resolve('correction',1500);
   assert.equal(correction.target?.id,'b');assert.equal(correction.previous?.id,'a');assert.equal(correction.authorization,false);
+  assert.equal(correction.previousAt,700);assert.equal(correction.targetAt,1500);assert.equal(correction.history.length,2);
   t.observe(scene.map(r=>({...r,revision:'2',window:'new-window'})),1600,1600);
   assert.equal(t.resolve('previous',1600).target,null);
   assert.equal(t.current(1600).target,null);

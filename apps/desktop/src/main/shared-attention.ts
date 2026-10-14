@@ -138,8 +138,11 @@ export class SharedAttentionTracker {
   resolve(reference: 'this'|'that'|'previous'|'correction', now: number) {
     const current=this.current(now);
     const recent=this.history.filter(h=>now-h.at<=this.options.historyMs && this.validReference(h.region));
-    const previous=[...recent].reverse().find(h=>h.region.id!==current.target?.id)?.region ?? null;
+    const previousEntry=[...recent].reverse().find(h=>h.region.id!==current.target?.id);
+    const previous=previousEntry?.region ?? null;
     return {target:reference==='previous'?previous:current.target, previous,
+      targetAt:reference==='previous'?(previousEntry?.at ?? null):(current.target?current.changedAt:null),
+      previousAt:previousEntry?.at ?? null, history:recent.map(h=>({region:cloneRegion(h.region),at:h.at})),
       alternatives:current.candidates.filter(c=>c.region.id!==current.target?.id).map(c=>cloneRegion(c.region)),
       ambiguous:current.state!=='stable', authorization:false as const};
   }
