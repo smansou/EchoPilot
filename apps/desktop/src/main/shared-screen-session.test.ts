@@ -22,7 +22,7 @@ test('scene freshness beyond 1.2s invalidates manual choice and semantic snapsho
   const h=harness();try{await h.ready();const id=h.session.target()!.id;h.session.choose(id);h.defer(new Promise(()=>{}));h.time(2301);h.gaze();h.session.tick();assert.equal(h.session.target(),null);assert.equal(h.highlights.at(-1)?.target,null);assert.equal(h.session.context()?.screen.targetId??null,null);}finally{h.session.dispose();}
 });
 test('future-dated gaze cannot validate an earlier pinned reference',async()=>{
-  const h=harness();try{await h.ready();h.session.pin('this');h.time(1500);h.gaze(9000);h.session.tick();assert.equal(h.session.target(),null);assert.equal(h.session.context()?.referent?.target,null);}finally{h.session.dispose();}
+  const h=harness();try{await h.ready();h.session.pin('this');h.time(1500);h.gaze(9000);h.session.tick();assert.equal(h.session.target(),null);assert.equal(h.session.context()?.referent?.target??null,null);}finally{h.session.dispose();}
 });
 test('late observation completion cannot resurrect disabled session state',async()=>{
   const h=harness();let finish!:(value:DesktopObserveResult)=>void;const pending=new Promise<DesktopObserveResult>(resolve=>{finish=resolve;});h.defer(pending);h.gaze();h.session.enable(true);h.session.enable(false);finish({outcome:'observed',evidence:h.evidence()});await Promise.resolve();await Promise.resolve();assert.equal(h.session.status().enabled,false);assert.equal(h.session.target(),null);assert.equal(h.session.status().regions,0);h.session.dispose();
