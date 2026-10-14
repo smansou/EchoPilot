@@ -44,3 +44,6 @@ test('unrelated whole-screen revision churn emits nothing; real region revision 
   const changed=context(11000);changed.attention.target!.revision='2';changed.revision='11000';f.offer(changed,11000);
   const packet=f.flush(11000)!;assert.equal(packet.revision,'11000');assert.equal(packet.regions[0]?.revision,'2');
 });
+test('preserving budget across window churn keeps cadence and rolling byte quota intact',()=>{
+  const f=new SharedScreenContextFeed({intervalMs:1000,maxBytes:1200,bytesPerMinute:8000});let total=0;for(let at=0;at<60000;at+=100){const c=context(at,String(at));c.window='window-'+at;f.reset(true);f.offer(c,at);const packet=f.flush(at);if(packet){total+=Buffer.byteLength(JSON.stringify(packet));assert.ok(f.usage(at).bytesInLastMinute<=8000);}}assert.ok(total<=8000);assert.ok(f.usage(59999).packets<=60);
+});

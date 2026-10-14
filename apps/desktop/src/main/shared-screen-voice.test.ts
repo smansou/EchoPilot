@@ -10,7 +10,7 @@ const settle=()=>new Promise(resolve=>setTimeout(resolve,340));
 const tool=(name:string,args:unknown,id=name)=>({content:null,tool_calls:[{id,type:'function',function:{name,arguments:JSON.stringify(args)}}]});
 function harness(){
   let receive!:(event:LiveEvent)=>void,connectOptions:LiveConnectOptions|undefined;
-  let allowed=true,initialReads=0,focused=0,writes=0,prepared=0,offset=0;
+  let allowed=true,initialReads=0,focused=0,writes=0,prepared=0,offset=0,finds=0;
   let currentNative={appBundleId:'fixture.app',role:'AXButton',label:'Open',fingerprint:'v1',value:'',enabled:true,focused:true};
   const regions:ScreenRegion[]=['a','b'].map((id,index)=>({id,revision:'1',app:'fixture.app:42',window:'w',type:'AXButton',label:index?'Save':'Open',bounds:{x:index*150,y:100,width:100,height:80}}));
   let lookedAt=regions[0]!,pinned:ScreenRegion|null=null;
@@ -23,10 +23,10 @@ function harness(){
     screenContext:()=>{initialReads++;return context();},userInput:text=>{order.push('pin:'+text);pinned=structuredClone(lookedAt);},
     connect:async(_provider,options)=>{connectOptions=options;receive=options.onEvent;return {context:text=>notes.push(text),result:(...args)=>results.push(args),close:async()=>true};}});
   const backend=createAgentBackend({config:()=>({provider:'openrouter',textModel:'fake',speechModel:'fake'}),cloud:{agentStep:async(_config:any,history:any)=>{messages.push(structuredClone(history));return queue.shift()??{content:'Observed'};}} as any,knowledge,
-    screenContext:context,focusScreenTarget:(id,signal)=>{signal.throwIfAborted();const target=regions.find(r=>r.id===id);if(!target)throw Error('Target is stale or unavailable.');focused++;lookedAt=target;pinned=structuredClone(target);return {id:target.id,label:target.label,kind:target.type,authorization:false};},screen:async()=>({text:JSON.stringify(context())}),
+    screenContext:context,findScreenTarget:(input,signal)=>{signal.throwIfAborted();finds++;return {targets:regions.filter(region=>!input.query||region.label.toLowerCase().includes(input.query.toLowerCase())).map(region=>({id:region.id,kind:region.type,label:region.label})),authorization:false};},focusScreenTarget:(id,signal)=>{signal.throwIfAborted();const target=regions.find(r=>r.id===id);if(!target)throw Error('Target is stale or unavailable.');focused++;lookedAt=target;pinned=structuredClone(target);return {id:target.id,label:target.label,kind:target.type,authorization:false};},screen:async()=>({text:JSON.stringify(context())}),
     prepare:async action=>{prepared++;const region=pinned??lookedAt;if(!regions.some(r=>r.id===region.id&&r.revision===region.revision))throw Error('Highlighted target changed.');const draft=await actions.handle({command:'prepareAction',projectId:'p',operation:action.operation,direction:action.value});assert.equal(draft.ok,true);const preview=(await actions.handle({command:'previewPrepared',projectId:'p'})).preview!;return {label:preview.label,execute:async()=>{const outcome=await actions.handle({command:'confirm',projectId:'p',previewId:preview.previewId,confirmed:true});if(!outcome.ok)throw Error(outcome.error);}};},
     revision:()=>live.revision(),inputOffset:()=>live.inputOffset(),userTextAfter:at=>live.userTextAfter(at),contextNote:text=>{live.note(text);}});
-  return {live,backend,notes,results,messages,queue,order,regions,reads:()=>initialReads,connected:()=>connectOptions,counts:()=>({focused,writes,prepared}),look(id:string){lookedAt=regions.find(r=>r.id===id)!;},allow(value:boolean){allowed=value;},changeNative(){currentNative={...currentNative,fingerprint:'v2'};},
+  return {live,backend,notes,results,messages,queue,order,regions,finds:()=>finds,reads:()=>initialReads,connected:()=>connectOptions,counts:()=>({focused,writes,prepared}),look(id:string){lookedAt=regions.find(r=>r.id===id)!;},allow(value:boolean){allowed=value;},changeNative(){currentNative={...currentNative,fingerprint:'v2'};},
     speech(text:string){offset+=100;receive({type:'transcript',speaker:'user',text,startMs:offset-10,endMs:offset,id:'speech-'+offset});},delegate(id:string){receive({type:'delegation',id,offsetMs:offset});},
     async start(){await live.start();await live.join(live.status().id!);live.ready(live.status().id!);},async stop(){await live.stop();actions.dispose();}};
 }
@@ -52,4 +52,10 @@ test('later exact confirmation commits once through the native action seam',asyn
 });
 test('live background note refuses transmission when session policy becomes private or muted',async()=>{
   const h=harness();try{await h.start();h.allow(false);assert.equal(h.live.note('synthetic private label'),false);assert.equal(h.notes.length,0);}finally{await h.stop();}
+});
+test('backend searches the local map then highlights the named candidate without acting',async()=>{
+  const h=harness();try{await h.start();h.queue.push(tool('find_screen_target',{query:'Save',kind:'control',direction:'right'}),tool('focus_screen_target',{target_id:'b'}),{content:'Save is highlighted.'});h.speech('No, the Save control on the right');h.delegate('search-correction');await settle();assert.equal(h.finds(),1);assert.deepEqual(h.counts(),{focused:1,writes:0,prepared:0});const search=JSON.parse(h.messages[1]!.find(m=>m.role==='tool').content);assert.equal(search.targets[0]?.id,'b');assert.equal(search.authorization,false);}finally{await h.stop();}
+});
+test('backend rejects unsupported local search arguments before invoking the map',async()=>{
+  const h=harness();try{await h.start();h.queue.push(tool('find_screen_target',{kind:'shell',query:'anything'}),{content:'Please identify a visible control.'});h.speech('Find a control');h.delegate('bad-search');await settle();assert.equal(h.finds(),0);assert.deepEqual(h.counts(),{focused:0,writes:0,prepared:0});const receipt=JSON.parse(h.messages[1]!.find(m=>m.role==='tool').content);assert.equal(receipt.ok,false);assert.match(receipt.error,/supported local screen query/);}finally{await h.stop();}
 });
