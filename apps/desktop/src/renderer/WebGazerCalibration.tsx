@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GazeCalibrationDiagnostics } from '../main/gaze-host';
+import { sizeWebGazerPreview } from './webgazer-preview';
 import { CalibrationTutorial } from './CalibrationTutorial';
 import './webgazer-calibration.css';
 // Reserve the top centre for visible camera feedback. The remaining eight positions
 // span the screen; the centre is trained last, following the upstream workflow.
 const targets=[[.12,.15],[.5,.42],[.88,.15],[.12,.5],[.88,.5],[.12,.85],[.5,.85],[.88,.85],[.5,.5],[.3,.3],[.7,.3],[.3,.7],[.7,.7],[.5,.65]] as const;
 type Prediction={x:number;y:number}|null;
-type WebGazer={params:Record<string,unknown>;begin():Promise<unknown>;pause():void;end():void;clearData():Promise<void>;showFaceOverlay(value:boolean):WebGazer;showFaceFeedbackBox(value:boolean):WebGazer;getRegression():{getData():unknown[]}[];setRegression(value:string):WebGazer;setTracker(value:string):WebGazer;applyKalmanFilter(value:boolean):WebGazer;showVideoPreview(value:boolean):WebGazer;showPredictionPoints(value:boolean):WebGazer;saveDataAcrossSessions(value:boolean):WebGazer;removeMouseEventListeners():WebGazer;recordScreenPosition(x:number,y:number,event:string):WebGazer;setGazeListener(callback:(prediction:Prediction)=>void):WebGazer;getTracker():{getPositions():unknown[]|null}};
+type WebGazer={params:Record<string,unknown>;setVideoViewerSize(width:number,height:number):unknown;begin():Promise<unknown>;pause():void;end():void;clearData():Promise<void>;showFaceOverlay(value:boolean):WebGazer;showFaceFeedbackBox(value:boolean):WebGazer;getRegression():{getData():unknown[]}[];setRegression(value:string):WebGazer;setTracker(value:string):WebGazer;applyKalmanFilter(value:boolean):WebGazer;showVideoPreview(value:boolean):WebGazer;showPredictionPoints(value:boolean):WebGazer;saveDataAcrossSessions(value:boolean):WebGazer;removeMouseEventListeners():WebGazer;recordScreenPosition(x:number,y:number,event:string):WebGazer;setGazeListener(callback:(prediction:Prediction)=>void):WebGazer;getTracker():{getPositions():unknown[]|null}};
 const desktop=(request:Record<string,unknown>):Promise<any>=>(window as any).echo.desktop(request);
 type View={phase:'tutorial'|'setup'|'training'|'validation'|'error'|'tracking';index:number;error:string;progress:number;ready:boolean;checking:boolean;settling:boolean;diagnostics?:GazeCalibrationDiagnostics|undefined};
 const initial:View={phase:'tutorial',index:-1,error:'',progress:0,ready:false,checking:false,settling:false};
@@ -86,6 +87,8 @@ export function WebGazerCalibration(){
       });
       deadline=setTimeout(()=>fail('The camera could not start. Check camera access in System Settings, then try setup again.'),20000);
       await wg.begin();if(deadline)clearTimeout(deadline);if(disposed||failed){cleanup();return;}
+      const camera=document.getElementById('webgazerVideoFeed') as HTMLVideoElement|null;
+      if(camera)sizeWebGazerPreview(wg,camera);
       wg.removeMouseEventListeners();
       health=setInterval(()=>{if(disposed||failed||finished)return;if(performance.now()-faceAt>=350){greenSince=0;predictions=[];sampleStarted=0;setView(s=>({...s,ready:false,progress:s.phase==='validation'?0:s.progress}));}if(checkArmed&&performance.now()-targetAt>15000)fail('The camera did not provide enough eye observations. You can try setup again or continue without gaze.');},200);
     }catch(error){fail(error instanceof Error?error.message:'Camera could not start. Check camera access in System Settings.');}}
@@ -98,7 +101,7 @@ export function WebGazerCalibration(){
   return <main className="gaze-calibration">
     <button className="gaze-cancel" onClick={close}>Stop gaze · Esc</button>
     {!tutorialDone&&<CalibrationTutorial onComplete={()=>setTutorialDone(true)}/>}
-    {view.phase==='setup'&&<section className="calibration-setup" aria-live="polite"><span>Camera check</span><h1>Find a comfortable position</h1><p>Your camera preview is above. When the outline stays green, you’re ready.</p><strong>{view.ready?'Face in view · ready':'Waiting for a clear view of your eyes…'}</strong><p>Keep the screen angle and your sitting position comfortable. You won’t need to watch instructions while following the targets.</p><button className="calibration-start" disabled={!view.ready} onClick={()=>startCalibration.current?.()}>Begin calibration</button><small>Camera images stay on this Mac.</small></section>}
+    {view.phase==='setup'&&<section className="calibration-setup" aria-live="polite"><span>Camera check</span><h1>Find a comfortable position</h1><p>Your camera preview is above. When the outline stays green, you’re ready.</p><strong>{view.ready?'Face in view · ready':'Waiting for a clear view of your eyes…'}</strong><p>Rest the computer on a stable surface. During calibration, keep your head comfortably steady and move your eyes between targets.</p><button className="calibration-start" disabled={!view.ready} onClick={()=>startCalibration.current?.()}>Begin calibration</button><small>Camera images stay on this Mac.</small></section>}
     {(view.phase==='training'||view.phase==='validation')&&target&&<>
       <div className="calibration-progress">{view.phase==='training'?`Learn your gaze · ${view.index+1} of 9`:`Check the result · ${view.index-8} of 5`}</div>
       <button aria-label="Calibration target" aria-disabled={!view.ready||view.settling} className="calibration-dot calibration-click" onClick={()=>click.current?.()} style={{left:`${target[0]*100}%`,top:`${target[1]*100}%`}}>{view.index<9?`${view.progress}/5`:view.checking?'Look':'Start'}</button>

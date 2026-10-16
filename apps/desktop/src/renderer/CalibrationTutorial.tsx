@@ -5,14 +5,14 @@ type CalibrationTutorialProps = { onComplete: () => void };
 const steps = [
   {
     title: 'Get comfortable',
-    body: 'Sit naturally and bring your face into the camera frame. A relaxed, steady position is all you need.',
+    body: 'Sit comfortably with the computer on a stable surface and your face in view. Avoid balancing it on your knees during setup.',
     note: 'You can pause or stop whenever you like.',
     art: 'setup',
   },
   {
     title: 'Follow with your eyes',
-    body: 'Look toward each target as it appears. Let your eyes move while keeping your head comfortable.',
-    note: 'There is no need to hold an awkward pose.',
+    body: 'Keep your head comfortably steady and move only your eyes between targets. Keep looking at the target while you click.',
+    note: 'You can blink normally. If you change your sitting position or screen angle, recalibrate.',
     art: 'follow',
   },
   {

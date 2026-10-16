@@ -262,8 +262,7 @@
   z-index: 2 !important;
   top: 24px !important;
   left: 50% !important;
-  width: 240px !important;
-  height: 180px !important;
+  box-sizing: content-box;
   overflow: hidden !important;
   border: 1px solid #ffffff40 !important;
   border-radius: 15px !important;
@@ -271,12 +270,8 @@
   transform: translateX(-50%) !important;
 }
 
-#webgazerVideoContainer video,
-#webgazerVideoContainer canvas {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
-}
+/* WebGazer sets video/overlay sizes and a smaller offset feedback square through
+   setVideoViewerSize(). Never stretch every canvas to the container dimensions. */
 
 .gaze-calibration .calibration-dot.calibration-click {
   z-index: 4;
@@ -416,7 +411,6 @@
   .calibration-tutorial__body { font-size: 12px; }
   .calibration-setup__preview { width: min(280px, 60vw); }
   .gaze-calibration .gaze-cancel { top: 10px; right: 10px; min-height: 36px; padding: 7px 10px; }
-  #webgazerVideoContainer { top: 12px !important; left: 12px !important; width: 112px !important; height: 84px !important; transform: none !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -440,4 +434,3 @@
 .calibration-result details { text-align: left; margin: 16px 0; font-size: 12px; }
 .calibration-result summary { cursor: pointer; color: #d9c9f0; }
 .calibration-result small { color: #b9b0c0; }
-@media (max-width: 600px) { #webgazerVideoContainer { top: 24px !important; left: 50% !important; width: 240px !important; height: 180px !important; transform: translateX(-50%) !important; } }

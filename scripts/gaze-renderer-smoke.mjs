@@ -22,6 +22,7 @@ const stub = String.raw`
   const samples = [];
   const container = document.createElement('div');
   container.id = 'webgazerVideoContainer';
+  container.style.width='240px';container.style.height='180px';
   const video = document.createElement('video');
   Object.defineProperty(video, 'srcObject', { writable: true, value: { getTracks: () => [track] } });
   video.autoplay = true;
