@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GazeCalibrationDiagnostics } from '../main/gaze-host';
+import { createGazeCameraCapture, type GazeCameraInfo } from './gaze-camera';
 import { sizeWebGazerPreview } from './webgazer-preview';
 import { CalibrationTutorial } from './CalibrationTutorial';
 import './webgazer-calibration.css';
@@ -15,21 +16,25 @@ export function WebGazerCalibration(){
   const [attempt,setAttempt]=useState(0),[tutorialDone,setTutorialDone]=useState(false);
   const click=useRef<(()=>void)|null>(null),startCalibration=useRef<(()=>void)|null>(null);
   const [view,setView]=useState<View>(initial);
+  const [cameraInfo,setCameraInfo]=useState<GazeCameraInfo|null>(null);
   const startup=useRef<Promise<void>|null>(null);
   const stopCamera=useRef<(()=>void)|null>(null);
   useEffect(()=>{
     if(!tutorialDone)return;
+    let cameraCapture:ReturnType<typeof createGazeCameraCapture>|null=null;
     let disposed=false,loadedModule=false,wg:WebGazer|undefined,index=-1,observations=0,targetAt=0,lastSent=0,lastClick=-Infinity;
     let advancing=false,finished=false,failed=false,checkArmed=false,interrupted=false;
-    let faceAt=-Infinity,greenSince=0,faceSerial=0,usedSerial=-1,validationSerial=-1,lastPositions:unknown[]|null=null,framesUsed=0,framesRejected=0,lastUI=0;
+    let faceAt=-Infinity,greenSince=0,faceSerial=0,usedSerial=-1,validationSerial=-1,lastPositions:unknown[]|null=null,framesUsed=0,framesRejected=0,lastUI=0,lastSourceSequence=-1,lastReceivedFrames=-1;
+    let receivingVideo:HTMLVideoElement|null=null;
+    let healthFrames=-1,receiverProgressAt=0,stalledAt=0;
     const validationTargets:Record<string,number>[]=[],errors:number[][]=[];
     let predictions:{x:number;y:number}[]=[],sampleStarted=0;
     let deadline:ReturnType<typeof setTimeout>|undefined,health:ReturnType<typeof setInterval>|undefined;
     const green=()=>document.getElementById('webgazerFaceFeedbackBox')?.style.borderColor==='green';
     const ready=()=>!interrupted&&performance.now()-faceAt<350&&green()&&greenSince>0&&performance.now()-greenSince>=600;
-    function cleanup(){if(deadline)clearTimeout(deadline);if(health)clearInterval(health);wg?.pause();document.querySelectorAll('video').forEach(video=>(video.srcObject as MediaStream|null)?.getTracks().forEach(track=>track.stop()));try{wg?.end();}catch{}if(loadedModule&&(window as any).webgazer===wg)delete (window as any).webgazer;}
+    function cleanup(){cameraCapture?.dispose();if(deadline)clearTimeout(deadline);if(health)clearInterval(health);wg?.pause();document.querySelectorAll('video').forEach(video=>(video.srcObject as MediaStream|null)?.getTracks().forEach(track=>track.stop()));try{wg?.end();}catch{}if(loadedModule&&(window as any).webgazer===wg)delete (window as any).webgazer;}
     stopCamera.current=cleanup;
-    function fail(message:string,diagnostics?:GazeCalibrationDiagnostics|undefined){if(failed||disposed)return;failed=true;click.current=null;startCalibration.current=null;cleanup();setView(s=>({...s,phase:'error',error:message,ready:false,diagnostics}));}
+    function fail(message:string,diagnostics?:GazeCalibrationDiagnostics|undefined){if(failed||disposed)return;failed=true;click.current=null;startCalibration.current=null;cleanup();if(finished)void desktop({action:'gaze-close'}).catch(()=>{});setView(s=>({...s,phase:'error',error:message,ready:false,diagnostics}));}
     function setTarget(){targetAt=performance.now();observations=0;predictions=[];sampleStarted=0;checkArmed=false;validationSerial=-1;
       setView({phase:index<9?'training':'validation',index,error:'',progress:0,ready:ready(),checking:false,settling:index<9});
       click.current=index<9?train:()=>{if(!ready())return;checkArmed=true;targetAt=performance.now();setView(s=>({...s,checking:true,error:''}));};
@@ -47,7 +52,7 @@ export function WebGazerCalibration(){
     function blur(){interrupted=true;greenSince=0;predictions=[];sampleStarted=0;targetAt=performance.now();if(!finished&&!failed)setView(s=>({...s,ready:false,progress:s.phase==='validation'?0:s.progress}));}
     function focus(){interrupted=false;targetAt=performance.now();}
     window.addEventListener('blur',blur);window.addEventListener('focus',focus);
-    setView({...initial,phase:'setup'});
+    setCameraInfo(null);setView({...initial,phase:'setup'});
     async function start(){try{
       const config=await desktop({action:'gaze-config'});if(disposed)return;
       const script=document.createElement('script');script.src='echo://app/vendor/webgazer/webgazer.js';
@@ -61,8 +66,13 @@ export function WebGazerCalibration(){
       wg.setGazeListener(prediction=>{
         if(disposed||advancing||failed)return;
         const time=performance.now(),positions=wg!.getTracker().getPositions();
-        const fresh=!!positions&&positions!==lastPositions;
-        if(fresh){lastPositions=positions;faceAt=time;faceSerial++;}
+        if(cameraCapture?.problem()){fail(cameraCapture.problem()!);return;}
+        const sourceSequence=cameraCapture?.sequence();
+        // A fresh capture alone is not enough if the receiving video stalled.
+        const receivedFrames=receivingVideo?.getVideoPlaybackQuality().totalVideoFrames;
+        const consumerChanged=!cameraCapture||receivedFrames!==undefined&&receivedFrames!==lastReceivedFrames;
+        const fresh=(cameraCapture?.fresh()??true)&&consumerChanged&&(sourceSequence===undefined||sourceSequence!==lastSourceSequence)&&!!positions&&positions!==lastPositions;
+        if(fresh){lastPositions=positions;if(receivedFrames!==undefined)lastReceivedFrames=receivedFrames;if(sourceSequence!==undefined)lastSourceSequence=sourceSequence;faceAt=time;faceSerial++;}
         if(interrupted||time-faceAt>=350||!green())greenSince=0;else if(!greenSince)greenSince=time;
         const finite=fresh&&prediction&&Number.isFinite(prediction.x)&&Number.isFinite(prediction.y);
         if(finished){if(finite&&time-lastSent>=50){lastSent=time;void desktop({action:'gaze-sample',x:prediction.x+config.originX,y:prediction.y+config.originY}).catch(()=>fail('Tracking stopped. Return to Settings to start gaze again.'));}return;}
@@ -86,11 +96,37 @@ export function WebGazerCalibration(){
         void desktop({action:'gaze-calibrated',errors,validation:{targets:validationTargets,framesUsed,framesRejected}}).then(result=>{if(disposed)return;if(!result.ok){fail(result.error||'This calibration could not separate screen areas reliably. You can try setup again or continue without gaze.',result.calibrationDiagnostics);return;}finished=true;wg?.showVideoPreview(false);advancing=false;setView({...initial,phase:'tracking'});}).catch(()=>fail('Calibration could not finish. Return to Settings to start gaze again.'));
       });
       deadline=setTimeout(()=>fail('The camera could not start. Check camera access in System Settings, then try setup again.'),20000);
-      await wg.begin();if(deadline)clearTimeout(deadline);if(disposed||failed){cleanup();return;}
+      // WebGazer keeps ownership of inference/regression. Intercept only its
+      // camera request in this isolated renderer to supply a bounded input stream.
+      const media=navigator.mediaDevices,originalGetUserMedia=media.getUserMedia;
+      const provideCamera:typeof media.getUserMedia=async constraints=>{
+        if(disposed||!constraints?.video||constraints.audio)throw new DOMException('Gaze camera request was cancelled.','AbortError');
+        cameraCapture??=createGazeCameraCapture(request=>originalGetUserMedia.call(media,request));
+        const stream=await cameraCapture.open();
+        if(disposed){cameraCapture.dispose();throw new DOMException('Gaze camera request was cancelled.','AbortError');}
+        setCameraInfo(cameraCapture.info());return stream;
+      };
+      media.getUserMedia=provideCamera;
+      try{await wg.begin();}finally{if(media.getUserMedia===provideCamera)media.getUserMedia=originalGetUserMedia;}
+      if(deadline)clearTimeout(deadline);if(disposed||failed){cleanup();return;}
       const camera=document.getElementById('webgazerVideoFeed') as HTMLVideoElement|null;
-      if(camera)sizeWebGazerPreview(wg,camera);
+      receivingVideo=camera;receiverProgressAt=performance.now();if(camera)sizeWebGazerPreview(wg,camera);
       wg.removeMouseEventListeners();
-      health=setInterval(()=>{if(disposed||failed||finished)return;if(performance.now()-faceAt>=350){greenSince=0;predictions=[];sampleStarted=0;setView(s=>({...s,ready:false,progress:s.phase==='validation'?0:s.progress}));}if(checkArmed&&performance.now()-targetAt>15000)fail('The camera did not provide enough eye observations. You can try setup again or continue without gaze.');},200);
+      health=setInterval(()=>{
+        if(disposed||failed)return;
+        if(cameraCapture?.problem()){fail(cameraCapture.problem()!);return;}
+        const time=performance.now(),frames=receivingVideo?.getVideoPlaybackQuality().totalVideoFrames;
+        if(frames!==undefined&&frames!==healthFrames){healthFrames=frames;receiverProgressAt=time;}
+        if(finished){
+          const stalled=!!cameraCapture&&(!cameraCapture.fresh()||time-receiverProgressAt>800);
+          if(!stalled)stalledAt=0;
+          else if(!stalledAt)stalledAt=time;
+          else if(time-stalledAt>2000)fail('The camera stopped updating. Start gaze setup again.');
+          return;
+        }
+        if(cameraCapture?.fresh()===false||time-faceAt>=350){greenSince=0;predictions=[];sampleStarted=0;setView(s=>({...s,ready:false,progress:s.phase==='validation'?0:s.progress}));}
+        if(checkArmed&&time-targetAt>15000)fail('The camera did not provide enough eye observations. You can try setup again or continue without gaze.');
+      },200);
     }catch(error){fail(error instanceof Error?error.message:'Camera could not start. Check camera access in System Settings.');}}
     const previousStartup=startup.current;
     startup.current=(async()=>{await previousStartup;if(!disposed)await start();})();
@@ -101,12 +137,12 @@ export function WebGazerCalibration(){
   return <main className="gaze-calibration">
     <button className="gaze-cancel" onClick={close}>Stop gaze · Esc</button>
     {!tutorialDone&&<CalibrationTutorial onComplete={()=>setTutorialDone(true)}/>}
-    {view.phase==='setup'&&<section className="calibration-setup" aria-live="polite"><span>Camera check</span><h1>Find a comfortable position</h1><p>Your camera preview is above. When the outline stays green, you’re ready.</p><strong>{view.ready?'Face in view · ready':'Waiting for a clear view of your eyes…'}</strong><p>Rest the computer on a stable surface. During calibration, keep your head comfortably steady and move your eyes between targets.</p><button className="calibration-start" disabled={!view.ready} onClick={()=>startCalibration.current?.()}>Begin calibration</button><small>Camera images stay on this Mac.</small></section>}
+    {view.phase==='setup'&&<section className="calibration-setup" aria-live="polite"><span>Camera check</span><h1>Find a comfortable position</h1><p>Your camera preview is above. When the outline stays green, you’re ready.</p><strong>{view.ready?'Face in view · ready':'Waiting for a clear view of your eyes…'}</strong><p>Rest the computer on a stable surface. During calibration, keep your head comfortably steady and move your eyes between targets.</p><button className="calibration-start" disabled={!view.ready} onClick={()=>startCalibration.current?.()}>Begin calibration</button>{cameraInfo&&<small>{cameraInfo.plan.zoom>1.01?'Closer camera framing enabled':'Standard framing · limited by capture resolution'}. Framing stays fixed during gaze use.</small>}<small>Camera images stay on this Mac.</small></section>}
     {(view.phase==='training'||view.phase==='validation')&&target&&<>
       <div className="calibration-progress">{view.phase==='training'?`Learn your gaze · ${view.index+1} of 9`:`Check the result · ${view.index-8} of 5`}</div>
       <button aria-label="Calibration target" aria-disabled={!view.ready||view.settling} className="calibration-dot calibration-click" onClick={()=>click.current?.()} style={{left:`${target[0]*100}%`,top:`${target[1]*100}%`}}>{view.index<9?`${view.progress}/5`:view.checking?'Look':'Start'}</button>
       <div className="calibration-target-help" role="status" style={{left:`${target[0]*100}%`,top:`${target[1]*100}%`,transform:`translate(${target[0]<.2?'0%':target[0]>.8?'-100%':'-50%'},${target[1]>.75?'calc(-100% - 48px)':'48px'})`}}><strong>{!view.ready?'Pause · face out of view':view.settling?'Look here for a moment':view.index<9?'Look here. Click five times.':view.checking?`Keep looking · ${view.progress}%`:'Look here, then click Start.'}</strong><p>{!view.ready?'The camera preview above will turn green when your eyes are in view.':view.settling?'Let your eyes settle. Then make five deliberate clicks.':view.index<9?'A slow, steady rhythm. Each glow counts one click.':view.checking?'Measuring only. No clicks needed.':'This checks a new area without training on it.'}</p></div>
     </>}
-    {view.phase==='error'&&<section className="calibration-result" role="alert"><span>Gaze isn’t ready yet</span><h1>This fit wasn’t reliable</h1><p>{view.error}</p>{view.diagnostics&&<details><summary>Calibration details</summary><p>{view.diagnostics.failedChecks.join('. ')}.</p><p>Horizontal response: {view.diagnostics.horizontalResponse.toFixed(2)} · Vertical response: {view.diagnostics.verticalResponse.toFixed(2)}</p><p>{view.diagnostics.areas.map((area,i)=>`Area ${i+1}: ${Math.round(area.error)} points (${area.frames} observations)`).join(' · ')}</p><small>Screen points measure error on this screen, not a percentage score. These summaries stay in memory.</small></details>}<p>More clicks don’t always improve webcam gaze. You can review setup once more, or use EchoPilot without gaze.</p><button className="calibration-retry" onClick={()=>{setView(initial);setTutorialDone(false);setAttempt(a=>a+1);}}>Review setup</button><button onClick={close}>Continue without gaze</button></section>}
+    {view.phase==='error'&&<section className="calibration-result" role="alert"><span>Gaze isn’t ready yet</span><h1>This fit wasn’t reliable</h1><p>{view.error}</p>{view.diagnostics&&<details><summary>Calibration details</summary>{cameraInfo&&<p>Camera input: {cameraInfo.plan.sourceWidth}×{cameraInfo.plan.sourceHeight} · crop: {cameraInfo.plan.cropWidth}×{cameraInfo.plan.cropHeight} · tracking: {cameraInfo.plan.outputWidth}×{cameraInfo.plan.outputHeight}. No crop is enlarged.</p>}<p>{view.diagnostics.failedChecks.join('. ')}.</p><p>Horizontal response: {view.diagnostics.horizontalResponse.toFixed(2)} · Vertical response: {view.diagnostics.verticalResponse.toFixed(2)}</p><p>{view.diagnostics.areas.map((area,i)=>`Area ${i+1}: ${Math.round(area.error)} points (${area.frames} observations)`).join(' · ')}</p><small>Screen points measure error on this screen, not a percentage score. These summaries stay in memory.</small></details>}<p>More clicks don’t always improve webcam gaze. You can review setup once more, or use EchoPilot without gaze.</p><button className="calibration-retry" onClick={()=>{setView(initial);setTutorialDone(false);setAttempt(a=>a+1);}}>Review setup</button><button onClick={close}>Continue without gaze</button></section>}
   </main>;
 }

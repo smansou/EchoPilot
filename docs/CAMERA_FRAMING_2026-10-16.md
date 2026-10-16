@@ -1,0 +1,31 @@
+# Camera input framing — October16, 2026
+
+## Requirement and actual device evidence
+
+The user explicitly requested supported, modern input zoom with minimal quality loss, not an enlarged preview or third-party camera app, and linked Apple's `AVCaptureDevice.videoZoomFactor` documentation. That is relevant to the principle: crop while sufficient input pixels remain, and avoid enlargement above the upscale threshold. The installed macOS26.5 SDK marks that specific property, its ramp method, `videoMaxZoomFactor` and the upscale threshold unavailable for native macOS. `AVCaptureConnection.videoScaleAndCropFactor` is an output enlargement, so it is not used as a substitute for additional captured detail.
+
+Read-only native discovery found one FaceTime HD Camera with640×480,1280×720 and1920×1080 formats at30fps; active format was640×480 and Center Stage was inactive. A short actual Electron probe then requested native-format capture and zoom permission, inspected capabilities/settings only, and stopped all tracks. It delivered1920×1080@30 with `resizeMode:none`. Chromium recognized the zoom constraint but this camera exposed no zoom capability, range or current zoom setting. This is a runtime API finding, not a claim about all Mac or UVC cameras. No camera pixels were read or saved by that probe. Metadata: `/private/tmp/echopilot-camera-{capabilities,runtime-capabilities}-20261016.json`.
+
+The first temporary native metadata tool failed while serializing a heterogeneous dictionary containing a platform-unavailable member; a typed, supported-property-only probe corrected it. That diagnostic crash was separate from EchoPilot. Do not copy that earlier temporary code or use unavailable/private camera APIs.
+
+Primary sources: [Apple zoom and upscaling](https://developer.apple.com/documentation/avfoundation/avcapturedevice/videozoomfactor), [Apple video-output crop/scale](https://developer.apple.com/documentation/avfoundation/avcaptureconnection/videoscaleandcropfactor), [Chromium camera controls](https://developer.chrome.com/blog/new-in-chrome-87), [Chromium macOS UVC implementation](https://chromium.googlesource.com/chromium/src/+/fe25ab7b22258f555e6aec4354a4acfea000a582/media/capture/video/mac/video_capture_device_mac.mm). Availability was checked directly in the installed `AVCaptureDevice.h`, not inferred from a cross-platform documentation page.
+
+## Implemented input path
+
+`gaze-camera.ts` owns one video-only source stream. It requests up to1920×1080 at30fps with exact `resizeMode:none` when supported. If native-format negotiation is unavailable or rejected, it uses default device capture instead of asking the browser to synthesize a larger image.
+
+Before WebGazer receives any video, the app takes a fixed centred4:3 crop from actual delivered frame dimensions and downsamples it to at most640×480. Default framing is1.5 relative to the largest fitted4:3 rectangle, capped by the available pixels. For1920×1080 input, the crop is960×720 and output640×480. For1280×720 input, the crop and output are640×480 (1:1). A640×480 or320×240 input stays unzoomed;640×360 becomes480×360 without enlargement. Both crop axes are always at least as large as output. The app introduces no JPEG/video re-encoding, generative enhancement or claimed recovery of nonexistent detail. The camera/driver's own processing is outside that guarantee.
+
+Frames use Chromium's bounded `MediaStreamTrackProcessor` where available (one queued frame, explicit VideoFrame close); a video-element/requestVideoFrameCallback path is tested as fallback. The crop stays fixed for the entire calibration and tracking session. Source-format changes fail closed. WebGazer's official face/eye extraction, ridge regression and Kalman estimator remain unchanged. Its temporary getUserMedia adapter is confined to the dedicated gaze renderer and restored after startup; no broader app media permissions or provider uploads were added.
+
+Source-frame freshness, output-track liveness and the receiving WebGazer video's actual frame counter gate samples. Repeated inference on a frozen frame is not accepted as fresh. Sustained source/receiver stalls close camera resources and gaze authority after a short recovery grace; ordinary missing-face observations still hide stale gaze and can recover. Permission cancellation settles startup without waiting for an unanswered OS prompt; late-arriving streams are stopped. Explicit Stop, failure, close and retry release original and processed streams. Setup indicates whether closer framing was available; failure details show source/crop/output dimensions.
+
+## Evidence and limits
+
+- Actual hardware metadata/capture capability check as above; no user face/inference/accuracy check.
+- Full project contracts/types/tests/build:701 passed, zero failed/skipped. Log `/private/tmp/echopilot-camera-final-check-20261016.log`.
+- Geometry bounds tests cover hundreds of source/zoom combinations and invalid input, with no upscaling, centred in-bounds crop and bounded processing dimensions.
+- Real Electron synthetic-stream tests cover 1:1 crop pixel mapping, downsampling, low-resolution fallback, both frame-processing backends, hidden-window continuation, source stall/resume/end, resolution change, immediate cancellation and late permission cleanup. Source and processed tracks end on disposal; encoding calls and external requests remain zero.
+- Actual vendored WebGazer/MediaPipe runs through this adapter with a public portrait replay:45 accepted/retained records, finite predictions, received-frame counter advances while hidden, pauses with receiving video and resumes afterward, and both streams release. This establishes module compatibility, not gaze accuracy. The public fixture came from `https://storage.googleapis.com/mediapipe-assets/portrait.jpg` and is temporary, not packaged.
+
+More captured eye detail is a plausible input improvement, not evidence that calibration accuracy improved for this user. WebGazer normalizes eye patches to10×6 features and still lacks explicit head-pose/lid-tilt compensation. The held-out acceptance gates were not relaxed. Human calibration, screen/voice acceptance, measured real-device latency and comparative performance remain outstanding. Do not call this lossless optical zoom or a solved consumer gaze tracker.
