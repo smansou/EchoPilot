@@ -1,5 +1,11 @@
 # Live handoff
 
+## Latest input-camera checkpoint — October16, 2026
+
+The user required actual quality-preserving input zoom. Native camera discovery and a real Electron metadata-only stream check confirmed FaceTime HD Camera1920×1080@30, `resizeMode:none`, no exposed zoom control/range even with zoom permission requested. Apple `videoZoomFactor` is SDK-unavailable on native macOS. Implemented and installed `2a19a70`: one video-only high-resolution capture, fixed centred960×720→640×480 crop/downsample on this camera, no upscaling or added JPEG/video encoding, lower-resolution/no-negotiation fallback, bounded frame processor plus tested video-element fallback. WebGazer estimator/filter/gates unchanged; no third-party app or new provider upload. Source/processed/receiving-video freshness, permission cancellation and sustained-stall cleanup are tested.
+
+Full701 checks pass; actual WebGazer/MediaPipe compatibility and both production-root manual-Stop and stall-close variants pass with synthetic inputs. Locally qualified candidate `/private/tmp/EchoPilot-camera-framing-20261016.app` installed; signature/hashes/startup verify. Rollback `/private/tmp/EchoPilot-before-camera-framing-20261016.app`. Read [camera framing evidence](CAMERA_FRAMING_2026-10-16.md). Human gaze accuracy remains unproven; do not label cropping an accuracy cure, optical/lossless zoom, or consumer acceptance. Previous foreground-focus check remains unverified. Camera/renderer tests use proper escalated host launches; avoid repeating restricted launches that produce crash dialogs.
+
 ## Latest preview checkpoint — October16, 2026
 
 User had not calibrated: the real preview guide extended outside the camera frame. Fixed in `bdc2c52`: remove blanket canvas stretching/forced4:3 crop, size preview through WebGazer's API to native aspect within240×180. Actual WebGazer DOM regression passes4:3,16:9 andportrait synthetic streams and fails with the old CSS reapplied; mock oval fixtures alone were inadequate. Tutorial now explicitly says keep head comfortably steady, move eyes and rest computer on a stable surface. Zoom/capture configuration remains unchanged; hardware zoom support and any accuracy benefit are unverified. Background is not a gaze anchor in this module.
