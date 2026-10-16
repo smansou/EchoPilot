@@ -1,5 +1,11 @@
 # Live handoff
 
+## Latest preview checkpoint — October16, 2026
+
+User had not calibrated: the real preview guide extended outside the camera frame. Fixed in `bdc2c52`: remove blanket canvas stretching/forced4:3 crop, size preview through WebGazer's API to native aspect within240×180. Actual WebGazer DOM regression passes4:3,16:9 andportrait synthetic streams and fails with the old CSS reapplied; mock oval fixtures alone were inadequate. Tutorial now explicitly says keep head comfortably steady, move eyes and rest computer on a stable surface. Zoom/capture configuration remains unchanged; hardware zoom support and any accuracy benefit are unverified. Background is not a gaze anchor in this module.
+
+Installed `/private/tmp/EchoPilot-preview-alignment-20261016.app` at `/Applications/EchoPilot.app`; qualified, hashes/signature/startup verified. Rollback `/private/tmp/EchoPilot-before-preview-alignment-20261016.app`. Read [calibration investigation](CALIBRATION_REVIEW_2026-10-16.md) for the defect, test evidence and zoom findings. Human gaze accuracy is still outstanding; do not call it fixed or consumer accepted.
+
 ## Latest calibration checkpoint — October 16, 2026
 
 The user’s real calibration failed at319 screen points. Consumer gaze acceptance remains failed/unproven. A guided calibration update (`5d59744`) is now installed/running: illustrated three-step tutorial before camera,240×180 top-centre face feedback, explicit stable-face setup, instructions next to targets, visible settling, fresh/spaced click sampling, independent20-observation checks with loss recovery, serialized retry/Stop cleanup and memory-only diagnostics explaining failed directions/areas. Upstream ridge/Kalman defaults and acceptance thresholds remain; more samples are not presented as an accuracy setting because the shipped click window retains only50 (45 used). No pose/lid-tilt compensation or proven personal accuracy improvement was added.
