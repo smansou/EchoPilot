@@ -12,3 +12,22 @@ test('collapsed, reversed and vertical-blind fits are rejected even if absolute 
 test('validation cannot fabricate frame counts or omit measured data; rejected calibration can retry',async()=>{const {send}=setup();await send('start',{displayId:'1',enabled:true});const errors=Array(5).fill([50,60]);assert.equal((await send('webgazer-calibration',{errors})).ok,false);assert.equal((await send('webgazer-calibration',{errors,validation:{...validation(),framesUsed:44}})).ok,false);assert.equal((await send('webgazer-calibration',{errors:Array(5).fill([600,600]),validation:validation()})).ok,false);assert.equal((await send('webgazer-calibration',{errors,validation:validation()})).ok,true);});
 
 test('validation includes jitter even when target means are perfect, and rejects inconsistent means',async()=>{const {send}=setup();await send('start',{displayId:'1',enabled:true});assert.equal((await send('webgazer-calibration',{errors:Array(5).fill([500,500]),validation:validation()})).ok,false);assert.equal((await send('webgazer-calibration',{errors:Array(5).fill([10,10]),validation:validation((x,y)=>[x+100,y])})).ok,false);assert.equal((await send('webgazer-calibration',{errors:Array(5).fill([-10,10]),validation:validation()})).ok,false);const result=await send('webgazer-calibration',{errors:Array(5).fill([120,100]),validation:validation()});assert.equal(result.ok,true);assert.equal(result.calibration?.residualCovariance2x2[0][0],14400);assert.equal(result.calibration?.residualCovariance2x2[1][1],10000);});
+
+
+test('calibration explains a failed axis using bounded numeric summaries, without lowering acceptance',async()=>{
+  const {send}=setup();await send('start',{displayId:'1',enabled:true});
+  const data=validation((x,y)=>[x,500]);
+  const result=await send('webgazer-calibration',{errors:data.targets.map(p=>[0,Math.abs(p.targetY-p.meanY)]),validation:data});
+  assert.equal(result.ok,false);
+  assert.ok(result.error?.includes('Upper and lower areas'));
+  assert.equal(result.calibrationDiagnostics?.verticalResponse,0);
+  assert.equal(result.calibrationDiagnostics?.horizontalResponse,1);
+  assert.equal(result.calibrationDiagnostics?.areas.length,5);
+  assert.ok(result.calibrationDiagnostics?.areas.every(p=>p.jitterX===0&&p.jitterY===0&&p.frames===20));
+  assert.equal((await send('stop')).calibrationDiagnostics,undefined);
+});
+test('independent checks require twenty real observations per area',async()=>{
+  const {send}=setup();await send('start',{displayId:'1',enabled:true});
+  const data=validation();data.targets[0]!.frames=19;
+  assert.equal((await send('webgazer-calibration',{errors:Array(5).fill([50,60]),validation:data})).error,'invalid_validation');
+});

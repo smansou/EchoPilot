@@ -4,7 +4,8 @@ import { resolve } from 'node:path';
 import { createWebcamGazeRuntime, createReferenceResolver, type CalibrationPoint, type CalibrationRecord, type DisplayTransform, type LandmarkFrame, type WebcamGazeRuntime, type GazeRuntimeStatus, type ResolveRequest, type GazeSample } from '../../../../packages/gaze/src/index';
 
 export type GazeCalibrationTarget = {index: number; total: number; x: number; y: number; normalizedX: number; normalizedY: number; heldOut: boolean; readyAt: number; frames: number};
-export type GazeHostResult = {ok: boolean; error?: string; status?: GazeRuntimeStatus; displays?: readonly DisplayTransform[]; target?: GazeCalibrationTarget; calibration?: CalibrationRecord | null; quality?: number; dedicatedDevice?: 'adapter_not_bundled'; resolution?: unknown; latestSample?: GazeSample};
+export type GazeCalibrationDiagnostics = {model: string; rms: number; horizontalResponse: number; verticalResponse: number; failedChecks: string[]; areas: {error: number; biasX: number; biasY: number; jitterX: number; jitterY: number; frames: number}[]};
+export type GazeHostResult = {calibrationDiagnostics?: GazeCalibrationDiagnostics; ok: boolean; error?: string; status?: GazeRuntimeStatus; displays?: readonly DisplayTransform[]; target?: GazeCalibrationTarget; calibration?: CalibrationRecord | null; quality?: number; dedicatedDevice?: 'adapter_not_bundled'; resolution?: unknown; latestSample?: GazeSample};
 export type GazeTransport = {stop(): void};
 export type GazeHostOptions = {bundleDir: string; activeProjectId(): string | null; displays(): readonly DisplayTransform[]; now?(): number; open?(displayId: string, event: (value: unknown) => void, exit: () => void): GazeTransport};
 const POSITIONS = [[.15,.15],[.5,.15],[.85,.15],[.15,.5],[.5,.5],[.85,.5],[.15,.85],[.5,.85],[.85,.85],[.3,.3],[.7,.3],[.3,.7],[.7,.7],[.5,.6]] as const;
