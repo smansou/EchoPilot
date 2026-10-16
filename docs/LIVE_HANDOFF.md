@@ -1,5 +1,11 @@
 # Live handoff
 
+## Latest calibration checkpoint — October 16, 2026
+
+The user’s real calibration failed at319 screen points. Consumer gaze acceptance remains failed/unproven. A guided calibration update (`5d59744`) is now installed/running: illustrated three-step tutorial before camera,240×180 top-centre face feedback, explicit stable-face setup, instructions next to targets, visible settling, fresh/spaced click sampling, independent20-observation checks with loss recovery, serialized retry/Stop cleanup and memory-only diagnostics explaining failed directions/areas. Upstream ridge/Kalman defaults and acceptance thresholds remain; more samples are not presented as an accuracy setting because the shipped click window retains only50 (45 used). No pose/lid-tilt compensation or proven personal accuracy improvement was added.
+
+Full check699 passed; final types/build and direct/production-protocol renderer fixtures passed. Native safety13 passed,1 foreground-focus check UNVERIFIED because macOS desktop was confirmed locked; the guarded partial fixture retains `passed:false`. Candidate `/private/tmp/EchoPilot-guided-calibration-20261016.app` is local-qualified, installed signature/hashes/startup verified. Rollback `/private/tmp/EchoPilot-before-guided-calibration-20261016.app`. Read [calibration investigation](CALIBRATION_REVIEW_2026-10-16.md) for evidence/logs and next acceptance. Do not ask for unchanged repeated retries or call the core failure solved; if the revised fit fails, inspect Calibration details before choosing the next intervention.
+
 ## Latest installed checkpoint — October 15, 2026
 
 The October14 feature checkpoint `247bd4b` passed final `pnpm check` (697 tests; zero failed/skipped, contracts/types/build passed), cloud-voice packaging, local qualification, and installed startup smoke. `/Applications/EchoPilot.app` now matches `/private/tmp/EchoPilot-shared-screen-20261015.app` for main JS, native desktop helper and bundle record; installed signature verifies and the app was relaunched. Rollback: `/private/tmp/EchoPilot-before-shared-screen-20261015.app`. User data preserved. See [October15 handoff](HANDOFF_2026-10-15.md).
