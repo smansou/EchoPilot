@@ -102,3 +102,11 @@ test('redacted native nodes cannot carry text or overlay geometry into the host'
   assert.equal(node.textRegions, undefined);
   assert.equal(JSON.stringify(node).includes('fixture secret'), false);
 });
+
+test('interactive region reads explicitly request the bounded native traversal budget',async()=>{
+  for(const interactive of [true,false,undefined]){
+    const {host,writes}=harness(fixture());
+    await host.observe({projectId:PROJECT,...(interactive===undefined?{}:{interactive})});
+    assert.equal(JSON.parse(writes[0]!).interactive,interactive===true?true:undefined);
+  }
+});

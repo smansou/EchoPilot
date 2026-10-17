@@ -10,14 +10,14 @@ const portraitPath=process.argv[2]??'/private/tmp/echopilot-public-portrait-2026
 const portrait=(await readFile(portraitPath)).toString('base64');
 const screenshot='/private/tmp/echopilot-gaze-camera-webgazer.png';
 
-await build({stdin:{contents:"import {createGazeCameraCapture} from './apps/desktop/src/renderer/gaze-camera';window.createGazeCameraCapture=createGazeCameraCapture;",resolveDir:root,loader:'tsx'},bundle:true,outfile:join(directory,'camera.js'),platform:'browser',jsx:'automatic'});
+await build({stdin:{contents:"import {createGazeCameraCapture} from './apps/desktop/src/renderer/gaze-camera';window.createGazeCameraCapture=createGazeCameraCapture;import {fitGazeModel,installGazeModel} from './apps/desktop/src/renderer/webgazer-model';window.fitGazeModel=fitGazeModel;window.installGazeModel=installGazeModel;",resolveDir:root,loader:'tsx'},bundle:true,outfile:join(directory,'camera.js'),platform:'browser',jsx:'automatic'});
 
 const fixture=`
 const portrait=new Image();portrait.src='data:image/jpeg;base64,${portrait}';
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const assert=(condition,message)=>{if(!condition)throw Error(message)};
 const waitFor=(predicate,timeout,label)=>new Promise((resolve,reject)=>{const started=Date.now();const poll=()=>{if(predicate())return resolve();if(Date.now()-started>timeout)return reject(Error('Timed out waiting for '+label));setTimeout(poll,25)};poll()});
-let capture,sourceStream,sourceTrack,outputStream,frameTimer,sourceCanvas,wg,requests=[],observations=0,finitePredictions=0,accepted=0,lastSourceSequence=-1,lastRecordSequence=-1,lastTrainAt=-Infinity,recordFailures=0;
+let lastEyeFeatures=null;let capture,sourceStream,sourceTrack,outputStream,frameTimer,sourceCanvas,wg,requests=[],observations=0,finitePredictions=0,accepted=0,lastSourceSequence=-1,lastRecordSequence=-1,lastTrainAt=-Infinity,recordFailures=0;
 window.beginIntegration=async()=>{
   await portrait.decode();
   sourceCanvas=document.createElement('canvas');sourceCanvas.width=1920;sourceCanvas.height=1080;
@@ -35,9 +35,10 @@ window.beginIntegration=async()=>{
   wg.params.faceMeshSolutionPath='echo://app/vendor/webgazer/mediapipe/face_mesh';
   wg.params.videoViewerWidth=240;wg.params.videoViewerHeight=180;
   wg.params.showFaceOverlay=true;wg.params.showFaceFeedbackBox=true;
-  wg.saveDataAcrossSessions(false).setRegression('ridge').setTracker('TFFacemesh').applyKalmanFilter(true).showPredictionPoints(false).showVideoPreview(true).showFaceOverlay(true).showFaceFeedbackBox(true);
+  wg.saveDataAcrossSessions(false).setRegression('ridge').setTracker('TFFacemesh').applyKalmanFilter(false).showPredictionPoints(false).showVideoPreview(true).showFaceOverlay(true).showFaceFeedbackBox(true);
   await wg.clearData();
   wg.setGazeListener(prediction=>{
+    if(prediction?.eyeFeatures)lastEyeFeatures=prediction.eyeFeatures;
     const sequence=capture.sequence(),positions=wg.getTracker().getPositions();
     if(positions&&sequence!==lastSourceSequence){lastSourceSequence=sequence;observations++;}
     if(prediction&&Number.isFinite(prediction.x)&&Number.isFinite(prediction.y))finitePredictions++;
@@ -86,7 +87,15 @@ window.finishIntegration=async()=>{
   await waitFor(()=>accepted===45&&finitePredictions>=12,30000,'45 training samples and finite WebGazer predictions');
   const before=wg.getRegression()[0].getData().length;
   assert(before===45,'Expected exactly 45 accepted WebGazer records, found '+before);
-  const result={landmarkObservations:observations,finitePredictions,acceptedRecords:accepted,retainedRecords:before,sourceSequence:capture.sequence(),adapterFresh:capture.fresh(),backend:capture.info().backend,recordFailures};
+  assert(lastEyeFeatures,'Prediction must expose the actual current eye patches');
+  const regression=wg.getRegression()[0],original=regression.predict(lastEyeFeatures),model=window.fitGazeModel(regression);
+  assert(model&&window.installGazeModel(regression,model),'Actual pinned ridge must support fitted coefficients');
+  const frozen=regression.predict(lastEyeFeatures);
+  assert(frozen&&Math.hypot(frozen.x-original.x,frozen.y-original.y)<=2,'Frozen model must agree with upstream prediction within rounding');
+  const serialized=JSON.stringify(model);assert(!serialized.includes('patch')&&!serialized.includes('features'),'Saved model contains eye data');
+  const fresh=new regression.constructor();assert(window.installGazeModel(fresh,JSON.parse(serialized)),'Restored coefficients must install into an empty regression');
+  const resumed=fresh.predict(lastEyeFeatures);assert(resumed&&resumed.x===frozen.x&&resumed.y===frozen.y,'Model reuse changed prediction');
+  const result={frozenModelAgreesWithUpstream:true,restoredModelAgrees:true,savedCoefficients:model.x.length*2,landmarkObservations:observations,finitePredictions,acceptedRecords:accepted,retainedRecords:before,sourceSequence:capture.sequence(),adapterFresh:capture.fresh(),backend:capture.info().backend,recordFailures};
   return result;
 };
 window.cleanupIntegration=async()=>{

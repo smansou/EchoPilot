@@ -1,11 +1,12 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {createWebGazerHost} from './webgazer-host';import {createGazeMotion} from './gaze-motion';
+import {SharedAttentionTracker} from './shared-attention';
 const display={displayId:'1',originX:-1600,originY:0,width:1600,height:1000,scale:2,arrangementGeneration:1};
 function validation(transform:(x:number,y:number)=>[number,number]=(x,y)=>[x,y]){return {framesUsed:45,framesRejected:2,targets:[[.3,.3],[.7,.3],[.3,.7],[.7,.7],[.5,.6]].map(([x,y])=>{const targetX=display.originX+x!*display.width,targetY=y!*display.height;const [meanX,meanY]=transform(targetX,targetY);return {targetX,targetY,meanX,meanY,frames:20};})};}
 function setup(){let time=1000;let current={...display};const host=createWebGazerHost({bundleDir:'',activeProjectId:()=> 'desktop',displays:()=>[current],now:()=>time});const send=(command:string,fields:Record<string,unknown>={})=>host.handle({command,projectId:'desktop',...fields});return {host,send,advance:()=>time+=1000,move:()=>current={...current,originX:0}};}
 test('WebGazer coordinates require an accepted held-out calibration; poor accuracy is rejected',async()=>{const {send,host}=setup();await send('start',{displayId:'1',enabled:true});assert.equal((await send('webgazer-sample',{x:-500,y:500})).ok,false);assert.equal((await send('webgazer-calibration',{errors:Array(5).fill([300,300]),validation:validation()})).ok,false);assert.equal(host.sample(),null);});
 test('screen coordinate transform, uncertainty, tracking loss, display changes and stop are authoritative',async()=>{const {host,send,advance,move}=setup();await send('start',{displayId:'1',enabled:true});assert.equal((await send('webgazer-calibration',{errors:Array(5).fill([50,60]),validation:validation()})).ok,true);assert.equal((await send('webgazer-sample',{x:-500,y:500})).ok,true);assert.equal(host.sample()?.meanX,-500);assert.equal(host.sample()?.covariance2x2[1][1],3600);assert.equal((await send('webgazer-sample',{x:NaN,y:500})).ok,false);advance();assert.equal(host.sample(),null);await send('webgazer-sample',{x:-500,y:500});move();assert.equal(host.sample(),null);await send('stop');assert.deepEqual(host.recentSamples(),[]);});
-test('visual marker buffers jitter, moves on both axes without overshoot, and limits jumps',()=>{const motion=createGazeMotion();motion.push(100,100);motion.step(0);for(let time=16;time<=1600;time+=16){motion.push(100+(time%32===0?12:-12),100+(time%32===0?-12:12));const p=motion.step(time)!;assert.ok(Math.abs(p.x-100)<4);assert.ok(Math.abs(p.y-100)<4);}motion.push(1000,800);let previous=motion.step(1616)!;assert.ok(Math.hypot(previous.x-100,previous.y-100)<=26);for(let time=1632;time<=3400;time+=16){motion.push(1000,800);const next=motion.step(time)!;assert.ok(next.x>=previous.x&&next.y>=previous.y&&next.x<=1000&&next.y<=800);assert.ok(Math.hypot(next.x-previous.x,next.y-previous.y)<=26);previous=next;}assert.ok(previous.x>990&&previous.y>790);motion.reset();assert.equal(motion.step(3500),null);});
+test('visual interpolation moves on both axes without overshoot and limits jumps',()=>{const motion=createGazeMotion();motion.push(100,100);motion.step(0);for(let time=16;time<=1600;time+=16){motion.push(100+(time%32===0?12:-12),100+(time%32===0?-12:12));const p=motion.step(time)!;assert.ok(Math.abs(p.x-100)<4);assert.ok(Math.abs(p.y-100)<4);}motion.push(1000,800);let previous=motion.step(1616)!;assert.ok(Math.hypot(previous.x-100,previous.y-100)<=161);for(let time=1632;time<=3400;time+=16){motion.push(1000,800);const next=motion.step(time)!;assert.ok(next.x>=previous.x&&next.y>=previous.y&&next.x<=1000&&next.y<=800);assert.ok(Math.hypot(next.x-previous.x,next.y-previous.y)<=161);previous=next;}assert.ok(previous.x>990&&previous.y>790);motion.reset();assert.equal(motion.step(3500),null);});
 
 test('coarse calibration preserves 175-point uncertainty rather than requiring precise cursor accuracy',async()=>{const {host,send}=setup();await send('start',{displayId:'1',enabled:true});const result=await send('webgazer-calibration',{errors:Array(5).fill([175,0]),validation:validation((x,y)=>[x+175,y])});assert.equal(result.ok,true);assert.equal(result.calibration?.reason,'coarse_area_only');assert.equal(result.calibration?.framesRejected,2);assert.equal(result.calibration?.validationFramesUsed,100);await send('webgazer-sample',{x:-500,y:500});assert.equal(host.sample()?.covariance2x2[0][0],175**2);});
 test('collapsed, reversed and vertical-blind fits are rejected even if absolute error fits coarse budget',async()=>{for(const transform of [(x:number,y:number):[number,number]=>[-800,500],(x:number,y:number):[number,number]=>[-1600-x,y],(x:number,y:number):[number,number]=>[x,500]]){const {send}=setup();await send('start',{displayId:'1',enabled:true});const data=validation(transform);const errors=data.targets.map(p=>[Math.abs(p.targetX-p.meanX),Math.abs(p.targetY-p.meanY)]);assert.equal((await send('webgazer-calibration',{errors,validation:data})).ok,false);}});
@@ -30,4 +31,25 @@ test('independent checks require twenty real observations per area',async()=>{
   const {send}=setup();await send('start',{displayId:'1',enabled:true});
   const data=validation();data.targets[0]!.frames=19;
   assert.equal((await send('webgazer-calibration',{errors:Array(5).fill([50,60]),validation:data})).error,'invalid_validation');
+});
+
+test('measured precise calibration can actually select a fine target through the production host',async()=>{
+  const {send,host}=setup();await send('start',{displayId:'1',enabled:true});
+  await send('webgazer-calibration',{errors:Array(5).fill([6,6]),validation:validation()});
+  await send('webgazer-sample',{x:-500,y:500});
+  const sample=host.sample()!;
+  assert.equal(sample.covariance2x2[0][0],36);
+  const tracker=new SharedAttentionTracker();
+  for(let at=0;at<=800;at+=100){
+    tracker.observe([{id:'sentence',revision:'1',app:'Reader',window:'w',type:'sentence',label:'Actual sentence',bounds:{x:-600,y:480,width:300,height:40}}],at,at);
+    tracker.update({capturedAt:at,mean:{x:sample.meanX,y:sample.meanY},covariance:{xx:sample.covariance2x2[0][0],xy:0,yy:sample.covariance2x2[1][1]},quality:sample.quality},at);
+  }
+  assert.equal(tracker.current(800).target?.id,'sentence');
+});
+test('explicit eye loss clears references immediately and reacquires without recalibration',async()=>{
+  const {send,host}=setup();await send('start',{displayId:'1',enabled:true});
+  await send('webgazer-calibration',{errors:Array(5).fill([50,60]),validation:validation()});
+  await send('webgazer-sample',{x:-500,y:500});assert.ok(host.sample());
+  await send('webgazer-lost');assert.equal(host.sample(),null);assert.deepEqual(host.recentSamples(),[]);
+  assert.equal((await send('webgazer-sample',{x:-900,y:800})).ok,true);assert.equal(host.sample()?.meanX,-900);
 });

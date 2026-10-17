@@ -1,0 +1,31 @@
+import {useEffect,useState} from 'react';
+import type {GazeHostResult} from '../main/gaze-host';
+import type {GazePreferences} from '../main/gaze-preferences';
+import type {SharedScreenStatus} from '../main/shared-screen-session';
+type Preferences=GazePreferences&{running?:boolean;saved?:boolean};
+export function GazeSettings({gaze,display,setDisplay,sharing,request,onError}:{gaze:GazeHostResult;display:string;setDisplay(value:string):void;sharing:SharedScreenStatus|null;request(value:Record<string,unknown>):Promise<any>;onError(message:string):void}){
+  const [preferences,setPreferences]=useState<Preferences|null>(null),[busy,setBusy]=useState(false);
+  useEffect(()=>{let alive=true,flight=false;const poll=async()=>{if(flight)return;flight=true;try{const next=await request({action:'gaze-preferences',displayId:display});if(alive)setPreferences(next);}catch{}finally{flight=false;}};void poll();const timer=setInterval(()=>void poll(),1000);window.addEventListener('focus',poll);return()=>{alive=false;clearInterval(timer);window.removeEventListener('focus',poll);};},[display]);
+  async function save(key:keyof GazePreferences,value:boolean){try{const next=await request({action:'gaze-preferences-set',preferences:{[key]:value}});setPreferences(p=>({...p,...next}));}catch(error){onError(String(error));}}
+  async function start(recalibrate=false){setBusy(true);try{await request({action:'gaze-start',displayId:display,recalibrate});setPreferences(await request({action:'gaze-preferences',displayId:display}));}catch(error){onError(error instanceof Error?error.message:String(error));}finally{setBusy(false);}}
+  async function stop(){setBusy(true);try{await request({action:'gaze-stop'});setPreferences(await request({action:'gaze-preferences',displayId:display}));}catch(error){onError(String(error));}finally{setBusy(false);}}
+  const running=preferences?.running===true;
+  const toggle=(key:keyof GazePreferences,label:string,description:string)=><div className="form-row"><div><h3>{label}</h3><p className="muted">{description}</p></div><button className={`toggle ${preferences?.[key]?'on':''}`} role="switch" aria-label={label} aria-checked={preferences?.[key]===true} disabled={!preferences} onClick={()=>void save(key,!preferences?.[key])}><span/></button></div>;
+  return <>
+    <section className="gaze-hero gaze-hero--compact"><div className="gaze-illustration"><div className="gaze-screen"><span className="gaze-line"/><span className="gaze-line"/><span className="gaze-line"/><span className="demo-gaze-orb"/></div></div><div><h2>Look. Let the context settle.</h2><p>Keep a shared point of attention.<br/>Your mouse stays where you left it.</p></div></section>
+    <section className="card"><div className="form-row"><label htmlFor="display">Display</label>{gaze.displays?.length===1?<span className="display-name">{gaze.displays[0]?.label??'Built-in display'}</span>:<select id="display" value={display} onChange={event=>setDisplay(event.target.value)}>{gaze.displays?.map(d=><option key={d.displayId} value={d.displayId}>{d.label??'Display'}</option>)}</select>}</div>
+      <div className="form-row"><div><h3>{running?'Gaze is on':preferences?.saved?'Ready to start':'Set up gaze'}</h3><p className="muted">{preferences?.saved?'Your calibration is saved. A short accuracy check catches changes in position.':'Follow the travelling light. It pauses briefly to learn each area—no clicks needed.'}</p></div><button className="primary" disabled={busy||!display} onClick={()=>void (running?stop():start())}>{busy?'Starting…':running?'Stop gaze':'Start gaze'}</button></div>
+      {running&&<p className="footnote" role="status">{gaze.status?.state==='active'?'Tracking your eyes':gaze.status?.reason==='calibration_required'?'Follow the light in the gaze window.':'Looking for a clear view of your eyes…'} · Esc stops gaze.</p>}
+      {gaze.calibrationDiagnostics&&<details className="gaze-diagnostics"><summary>Tracking accuracy</summary><p className="footnote">Measured error: {Math.round(gaze.calibrationDiagnostics.rms)} screen points. {gaze.calibrationDiagnostics.rms>80?'This fit supports larger areas; small text and controls may remain ambiguous.':'The outline waits for a clear, stable target.'}</p><p className="footnote">Horizontal response {gaze.calibrationDiagnostics.horizontalResponse.toFixed(2)} · Vertical response {gaze.calibrationDiagnostics.verticalResponse.toFixed(2)}</p></details>}
+      <div className="gaze-actions"><button className="text-button" disabled={busy||!display} onClick={()=>void start(true)}>Calibrate again</button>
+      {preferences?.saved&&<button className="text-button" onClick={()=>void request({action:'gaze-forget'}).then(()=>request({action:'gaze-preferences',displayId:display})).then(setPreferences).catch(error=>onError(String(error)))}>Forget saved calibration</button>}</div>
+    </section>
+    <section className="card shared-screen-card">{toggle('outlines','Outline what I look at','Hold a quiet outline around a clear target. During live voice, its text context goes to your selected providers.')}
+      <div className={`attention-preview ${sharing?.target?'active':''}`}><span className="attention-corners"/><div><strong>{sharing?.target?.label||'A glance becomes a stable area'}</strong><small>{sharing?.enabled?sharing.message:'Outlines follow when gaze is active · Accessibility required'}</small></div><span className="attention-spark">✧</span></div>
+      {toggle('showPointer','Show gaze pointer','Hide the floating pointer while keeping target outlines visible.')}
+      {sharing?.enabled&&<p className="footnote" role="status">{sharing.regions} local targets · {Math.round(sharing.observationDurationMs)} ms to read</p>}
+    </section>
+    <section className="card"><h2>Start with my voice</h2>{toggle('autoAgent','Start gaze with live agent','The camera starts when you begin a live conversation.')}{toggle('autoDictation','Start gaze with smart dictation','Adds gaze to screen context. Smart dictation also works with the camera off.')}</section>
+    <div className="quiet-note"><p>Calibration coefficients stay encrypted on this Mac. Camera images are never saved. Screen context uses accessible text, local OCR and a screenshot fallback; gaze adds a point of attention.</p></div>
+  </>;
+}

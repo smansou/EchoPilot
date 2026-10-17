@@ -10,7 +10,7 @@ export function planGazeCrop(sourceWidth:number,sourceHeight:number,desiredZoom=
   const cropWidth=crop*4,cropHeight=crop*3;
   return {sourceWidth,sourceHeight,outputWidth:output*4,outputHeight:output*3,cropX:Math.floor((sourceWidth-cropWidth)/2),cropY:Math.floor((sourceHeight-cropHeight)/2),cropWidth,cropHeight,zoom:available/crop};
 }
-export type GazeCameraInfo={plan:GazeCropPlan;sourceFrameRate?:number;zoomCapabilityExposed:boolean;backend:'video-frame'|'video-element'};
+export type GazeCameraInfo={plan:GazeCropPlan;sourceFrameRate?:number;zoomCapabilityExposed:boolean;backend:'video-frame'|'video-element';cameraId?:string};
 export function createGazeCameraCapture(getUserMedia:(constraints:MediaStreamConstraints)=>Promise<MediaStream>){
   let disposed=false,source:MediaStream|null=null,output:MediaStream|null=null,video:HTMLVideoElement|null=null;
   let details:GazeCameraInfo|null=null,lastFrameAt=-Infinity,sourceSequence=0,frameHandle:number|null=null,usesVideoCallback=false;
@@ -32,7 +32,7 @@ export function createGazeCameraCapture(getUserMedia:(constraints:MediaStreamCon
     const plan=planGazeCrop(width,height),settings=track.getSettings();
     let zoomCapabilityExposed=false;
     try{const caps=track.getCapabilities() as MediaTrackCapabilities&{zoom?:{min:number;max:number}};zoomCapabilityExposed=!!caps.zoom&&caps.zoom.max>caps.zoom.min;}catch{}
-    details={plan,zoomCapabilityExposed,backend,...(typeof settings.frameRate==='number'&&Number.isFinite(settings.frameRate)?{sourceFrameRate:settings.frameRate}:{})};
+    details={plan,zoomCapabilityExposed,backend,...(settings.deviceId?{cameraId:settings.deviceId}:{}),...(typeof settings.frameRate==='number'&&Number.isFinite(settings.frameRate)?{sourceFrameRate:settings.frameRate}:{})};
     const canvas=document.createElement('canvas');canvas.width=plan.outputWidth;canvas.height=plan.outputHeight;
     const context=canvas.getContext('2d',{alpha:false});
     if(!context)throw new Error('Local camera framing could not start.');

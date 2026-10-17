@@ -1,5 +1,37 @@
 # Live handoff
 
+## October 17, 2026 — hands-free calibration and persistent gaze
+
+Active source is now `/Users/sobhi/.codex/worktrees/23fd/EchoPilot` on
+`bugfix/reliable-gaze-outlines`, based on `c7b910b`. Read
+[the investigation and verification record](GAZE_RELIABILITY_2026-10-17.md).
+The prior complete-app checkout has not been modified by this continuation.
+
+The user reports severe actual gaze jitter/loss and absent outlines. Human acceptance
+is still required. Implemented automatic stationary sampling with animated transitions,
+independent near-corner checks, frozen ridge coefficients, encrypted coefficient-only
+reuse with a short independent check, Start/Stop gaze, opt-in voice/dictation startup,
+pointer visibility independent of outlines, and fresh native permission status reads.
+Fixed rejected edge extrapolation, native marker edge constraints, impossible fine-target
+uncertainty floor, double filtering/lag, stale eye trajectories, interactive AX budget
+versus scene-expiry mismatch, and absence of a real-window fallback.
+
+717 project tests and native 53 XCTest + 2 Swift Testing tests pass. Actual vendored
+module verifies coefficient equivalence and restoration; synthetic production renderer
+verifies all corners, eye loss/reacquisition, pointer visibility, saved-fit restart
+(12.8s check, no retraining), 800×600 layout and camera stall teardown (2.5s). Full
+synthetic initial calibration: 24.7s. These do not establish personal gaze accuracy or
+head-pose robustness. The user is available to perform a real-camera check.
+
+Final candidate `/private/tmp/EchoPilot-handsfree-final-20261017.app` is local-qualified
+and installed at `/Applications/EchoPilot.app`; signature and main/preload/renderer/native
+helper hashes match. Relaunched. Rollback: `/private/tmp/EchoPilot-before-handsfree-20261017.app`.
+The user has been asked to run one real calibration and check saved-fit startup. Awaiting
+that result; do not call personal accuracy accepted. No user's camera images or paid provider calls used in tests.
+No pushes. Automatic gaze with live voice and smart dictation is opt-in; smart dictation
+works with the camera off using text/OCR/screenshot context.
+
+
 ## Latest input-camera checkpoint — October16, 2026
 
 The user required actual quality-preserving input zoom. Native camera discovery and a real Electron metadata-only stream check confirmed FaceTime HD Camera1920×1080@30, `resizeMode:none`, no exposed zoom control/range even with zoom permission requested. Apple `videoZoomFactor` is SDK-unavailable on native macOS. Implemented and installed `2a19a70`: one video-only high-resolution capture, fixed centred960×720→640×480 crop/downsample on this camera, no upscaling or added JPEG/video encoding, lower-resolution/no-negotiation fallback, bounded frame processor plus tested video-element fallback. WebGazer estimator/filter/gates unchanged; no third-party app or new provider upload. Source/processed/receiving-video freshness, permission cancellation and sustained-stall cleanup are tested.

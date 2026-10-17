@@ -22,7 +22,7 @@ export function createSharedScreenSession(options:{allowed():boolean;samples():r
   function usable(sample:GazeSample|undefined,time:number){if(!sample)return false;const age=time-Date.parse(sample.timestamp),xx=sample.covariance2x2[0][0],xy=sample.covariance2x2[0][1],yy=sample.covariance2x2[1][1];return age>=0&&age<800&&sample.quality>=.35&&sample.quality<=1&&[sample.meanX,sample.meanY,xx,xy,yy].every(Number.isFinite)&&xx>=0&&yy>=0&&xy*xy<=xx*yy+1e-6;}
   function attention(gaze:readonly GazeSample[],time:number){
     if(!usable(gaze.at(-1),time)){tracker.clear(time);return tracker.current(time);}
-    const recent=gaze.filter(s=>usable(s,time)&&time-Date.parse(s.timestamp)<450);
+    const recent=gaze.filter(s=>usable(s,time)&&time-Date.parse(s.timestamp)<180);
     const last=recent.at(-1);if(!last)return tracker.current(time);
     const mean={x:recent.reduce((n,s)=>n+s.meanX,0)/recent.length,y:recent.reduce((n,s)=>n+s.meanY,0)/recent.length};
     const covariance={xx:last.covariance2x2[0][0]+recent.reduce((n,s)=>n+(s.meanX-mean.x)**2,0)/recent.length,xy:last.covariance2x2[0][1],yy:last.covariance2x2[1][1]+recent.reduce((n,s)=>n+(s.meanY-mean.y)**2,0)/recent.length};
@@ -46,7 +46,7 @@ export function createSharedScreenSession(options:{allowed():boolean;samples():r
     if(status.phase==='waiting-gaze'&&scene&&time-scene.capturedAt<=1200)tracker.observe(scene.regions,scene.capturedAt,time);
     if(time-lastPoll>=700)void read();
     const result=currentAttention(time);options.highlight(result);
-    status={...status,phase:result.target?'tracking':scene?'reading':'paused',target:result.target?{id:result.target.id,label:result.target.label.slice(0,120),kind:result.target.type}:null};
+    status={...status,phase:result.target?'tracking':scene?'reading':'paused',target:result.target?{id:result.target.id,label:result.target.label.slice(0,120),kind:result.target.type}:null,message:result.state==='stable'?'Following your gaze':result.state==='settling'?'Hold your gaze briefly to select this area':result.state==='ambiguous'?'Gaze overlaps several targets. Look toward the centre of an area.':scene?.regions.length?'No confident target here yet':status.message};
     const sessionId=options.voiceSession();if(sessionId!==voiceId){voiceId=sessionId;feed.reset(true);}
     if(scene){feed.offer({app:scene.app,window:scene.window,revision:scene.revision,capturedAt:scene.capturedAt,attention:result},time);
       if(sessionId){const update=feed.flush(time);if(update){try{if(!options.send(JSON.stringify({sharedScreen:update})))feed.reset(true);else lastNotice='';}catch{feed.reset(true);}}}}

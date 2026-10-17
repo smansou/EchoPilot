@@ -1,6 +1,6 @@
 import { createReferenceResolver, type CalibrationRecord, type DisplayTransform, type GazeSample, type ResolveRequest } from '../../../../packages/gaze/src/index';
 import type { GazeCalibrationDiagnostics, GazeHostOptions, GazeHostResult } from './gaze-host';
-/** WebGazer owns camera inference, regression and Kalman filtering. This host holds only
+/** WebGazer owns camera inference and regression; the renderer filters fresh eye samples. This host holds only
  * validated screen coordinates and measured uncertainty, in memory for the current session. */
 export function createWebGazerHost(options: GazeHostOptions) {
   const now=options.now??Date.now;
@@ -40,9 +40,9 @@ export function createWebGazerHost(options: GazeHostOptions) {
         // Coarse area targeting still needs evidence of tracking in both directions.
         // Compare unseen predictions with a constant-at-center baseline: relaxing an
         // absolute pixel threshold alone would admit collapsed regressions.
-        const validation=r.validation as {targets?:unknown;framesUsed?:unknown;framesRejected?:unknown}|undefined;
+        const validation=r.validation as {targets?:unknown;framesUsed?:unknown;framesRejected?:unknown;mode?:unknown}|undefined;
         const records=validation?.targets;
-        if(!Array.isArray(records)||records.length!==5||validation?.framesUsed!==45||typeof validation.framesRejected!=='number'||!Number.isInteger(validation.framesRejected)||validation.framesRejected<0)return {ok:false,error:'invalid_validation'};
+        if(!Array.isArray(records)||records.length!==5||!(validation?.framesUsed===45||validation?.mode==='resume'&&validation?.framesUsed===0)||typeof validation.framesRejected!=='number'||!Number.isInteger(validation.framesRejected)||validation.framesRejected<0)return {ok:false,error:'invalid_validation'};
         type Check={targetX:number;targetY:number;meanX:number;meanY:number;frames:number};
         if(!records.every(value=>value&&typeof value==='object'&&['targetX','targetY','meanX','meanY','frames'].every(key=>typeof value[key]==='number'&&Number.isFinite(value[key]))&&Number.isInteger(value.frames)&&value.frames>=20&&value.frames<=1000))return {ok:false,error:'invalid_validation'};
         const checks=records as Check[];
@@ -69,11 +69,13 @@ export function createWebGazerHost(options: GazeHostOptions) {
         const accepted=failedChecks.length===0;
         // Only numerical calibration summaries stay in memory. No eye images,
         // landmarks, screen text or raw gaze trajectory enter these diagnostics.
-        diagnostics={model:'WebGazer 3.5.3 · ridge · Kalman',rms,horizontalResponse,verticalResponse,failedChecks,areas:checks.map((p,i)=>{const biasX=p.meanX-p.targetX,biasY=p.meanY-p.targetY;return {error:Math.hypot(...pairs[i]!),biasX,biasY,jitterX:Math.sqrt(Math.max(0,pairs[i]![0]**2-biasX**2)),jitterY:Math.sqrt(Math.max(0,pairs[i]![1]**2-biasY**2)),frames:p.frames};})};
-        const variance=(axis:0|1)=>Math.max(40*40,pairs.reduce((sum,e)=>sum+e[axis]*e[axis],0)/5);
-        calibration={accepted,reason:accepted?'coarse_area_only':'validation_did_not_separate_areas',calibrationGeneration:generation,displayId:display.displayId,cameraId:'webgazer-local',framesUsed:45,framesRejected:validation.framesRejected,validationFramesUsed:checks.reduce((sum,p)=>sum+p.frames,0),residualCovariance2x2:[[variance(0),0],[0,variance(1)]],displayArrangementGeneration:display.arrangementGeneration,recordedAt:new Date(now()).toISOString()};
+        diagnostics={model:'WebGazer 3.5.3 · ridge · adaptive median',rms,horizontalResponse,verticalResponse,failedChecks,areas:checks.map((p,i)=>{const biasX=p.meanX-p.targetX,biasY=p.meanY-p.targetY;return {error:Math.hypot(...pairs[i]!),biasX,biasY,jitterX:Math.sqrt(Math.max(0,pairs[i]![0]**2-biasX**2)),jitterY:Math.sqrt(Math.max(0,pairs[i]![1]**2-biasY**2)),frames:p.frames};})};
+        const variance=(axis:0|1)=>Math.max(4*4,pairs.reduce((sum,e)=>sum+e[axis]*e[axis],0)/5);
+        calibration={accepted,reason:accepted?'coarse_area_only':'validation_did_not_separate_areas',calibrationGeneration:generation,displayId:display.displayId,cameraId:'webgazer-local',framesUsed:validation!.framesUsed as number,framesRejected:validation.framesRejected,validationFramesUsed:checks.reduce((sum,p)=>sum+p.frames,0),residualCovariance2x2:[[variance(0),0],[0,variance(1)]],displayArrangementGeneration:display.arrangementGeneration,recordedAt:new Date(now()).toISOString()};
         if(!accepted){reason='calibration_rejected';return {ok:false,calibration,calibrationDiagnostics:diagnostics,error:`${failedChecks[0]}. Measured error: ${Math.round(rms)} screen points. Gaze remains off because this fit cannot support reliable targeting.`};}
         reason='pupil_tracking_lost';
+      }else if(r.command==='webgazer-lost'){
+        samples=[];reason='pupil_tracking_lost';
       }else if(r.command==='webgazer-sample'){
         if(!display||!calibration?.accepted)return {ok:false,error:'calibration_required'};
         if(status().reason==='display_unavailable')return {ok:false,error:'display_unavailable'};

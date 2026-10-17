@@ -434,3 +434,16 @@
 .calibration-result details { text-align: left; margin: 16px 0; font-size: 12px; }
 .calibration-result summary { cursor: pointer; color: #d9c9f0; }
 .calibration-result small { color: #b9b0c0; }
+
+/* Keep chrome away from corner training targets and the centred camera. */
+.gaze-calibration[data-calibrating=true] .gaze-cancel {
+  left: calc(12% + 44px);
+  right: auto;
+}
+.gaze-calibration[data-calibrating=true] .calibration-progress {
+  top: 210px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.gaze-calibration .calibration-dot.calibration-click { transition: left .35s ease-in-out, top .35s ease-in-out, background .18s ease, box-shadow .18s ease; }

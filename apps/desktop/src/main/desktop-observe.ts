@@ -135,7 +135,7 @@ export type DesktopObserveHostOptions = DesktopObserveHelperOptions & Readonly<{
 }>;
 
 export type DesktopObserveHost = Readonly<{
-  observe(request: Readonly<{ projectId: unknown; allowLocalOCR?:boolean }>): Promise<DesktopObserveResult>;
+  observe(request: Readonly<{ projectId: unknown; allowLocalOCR?:boolean;interactive?:boolean }>): Promise<DesktopObserveResult>;
 }>;
 
 export type DesktopObserveDiagnostics = Readonly<{
@@ -394,7 +394,7 @@ export function createDesktopObserveHost(options: DesktopObserveHostOptions): De
   const maxEvidenceNodes = normalizeLimit(options.maxEvidenceNodes, DESKTOP_OBSERVE_MAX_EVIDENCE_NODES);
   const candidates = options.helperPath ? [explicitHelperPath(bundleDir, options.helperPath)] : desktopHelperCandidates(bundleDir, env);
 
-  function runObservation(helper: string, projectId: string, allowLocalOCR:boolean): Promise<DesktopObserveResult> {
+  function runObservation(helper: string, projectId: string, allowLocalOCR:boolean, interactive:boolean): Promise<DesktopObserveResult> {
     return new Promise((resolveResult) => {
       let settled = false;
       let buffer = '';
@@ -460,6 +460,7 @@ export function createDesktopObserveHost(options: DesktopObserveHostOptions): De
         child.stdin.write(`${JSON.stringify({
           operation: 'observe',
           ...(allowLocalOCR?{allowLocalOCR:true}:{}),
+          ...(interactive?{interactive:true}:{}),
           scope: { profileId: 'local', projectId, sensitivity: 'normal' },
         })}\n`);
       } catch {
@@ -469,12 +470,12 @@ export function createDesktopObserveHost(options: DesktopObserveHostOptions): De
   }
 
   return Object.freeze({
-    async observe(request: Readonly<{ projectId: unknown; allowLocalOCR?:boolean }>): Promise<DesktopObserveResult> {
+    async observe(request: Readonly<{ projectId: unknown; allowLocalOCR?:boolean;interactive?:boolean }>): Promise<DesktopObserveResult> {
       const projectId = normalizeProjectId(request.projectId);
       if (projectId === null) return { outcome: 'invalid_scope' };
       const helper = candidates.find((candidate) => exists(candidate));
       if (!helper) return { outcome: 'helper_missing', searched: [...candidates] };
-      return runObservation(helper, projectId,request.allowLocalOCR===true);
+      return runObservation(helper, projectId,request.allowLocalOCR===true,request.interactive===true);
     },
   });
 }

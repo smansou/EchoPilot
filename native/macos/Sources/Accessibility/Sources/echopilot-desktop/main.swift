@@ -1,5 +1,6 @@
 import DesktopAX
 import Foundation
+import CoreGraphics
 
 // `echopilot-desktop` is the private stdio helper the Electron main process spawns for a granted
 // desktop action (C02). One JSON request per line in, one JSON response per line out; it listens on
@@ -34,6 +35,7 @@ import Foundation
 private struct Request: Decodable {
     let operation: String
     let allowLocalOCR: Bool?
+    let interactive: Bool?
     let preferredRole: String?
     let scope: ActionScope?
     let actionId: String?
@@ -70,6 +72,7 @@ private struct Response: Encodable {
 private struct StatusReport: Encodable {
     let helper = "echopilot-desktop"
     let permission: SystemAXDriver.PermissionStatus
+    let screenRecording: Bool
 }
 
 private struct HashReport: Encodable {
@@ -125,10 +128,6 @@ private let encoder: JSONEncoder = {
 
 private let decoder = JSONDecoder()
 private let host = DesktopHost()
-private let observer = ForegroundObserver(
-    source: SystemForegroundObservationSource(),
-    policy: observationPolicy
-)
 private let maxRequestBytes = 64 * 1024
 
 private func require<T>(_ value: T?, _ field: String) throws -> T {
@@ -152,7 +151,7 @@ private func handle(_ line: String) throws -> Data {
         }
         return try Response.success(FocusedTargetReport(selection: try driver.selectionRange(target), targetRef: target, state: state), encoder: encoder)
     case "status":
-        return try Response.success(StatusReport(permission: SystemAXDriver.permissionStatus), encoder: encoder)
+        return try Response.success(StatusReport(permission: SystemAXDriver.permissionStatus, screenRecording: CGPreflightScreenCaptureAccess()), encoder: encoder)
     case "propose":
         let scope = try require(request.scope, "scope")
         let service = host.service(for: scope)
@@ -190,6 +189,11 @@ private func handle(_ line: String) throws -> Data {
         return try Response.success(state, encoder: encoder)
     case "observe":
         let scope = try require(request.scope, "scope")
+        var policy = observationPolicy
+        // Interactive regions expire after 1.2 seconds in the host. Reserve time
+        // for process startup and delivery instead of spending two seconds in AX.
+        if request.interactive == true { policy.bounds.maxTraversalSeconds = 0.45 }
+        let observer = ForegroundObserver(source: SystemForegroundObservationSource(), policy: policy)
         let outcome = try observer.observe(scope: scope)
         switch outcome {
         case let .evidence(evidence):

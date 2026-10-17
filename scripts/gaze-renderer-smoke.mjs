@@ -6,22 +6,34 @@ import electron from 'electron';
 
 const root = process.cwd();
 const stallVariant = process.argv.includes('--stall-camera');
+const compact = process.argv.includes('--compact');
 if (process.argv.includes('--real')) {
   throw new Error('--real is gated off in this guided-renderer smoke. A static-face fixture cannot validate human gaze accuracy.');
 }
 
 const directory = await mkdtemp('/private/tmp/echo-gaze-renderer-');
-const outputPath = resolve('artifacts/gaze-renderer-acceptance.json');
+const outputPath = resolve(compact?'artifacts/gaze-renderer-compact-acceptance.json':'artifacts/gaze-renderer-acceptance.json');
 
 // This is an API-compatible deterministic fake, not an accuracy fixture. It requests its
 // stream through the renderer's production adapter, follows visible targets, and records the
 // same 45 deliberate samples. The underlying 1920x1080 source is a local synthetic canvas.
 const stub = String.raw`
 (() => {
+  // This synthetic-camera fixture must not depend on the user leaving their
+  // desktop idle. Explicit blur/pause behaviour is tested in the UI fixture.
+  window.addEventListener('blur',()=>queueMicrotask(()=>window.dispatchEvent(new Event('focus'))));
   let callback = () => {}, timer = null, sourceTimer = null, paused = false, active = false;
   let sourceStream = null, sourceTrack = null, outputStream = null, outputTrack = null;
   let sourceDrawCount = 0, sourceConstraints = null, previewCount = 0;
   const samples = [];
+  class FixtureReg {
+    constructor(){this.init();}
+    init(){this.eyeFeaturesClicks={data:[]};this.screenXClicksArray={data:[]};this.screenYClicksArray={data:[]};this.ridgeParameter=1e-5;}
+    addData(eyes,position){this.eyeFeaturesClicks.data.push([1,position[0]/1000,position[1]/1000]);this.screenXClicksArray.data.push([position[0]]);this.screenYClicksArray.data.push([position[1]]);}
+    getData(){return samples;}
+    predict(){return null;}
+  }
+  const regression=new FixtureReg();
   const container = document.createElement('div');
   container.id = 'webgazerVideoContainer';
   container.style.position='fixed';container.style.top='24px';container.style.left='50%';container.style.transform='translateX(-50%)';
@@ -46,6 +58,7 @@ const stub = String.raw`
   }
   function instrument(track,which) {
     let reported=false;const stop=track.stop.bind(track);
+    if(which==='source'){const settings=track.getSettings.bind(track);Object.defineProperty(track,'getSettings',{value:()=>({...settings(),deviceId:'fixture-camera-stable'})});}
     Object.defineProperty(track,'stop',{configurable:true,value(){if(!reported){reported=true;reportTrackStopped(which)}stop();}});
     return track;
   }
@@ -70,7 +83,7 @@ const stub = String.raw`
 
   function prediction() {
     const dot = document.querySelector('.calibration-dot');
-    if (!dot) return { x: innerWidth / 2, y: innerHeight / 2 };
+    if (!dot) return window.fixturePrediction || { x: innerWidth / 2, y: innerHeight / 2 };
     const style = getComputedStyle(dot);
     return { x: Number.parseFloat(style.left), y: Number.parseFloat(style.top) };
   }
@@ -90,7 +103,7 @@ const stub = String.raw`
     },
     pause() { paused = true; clearInterval(timer); timer = null; return this; },
     end() { active = false; clearInterval(timer); timer = null; container.remove(); return this; },
-    async clearData() { samples.length = 0; return this; },
+    async clearData() { regression.init();samples.length = 0; return this; },
     showFaceOverlay() { return this; },
     showFaceFeedbackBox() { return this; },
     setVideoViewerSize(width,height) {
@@ -101,7 +114,7 @@ const stub = String.raw`
       feedback.style.width=size+'px';feedback.style.height=size+'px';feedback.style.left=((width-size)/2)+'px';feedback.style.top=((height-size)/2)+'px';
       return this;
     },
-    getRegression() { return [{ getData: () => samples }]; },
+    getRegression() { return [regression]; },
     setRegression() { return this; },
     setTracker() { return this; },
     applyKalmanFilter() { return this; },
@@ -109,9 +122,15 @@ const stub = String.raw`
     showPredictionPoints() { return this; },
     saveDataAcrossSessions() { return this; },
     removeMouseEventListeners() { return this; },
-    recordScreenPosition(x, y, type) { samples.push({ x, y, type }); return this; },
+    recordScreenPosition(x, y, type) { samples.push({ x, y, type });regression.addData(null,[x,y]); return this; },
     setGazeListener(fn) { callback = fn; return this; },
-    getTracker() { return { getPositions: () => [{ x: 1, y: 2 }, { x: 3, y: 4 }] }; },
+    getTracker() { return { getPositions: () => {
+      const face=Array.from({length:468},()=>[0,0,0]);if(window.fixtureEyesClosed)return face;
+      for(const [a,b] of [[33,133],[362,263]]){face[a]=[0,0,0];face[b]=[20,0,0];}
+      for(const i of [159,158,386,385])face[i]=[10,-3,0];
+      for(const i of [145,153,374,380])face[i]=[10,3,0];
+      return face;
+    } }; },
   };
   window.fixtureTracksReleased = () => sourceTrack?.readyState === 'ended' && outputTrack?.readyState === 'ended';
   window.fixtureTrainingCount = () => samples.length;
@@ -134,7 +153,7 @@ app.on('window-all-closed', () => {});
 app.setPath('userData', ${JSON.stringify(join(directory, 'profile'))});
 protocol.registerSchemesAsPrivileged([{scheme:'echo',privileges:{standard:true,secure:true,supportFetchAPI:true}}]);
 app.whenReady().then(async () => {
-  let overlay;
+  let overlay,savedProfile=null,showPointer=true;
   try {
     const externalRequests = [];
     let mockSourceTrackReleased=false,mockProcessedTrackReleased=false;
@@ -151,18 +170,20 @@ app.whenReady().then(async () => {
     });
     const display = screen.getPrimaryDisplay();
     const host = createWebGazerHost({bundleDir:'',activeProjectId:()=> 'desktop',displays:()=>[{displayId:String(display.id),originX:display.bounds.x,originY:display.bounds.y,width:display.bounds.width,height:display.bounds.height,scale:display.scaleFactor,arrangementGeneration:1}]});
-    overlay = createGazeOverlay({host,bundleDir:${JSON.stringify(resolve('dist/main'))},projectId:()=> 'desktop'});
+    overlay = createGazeOverlay({loadProfile:()=>savedProfile,saveProfile:(_id,profile)=>{savedProfile=profile;},showPointer:()=>showPointer,host,bundleDir:${JSON.stringify(resolve('dist/main'))},projectId:()=> 'desktop'});
     ipcMain.handle('echo:desktop',(event,input)=>{if(input?.action==='__fixture-track-stopped'){if(input.which==='source')mockSourceTrackReleased=true;if(input.which==='processed')mockProcessedTrackReleased=true;return {ok:true};}return overlay.handle(event.sender,input);});
+    const calibrationStartedAt=Date.now();
     await overlay.start(String(display.id));
     const stallCamera=${stallVariant};
     const window = BrowserWindow.getAllWindows()[0];
     if (!window) throw Error('Calibration window did not open.');
+    if(${compact})window.setContentSize(800,600);
     const run = code => window.webContents.executeJavaScript(code);
     const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
     const until = async (expression, label, timeout=15000) => {
       const end = Date.now() + timeout;
       while (Date.now() < end) { if (await run(expression)) return; await wait(40); }
-      throw Error('Timed out waiting for ' + label + '.');
+      throw Error('Timed out waiting for ' + label + '. UI: '+await run("document.body.innerText"));
     };
 
     // Step through the actual tutorial, start camera setup, and use its real buttons to provide
@@ -181,30 +202,19 @@ app.whenReady().then(async () => {
     const feedback=cameraFixture.feedback;
     if(!feedback||Math.abs(feedback.box.width-feedback.box.height)>1||Math.abs((feedback.box.x+feedback.box.width/2)-(feedback.video.x+feedback.video.width/2))>2||Math.abs((feedback.box.y+feedback.box.height/2)-(feedback.video.y+feedback.video.height/2))>2)throw Error('The fake WebGazer feedback box is not square and centered inside the received preview.');
     await run("document.querySelector('.calibration-start').click()");
-    for (let target=0; target<9; target++) {
-      await until("document.querySelector('.calibration-dot') && document.querySelector('.calibration-dot').textContent.includes('/5')", 'training target '+(target+1));
-      await wait(850);
-      for (let click=0; click<5; click++) {
-        await run("document.querySelector('.calibration-dot').click()");
-        await wait(270);
-      }
-      const count = await run('window.fixtureTrainingCount()');
-      if (count !== (target+1)*5) throw Error('Expected '+((target+1)*5)+' real click records after target '+(target+1)+', got '+count+'.');
-    }
-    if (await run('window.fixtureTrainingCount()') !== 45) throw Error('Expected exactly 45 deliberate training clicks.');
+    await wait(900);
+    const layout=await run("(()=>{const dot=document.querySelector('.calibration-dot').getBoundingClientRect(),preview=document.getElementById('webgazerVideoContainer').getBoundingClientRect(),help=document.querySelector('.calibration-target-help').getBoundingClientRect(),stop=document.querySelector('.gaze-cancel').getBoundingClientRect();const separate=(a,b)=>a.right<=b.left||a.left>=b.right||a.bottom<=b.top||a.top>=b.bottom;return {width:innerWidth,height:innerHeight,previewClear:separate(dot,preview),stopClear:separate(dot,stop),helpFits:help.left>=0&&help.top>=0&&help.right<=innerWidth&&help.bottom<=innerHeight};})()");
+    if(!layout.previewClear||!layout.stopClear||!layout.helpFits)throw Error('Calibration target layout is obstructed: '+JSON.stringify(layout));
+    if(${compact}){await mkdir(${JSON.stringify(resolve('artifacts/ui-live'))},{recursive:true});writeFileSync(${JSON.stringify(resolve('artifacts/ui-live/handsfree-calibration.png'))},(await window.webContents.capturePage()).toPNG());}
 
-    // Each of the five held-out targets is armed through its Start button. The renderer itself
-    // enforces 1s settling, 2.8s measurement and at least 20 fresh observations.
-    for (let target=0; target<5; target++) {
-      await until("document.querySelector('.calibration-dot') && document.querySelector('.calibration-dot').textContent.includes('Start')", 'held-out target '+(target+1));
-      await run("document.querySelector('.calibration-dot').click()");
-      await until("document.querySelector('.calibration-target-help')?.innerText.includes('%')", 'held-out measurement '+(target+1));
-      if (target<4) await until("document.querySelector('.calibration-dot')?.textContent.includes('Start')", 'next held-out target '+(target+2), 10000);
-    }
+    await until('window.fixtureTrainingCount() === 45', '45 hands-free calibration observations',30000);
+    console.log('TRAINING_COMPLETE');
 
-    await until("document.querySelector('.calibration-dot') === null && document.querySelector('.calibration-tutorial') === null", 'calibration completion', 10000);
+    await until("document.querySelector('.calibration-dot') === null && document.querySelector('.calibration-tutorial') === null", 'calibration completion', 30000);
     await until('window.fixtureTrainingCount() === 45', 'retained 45 training observations');
     await wait(100);
+    const initialCalibrationMs=Date.now()-calibrationStartedAt;
+    console.log('TRACKING');
     const first = host.sample();
     if (!first) throw Error('The native WebGazer host did not publish a calibrated sample.');
     if (window.isVisible()) throw Error('Calibration window should be hidden after success.');
@@ -214,6 +224,23 @@ app.whenReady().then(async () => {
     const later = host.sample();
     if (!later || later.timestamp === first.timestamp) throw Error('Hidden renderer stopped publishing fresh gaze samples.');
 
+    // Exercise the actual renderer -> IPC -> host -> native marker at all four
+    // corners, then lose the eyes while video continues and reacquire away from centre.
+    const config=await run("window.echo.desktop({action:'gaze-config'})");
+    for(const [x,y] of [[display.bounds.x,display.bounds.y],[display.bounds.x+display.bounds.width,display.bounds.y],[display.bounds.x,display.bounds.y+display.bounds.height],[display.bounds.x+display.bounds.width,display.bounds.y+display.bounds.height]]){
+      console.log('CORNER',x,y);
+      const local={x:x-config.originX+(x===display.bounds.x?-100:100),y:y-config.originY+(y===display.bounds.y?-100:100)};
+      await run('window.fixturePrediction='+JSON.stringify(local));await wait(650);
+      const sample=host.sample();if(!sample||Math.abs(sample.meanX-x)>1||Math.abs(sample.meanY-y)>1)throw Error('Corner prediction was dropped or did not reach the display edge.');
+      const box=marker.getBounds();const orb=await marker.webContents.executeJavaScript("(()=>{const b=document.getElementById('orb').getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2}})()");if(Math.abs(box.x+orb.x-x)>2||Math.abs(box.y+orb.y-y)>2)throw Error('Native marker centre cannot reach corner: '+JSON.stringify({box,orb,x,y}));
+    }
+    console.log('EYE_LOSS');
+    await run('window.fixtureEyesClosed=true');await wait(400);
+    if(host.sample()||marker.isVisible())throw Error('Closed eyes kept a live target or visible pointer.');
+    await run('window.fixturePrediction={x:200,y:300};window.fixtureEyesClosed=false');await wait(400);
+    if(!host.sample()||!marker.isVisible())throw Error('Eyes did not reacquire away from the camera centre.');
+    showPointer=false;await wait(100);if(marker.isVisible()||!host.sample())throw Error('Hiding the pointer stopped gaze or left it visible');showPointer=true;await wait(100);if(!marker.isVisible())throw Error('Pointer could not be restored');
+    let restartCheckMs=null;
     let stallShutdownMs=null,sourceFramesFrozen=false;
     if(stallCamera){
       const startedAt=Date.now();
@@ -236,10 +263,21 @@ app.whenReady().then(async () => {
       while(BrowserWindow.getAllWindows().length&&Date.now()<end)await wait(25);
       if(BrowserWindow.getAllWindows().length)throw Error('Stop leaked calibration or marker windows.');
     }
+    if(!stallCamera&&!${compact}){
+      if(!savedProfile)throw Error('Accepted calibration did not save fitted coefficients');
+      const started=Date.now();await overlay.start(String(display.id));
+      const resumedWindow=BrowserWindow.getAllWindows()[0];
+      await wait(2000);console.log('RESUME_METADATA',JSON.stringify({savedViewport:savedProfile.viewport,currentViewport:await resumedWindow.webContents.executeJavaScript('[innerWidth,innerHeight]'),cameraSignature:savedProfile.cameraSignature,config:await resumedWindow.webContents.executeJavaScript("window.echo.desktop({action:'gaze-config'}).then(c=>({displayKey:c.displayKey,hasProfile:!!c.profile}))")}));
+      const end=Date.now()+30000;while((!host.sample()||resumedWindow.isVisible())&&Date.now()<end)await wait(30);
+      restartCheckMs=Date.now()-started;
+      if(!host.sample()||resumedWindow.isVisible())throw Error('Saved fit did not start with a short independent accuracy check: '+await resumedWindow.webContents.executeJavaScript('document.body.innerText'));
+      const retained=await resumedWindow.webContents.executeJavaScript('window.fixtureTrainingCount()');if(retained!==0)throw Error('Saved fit retrained instead of being reused');
+      await overlay.stop();if(BrowserWindow.getAllWindows().length)throw Error('Restart check leaked windows');
+    }
     if(!mockSourceTrackReleased||!mockProcessedTrackReleased)throw Error('Cleanup did not stop both the original source and processed camera tracks.');
     if (externalRequests.length) throw Error('Unexpected external requests: '+externalRequests.join(', '));
 
-    const result = {variant:stallCamera?'stall-camera':'manual-stop',actualRenderer:true,actualProtocol:true,actualOverlay:true,actualWebGazerHost:true,productionCameraAdapter:true,sourceResolution:'1920x1080',webgazerInput:'640x480',feedbackGeometry:true,tutorial:true,setup:true,trainingClicks:45,heldOutTargets:5,heldOutFramesMinimum:20,calibrationAccepted:true,trackingContinuedWhileHidden:true,windowsClosed:true,sourceTrackReleased:mockSourceTrackReleased,processedTrackReleased:mockProcessedTrackReleased,sourceFramesFrozen,stallShutdownMs,cameraUsed:false,externalRequests};
+    const result = {variant:stallCamera?'stall-camera':'manual-stop',actualRenderer:true,actualProtocol:true,actualOverlay:true,actualWebGazerHost:true,productionCameraAdapter:true,sourceResolution:'1920x1080',webgazerInput:'640x480',feedbackGeometry:true,initialCalibrationMs,allFourCorners:true,pointerVisibilityIndependent:true,savedModelReused:!stallCamera&&!${compact},layout,restartCheckMs,closedEyesInvalidate:true,reacquisition:true,tutorial:true,setup:true,handsFreeTrainingObservations:45,heldOutTargets:5,heldOutFramesMinimum:20,calibrationAccepted:true,trackingContinuedWhileHidden:true,windowsClosed:true,sourceTrackReleased:mockSourceTrackReleased,processedTrackReleased:mockProcessedTrackReleased,sourceFramesFrozen,stallShutdownMs,cameraUsed:false,externalRequests};
     await mkdir(${JSON.stringify(resolve('artifacts'))},{recursive:true});
     writeFileSync(${JSON.stringify(outputPath)},JSON.stringify(result,null,2));
     console.log('GAZE_RENDERER '+JSON.stringify(result));

@@ -31,7 +31,7 @@ export function screenRegions(evidence:ForegroundEvidence){
     regions.push({...make(id,type,label,bounds,parent),nativeRole:node.role});stack.push({depth:node.depth,id});
     for(const text of node.textRegions??[]){const textBounds=windowFrame?clip(text.frame,windowFrame):text.frame;if(!textBounds)continue;regions.push(make(`${id}:${text.kind}:${text.rangeStart}`,text.kind,clean(text.text).slice(0,700),textBounds,id));}
   }
-  if(regions.length&&windowFrame)regions.unshift(make(rootId,'window',evidence.window.title||evidence.application.name,windowFrame));
+  if(windowFrame&&(regions.length||!evidence.nodes.some(node=>node.redacted||/secure|password/i.test(node.role+' '+(node.subrole??'')))))regions.unshift(make(rootId,'window',evidence.window.title||evidence.application.name,windowFrame));
   // Stable per-region revision prevents a clock elsewhere in the screen from resetting dwell.
   const revision=hash(regions.map(r=>[r.id,r.revision]));
   return {app:evidence.application.name,window:evidence.window.title,scope:windowScope,revision,capturedAt:evidence.observedAtMs,regions:regions.slice(0,600)};

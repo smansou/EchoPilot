@@ -20,3 +20,11 @@ test('mapper disambiguates duplicate labels and invalidates scope when window id
   const a=screenRegions(original),b=screenRegions({...original,window:{...original.window,id:'w2'}});
   assert.notEqual(a.regions[1]?.id,a.regions[2]?.id);assert.notEqual(a.scope,b.scope);assert.notEqual(a.regions[1]?.id,b.regions[1]?.id);
 });
+
+test('a real window frame remains a coarse target when no child exposes geometry',()=>{
+  const mapped=screenRegions(evidence([node({frame:undefined} as unknown as Partial<ForegroundEvidenceNode>)]));
+  assert.equal(mapped.regions.length,1);assert.equal(mapped.regions[0]?.type,'window');
+  assert.deepEqual(mapped.regions[0]?.bounds,{x:0,y:0,width:800,height:600});
+  const secure=screenRegions(evidence([node({role:'AXSecureTextField',redacted:true})]));
+  assert.equal(secure.regions.length,0);
+});

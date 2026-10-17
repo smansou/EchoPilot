@@ -11,13 +11,13 @@ const steps = [
   },
   {
     title: 'Follow with your eyes',
-    body: 'Keep your head comfortably steady and move only your eyes between targets. Keep looking at the target while you click.',
+    body: 'Follow the light with your eyes. It travels across the screen and pauses briefly to learn each area. No clicking is needed.',
     note: 'You can blink normally. If you change your sitting position or screen angle, recalibrate.',
     art: 'follow',
   },
   {
-    title: 'Click, then check',
-    body: 'When the face box is green, make five deliberate clicks on each target. At the end, a few targets check how tracking is working.',
+    title: 'Follow, then check',
+    body: 'When your face is clearly in view, begin. A short final check measures accuracy in areas the model has not learned.',
     note: 'That check helps decide whether setup is ready; calibration cannot promise perfect accuracy.',
     art: 'click',
   },
@@ -61,7 +61,7 @@ function StepArt({ kind }: { kind: (typeof steps)[number]['art'] }) {
   }
 
   return (
-    <svg viewBox="0 0 270 145" role="img" aria-label="A green face frame, five clicks, and a final check">
+    <svg viewBox="0 0 270 145" role="img" aria-label="A green face frame and independent accuracy check">
       <rect x="38" y="15" width="194" height="115" rx="18" fill="#27232e" stroke="#77698c" strokeWidth="1.5" />
       <rect x="49" y="26" width="172" height="93" rx="12" fill="#34303d" />
       <rect x="93" y="31" width="84" height="79" rx="34" fill="none" stroke="#77b993" strokeWidth="2" />
