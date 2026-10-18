@@ -23,3 +23,6 @@ workers/pocket-tts/python/
 
 # Swift package caches at any native package depth
 **/.build/
+
+# Verified, reproducible offline wake model (scripts/vendor-wake.mjs)
+models/wake/

@@ -2,7 +2,7 @@
 
 EchoPilot is a macOS desktop voice partner. Dictation writes into the app you are using; native live conversation helps you work through questions, understand saved coding sessions and propose supported desktop actions. Both use one small notch. Settings, gaze calibration and encrypted history live in the app window.
 
-Choose Gemini or OpenAI for live voice. Reasoning and dictation can use Gemini, OpenAI or OpenRouter independently. Keys stay in macOS Keychain; local Claude/Codex session discovery requires no separate pairing. The voice model reuses known context and delegates missing research to a separate backend.
+Choose Gemini or OpenAI for live voice. Reasoning and dictation can use Gemini, OpenAI or OpenRouter independently. Keys stay in macOS Keychain; local Claude/Codex session discovery requires no separate pairing. The voice model starts with locally prepared session evidence and persistent goals, and delegates missing research or coding work when needed. Assistant & memory settings let you inspect commitments, follow coding tasks, set the idle sleep timeout and calibrate an optional offline wake phrase.
 
 ## Run locally
 
@@ -13,11 +13,11 @@ pnpm install
 pnpm dev
 ```
 
-In General, choose a provider setup and save its API key. Allow Microphone and Accessibility. Press Control+Option+Space to dictate, or Option+Space for live conversation. Advanced allows a custom voice/reasoning combination. No local model downloads are required for these features.
+In General, choose a provider setup and save its API key. Allow Microphone and Accessibility. Press Control+Option+Space to dictate, or Option+Space for live conversation. Advanced allows a custom voice/reasoning combination. No local model downloads are required for live voice or dictation. For optional English wake phrases, run `pnpm models:wake` before building, then calibrate your phrase in Assistant & memory. Wake audio stays local until voice activates.
 
 `pnpm dev` builds the application and available native helpers. `pnpm package` creates an ad-hoc signed local cloud-voice app without offline ASR/VAD model packs. It is not a notarized distribution. Quit older copies before testing global shortcuts.
 
-See [current handoff](docs/LIVE_HANDOFF.md), [native live voice](docs/REALTIME.md), and [desktop guide](docs/DESKTOP_REDESIGN.md) for verified behavior and remaining acceptance work. Earlier implementation plans and backlog tickets are historical, not a description of the current UI.
+See [assistant context and wake voice](docs/PERSONAL_ASSISTANT_CONTEXT_2026-10-18.md), [current handoff](docs/LIVE_HANDOFF.md), [native live voice](docs/REALTIME.md), and [desktop guide](docs/DESKTOP_REDESIGN.md) for verified behavior and remaining acceptance work. Earlier implementation plans and backlog tickets are historical, not a description of the current UI.
 
 ## Verify
 

@@ -1,7 +1,7 @@
 import type { SessionState } from './desktop-session';
 export type LiveProvider = 'openai' | 'gemini';
-export type LivePreferences = {provider:LiveProvider;voice:string};
-export type LiveState = SessionState & {transport:'webrtc'|'pcm';provider:LiveProvider;finalized?:boolean};
+export type LivePreferences = {provider:LiveProvider;voice:string;idleTimeoutSeconds?:number};
+export type LiveState = SessionState & {transport:'webrtc'|'pcm';provider:LiveProvider;finalized?:boolean;asleep?:boolean};
 export type LiveEvent =
   | {type:'transcript';speaker:'user'|'assistant';text:string;startMs:number;endMs:number;id?:string}
   | {type:'delegation';id:string;offsetMs:number;task?:string}

@@ -33,11 +33,15 @@
     "loop:policy-test": "node --test scripts/loop-gates.test.mjs scripts/loop-policy.test.mjs",
     "release:validate": "node scripts/validate-release.mjs",
     "progress:board": "node scripts/progress-board.mjs",
-    "progress:task": "node scripts/progress-task.mjs"
+    "progress:task": "node scripts/progress-task.mjs",
+    "models:wake": "node scripts/vendor-wake.mjs"
   },
   "dependencies": {
+    "@sctg/sentencepiece-js": "1.3.3",
+    "js-tiktoken": "1.0.21",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "sherpa-onnx-node": "1.13.8",
     "ws": "8.22.0"
   },
   "devDependencies": {

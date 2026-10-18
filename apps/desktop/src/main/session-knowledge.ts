@@ -18,10 +18,10 @@ export function createSessionKnowledge(options:{library:ReturnType<typeof create
     if(typeof parsed.brief!=='string'||!parsed.brief.trim()||parsed.brief.length>4000||!Array.isArray(parsed.source_refs)||!parsed.source_refs.every(ref=>typeof ref==='string'&&refs.has(ref))||!Array.isArray(parsed.uncertainties)||!parsed.uncertainties.every(x=>typeof x==='string'))throw Error('Research returned unsupported evidence.');
     if(parsed.source_refs.length===0&&!parsed.uncertainties.length)throw Error('Research returned no evidence or uncertainty.');
     const result:SessionBrief={sessionId,project:evidence.project,version:evidence.version,updatedAt:evidence.updatedAt,coverage:evidence.coverage,brief:parsed.brief,source_refs:parsed.source_refs as string[],uncertainties:(parsed.uncertainties as string[]).slice(0,8).map(s=>s.slice(0,300))};
-    briefs.set(sessionId,result);cache.set(key,result);if(cache.size>30)cache.delete(cache.keys().next().value!);if(briefs.size>3)briefs.delete(briefs.keys().next().value!);
+    briefs.set(sessionId,result);cache.set(key,result);if(cache.size>30)cache.delete(cache.keys().next().value!);if(briefs.size>12)briefs.delete(briefs.keys().next().value!);
     return {...result};
   }
-  return {research,catalog:options.library.catalog,retained:()=>[...briefs.values()],clear(){epoch++;briefs.clear();cache.clear();},
+  return {research,catalog:options.library.catalog,evidence:options.library.evidence,search:options.library.search,peek:options.library.peek,refresh:options.library.refresh,retained:()=>[...briefs.values()],clear(){epoch++;briefs.clear();cache.clear();},
     async changed(){const result:string[]=[];for(const [id,brief] of briefs){const version=await options.library.version(id);if(version&&version!==brief.version)result.push(id);}return result;},
   };
 }

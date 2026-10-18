@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "model": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
+  "engine": "sherpa-onnx-node@1.13.8",
+  "license": "Apache-2.0",
+  "licenseFile": "models/licenses/sherpa-onnx.LICENSE",
+  "language": "English",
+  "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2",
+  "archiveSha256": "f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a",
+  "files": [
+    {
+      "name": "bpe.model",
+      "bytes": 244837,
+      "sha256": "c8a2a0129c4ab8e463164c142f82d25649661b122c8cd0b7aab5c9e80b90ad24"
+    },
+    {
+      "name": "tokens.txt",
+      "bytes": 5006,
+      "sha256": "fd2ded4050a55d2b1578870ba8697d02371980217806b7558bd0a5cc60f3ba53"
+    },
+    {
+      "name": "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+      "bytes": 4807159,
+      "sha256": "1e721676515bcd42a186979733981213c66c80db680e1cc582dfedf3be76e678"
+    },
+    {
+      "name": "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+      "bytes": 277985,
+      "sha256": "e40ff43297abe815e8898494c17e71bba2152d9d40fa3eb803f75d0f7533329a"
+    },
+    {
+      "name": "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+      "bytes": 163380,
+      "sha256": "eae9da0c7e1e6c6a3f4cc42d167899c388f6c6701b94cb96320e4f55df79624c"
+    }
+  ]
+}

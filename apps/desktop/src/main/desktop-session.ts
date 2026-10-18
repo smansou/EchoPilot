@@ -3,7 +3,7 @@ import type { CloudConfig, ScreenContext } from './cloud-provider';
 export type SessionMode = 'dictation' | 'agent';
 export type SessionState = { id: string | null; mode: SessionMode; phase: 'idle' | 'closing' | 'starting' | 'listening' | 'processing' | 'confirming' | 'done' | 'error'; message: string; transcript: string; reply: string; recording: boolean };
 export type AgentAction = { operation: 'click' | 'select' | 'scroll' | 'navigate' | 'set_value'; value: string; target: 'focused' | 'gaze' };
-export type SessionHistory = { id: string; at: string; mode: SessionMode; text: string; result: string };
+export type SessionHistory = { id: string; at: string; mode: SessionMode; text: string; result: string; turns?:{speaker:'user'|'assistant';text:string}[] };
 export function createDesktopSession(options: {
   config(): CloudConfig; smart(): boolean; allowed(): boolean;
   context(signal: AbortSignal): Promise<ScreenContext>;

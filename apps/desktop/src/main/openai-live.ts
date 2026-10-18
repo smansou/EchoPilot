@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import {randomUUID} from 'node:crypto';
+import {clipContext} from './live-context';
 import {openAILiveConfig} from './live-config';
 import {boundedContextParts,type LiveConnectOptions,type LiveConnection} from './live-types';
 export async function connectOpenAILive(options:LiveConnectOptions & {fetcher?:typeof fetch;socket?:(url:string,key:string)=>WebSocket}):Promise<LiveConnection>{
@@ -39,10 +40,10 @@ export async function connectOpenAILive(options:LiveConnectOptions & {fetcher?:t
     });
     options.signal.throwIfAborted();
     function append(type:'session.thinking.append'|'session.commentary.append',content:string,delegationId:string|null){
-      if(closing)return;const parts=boundedContextParts(content.slice(0,10000));
+      if(closing)return;const parts=boundedContextParts(clipContext(content,6000));
       // Each append stays below the documented 500-token limit, conservatively measured in UTF-8 bytes.
-      for(const part of parts){const id=randomUUID();pending.set(id,setTimeout(()=>{pending.delete(id);if(!closing)options.onEvent({type:'failure',message:'GPT-Live did not acknowledge a context update.'});},20000));send({type,event_id:id,delegation_id:delegationId,content:part});}
+      for(const part of parts){const id=randomUUID();pending.set(id,setTimeout(()=>{pending.delete(id);/* Timeline acknowledgments may pause with silence; do not tear down healthy audio. */},20000));send({type,event_id:id,delegation_id:delegationId,content:part});}
     }
-    return {sdp:result.transport.sdp,close,context:(content,id=null)=>append('session.thinking.append',content,id),result:(content,id,speak)=>{if(!speak){append('session.thinking.append',content,id);return;}const parts=boundedContextParts(content);if(parts.length===1){append('session.commentary.append',content,id);return;}append('session.thinking.append',content,id);append('session.commentary.append','The requested backend work is complete. Use the factual result just supplied to answer the user concisely, preserving uncertainties and action outcomes.',id);}};
+    return {sdp:result.transport.sdp,close,context:(content,id=null)=>append('session.thinking.append',content,id),result:(content,id,speak)=>{if(!speak){append('session.thinking.append',content,id);return;}const parts=boundedContextParts(content);if(parts.length===1){append('session.commentary.append',content,id);return;}append('session.thinking.append',content,id);append('session.commentary.append','The requested backend work is complete. Use the factual result just supplied to answer at the depth their request needs, preserving reasons, concrete next steps, uncertainties and action outcomes.',id);}};
   }catch(error){await close();throw error;}
 }

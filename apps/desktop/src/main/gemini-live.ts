@@ -1,11 +1,12 @@
 import WebSocket from 'ws';
 import {LIVE_MODELS,LIVE_INSTRUCTIONS,DELEGATE_TOOL} from './live-config';
+import {clipContext} from './live-context';
 import type {LiveConnectOptions,LiveConnection} from './live-types';
 export function geminiLiveSetup(voice:string,context:string){return {setup:{
   model:`models/${LIVE_MODELS.gemini}`,
   generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:['Kore','Puck','Aoede'].includes(voice)?voice:'Kore'}}}},
-  systemInstruction:{parts:[{text:LIVE_INSTRUCTIONS+'\nUse delegate_task for backend assistance. '+context.slice(0,16000)}]},
-  inputAudioTranscription:{},outputAudioTranscription:{},contextWindowCompression:{slidingWindow:{}},
+  systemInstruction:{parts:[{text:LIVE_INSTRUCTIONS+'\nUse delegate_task for backend assistance. '+clipContext(context,7600)}]},
+  inputAudioTranscription:{},outputAudioTranscription:{},contextWindowCompression:{triggerTokens:16000,slidingWindow:{targetTokens:8000}},
   tools:[{functionDeclarations:[{...DELEGATE_TOOL,behavior:'NON_BLOCKING'}]}],
 }};}
 export async function connectGeminiLive(options:LiveConnectOptions & {socket?:(key:string)=>WebSocket;now?:()=>number}):Promise<LiveConnection>{
