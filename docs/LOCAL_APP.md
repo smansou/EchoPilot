@@ -1,5 +1,23 @@
 # Local macOS app bundle
 
+Cloud voice requires `dist/native/echopilot-secrets`. The macOS build compiles it
+directly from the helper sources, without resolving the offline ASR packages.
+Packaging fails if it is missing; runtime lookup also supports older SwiftPM paths.
+
+For stable local Keychain identity, `node scripts/local-signing.mjs` explicitly sets
+up a private build keychain under `~/Library/Application Support/EchoPilot Build`.
+This setup requires user approval: it adds a self-signed certificate to this user's
+code-signing trust settings, never TLS or system-wide trust. Builds only reuse an
+existing valid identity and never add trust. Keep this directory across worktrees
+and updates. The signing key and password stay outside the repository with
+user-only permissions. Without a valid configured identity, builds retain the
+ad-hoc development fallback.
+
+The first launch after switching from an old ad-hoc build may require choosing
+**Always Allow** for EchoPilot's existing Keychain items. This preserves their
+secrets and encryption keys. Subsequent builds with the same certificate should
+retain access. Local signing is not Developer ID signing or notarization.
+
 `pnpm package` assembles a real, double-clickable `EchoPilot.app` from this checkout using the
 official Electron.app that the `electron` dependency already installed under `node_modules`. It is
 a **local development bundle**, not a distributable release: it is ad-hoc signed so macOS can run

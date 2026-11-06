@@ -67,6 +67,7 @@ async function makeFixture(t, { voice = true, asr = true, silero = true, reasone
   await write(join(root, 'dist', 'renderer', 'index.html'), '<!doctype html><title>EchoPilot</title>\n');
   await write(join(root, 'dist', 'native', 'PlatformHost'), '#!/bin/sh\nexit 0\n');
   await write(join(root, 'dist', 'native', 'echopilot-desktop'), '#!/bin/sh\nexit 0\n');
+  await write(join(root, 'dist', 'native', 'echopilot-secrets'), '#!/bin/sh\nexit 0\n');
   if (voice) await write(join(root, 'dist', 'native', 'EchoPilotVoice.app', 'Contents', 'MacOS', 'echopilot-voice'), '#!/bin/sh\nexit 0\n');
   await write(join(root, 'models', 'manifest.json'), '{"manifestVersion":1}\n');
   await write(join(root, 'models', 'licenses', 'whisper-small-en.LICENSE'), 'fixture license\n');
@@ -371,7 +372,7 @@ test('packageLocalApp assembles an EchoPilot bundle with the official Electron i
     'dist/native/PlatformHost',
     'dist/native/echopilot-desktop',
     'dist/native/EchoPilotVoice.app/Contents/MacOS/echopilot-voice',
-    'dist/native/macos/.build/release/echopilot-secrets',
+    'dist/native/echopilot-secrets',
     'dist/native/echopilot-exec-observation',
     'scripts/release/installers.json',
     'fixtures/bootstrap/session.jsonl',
@@ -494,6 +495,14 @@ test('packageLocalApp fails closed on missing compiled payload and creates nothi
   });
   assert.equal(calls.length, 0, 'nothing runs when the payload is missing');
   assert.ok(!existsSync(join(fixture.root, ARTIFACTS_DIRECTORY)), 'no artifact directory is created');
+});
+
+test('cloud voice packaging refuses to ship without the Keychain helper',async(t)=>{
+  const fixture=await makeFixture(t,{voice:false,asr:false,silero:false});
+  await rm(join(fixture.root,'dist/native/echopilot-secrets'));
+  const {calls,execute}=makeExecute();
+  await assert.rejects(runPackage(fixture,execute,{uiOnly:true}),/echopilot-secrets/);
+  assert.equal(calls.length,0);
 });
 
 test('packageLocalApp builds the TypeScript bundle once when only dist output is missing', async (t) => {

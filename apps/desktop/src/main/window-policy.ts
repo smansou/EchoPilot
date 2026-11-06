@@ -84,7 +84,7 @@ export function applyForegroundSafeWindowBehavior(
 ): boolean {
   if (platform !== 'darwin') return false;
   window.setVisibleOnAllWorkspaces(true, WIDGET_WORKSPACE_OPTIONS);
-  window.setAlwaysOnTop(true, 'floating');
+  window.setAlwaysOnTop(true, 'status');
   return true;
 }
 

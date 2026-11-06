@@ -10,9 +10,10 @@
 //   - the bundle is renamed to EchoPilot with the stable local identifier
 //     com.echopilot.desktop.local and is ad-hoc signed and verified.
 //
-// There is no Developer ID signature, no notarization, no Keychain access, no Apple account or
+// There is no Developer ID signature, no notarization, no application-secret access, no Apple account or
 // credential, no network fetch, and no write outside the repository (default output:
-// artifacts/local-app). apps/desktop/forge.config.ts with scripts/release/* remains the
+// artifacts/local-app). If explicitly configured, its private build keychain supplies a stable
+// local signing identity. apps/desktop/forge.config.ts with scripts/release/* remains the
 // (currently unprovisioned) distributable release path. Run with --help for options; see
 // docs/LOCAL_APP.md for the bundle contract and the remaining gates.
 
@@ -22,6 +23,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { cp, lstat, mkdir, mkdtemp, readFile, readlink, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {localSigning,signingArguments} from './local-signing.mjs';
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const PRODUCT_NAME = 'EchoPilot';
@@ -180,6 +182,7 @@ export function resolveSileroPack({ root = REPO_ROOT, exists = existsSync, candi
 
 /** Compiled payload every bundle carries; the runtime resolves these through app.getAppPath(). */
 export const REQUIRED_PAYLOAD = [
+  { id: 'secrets-helper', source: 'dist/native/echopilot-secrets', kind: 'file' },
   { id: 'dist-main', source: 'dist/main', kind: 'directory' },
   { id: 'dist-preload', source: 'dist/preload', kind: 'directory' },
   { id: 'dist-renderer', source: 'dist/renderer', kind: 'directory' },
@@ -201,13 +204,6 @@ export const REQUIRED_NATIVE_HELPERS = [
 
 /** Compiled-but-optional helpers the packaged runtime looks up bundle-relative, when built. */
 export const OPTIONAL_HELPER_GROUPS = [
-  {
-    id: 'secrets-helper',
-    candidates: [
-      { source: 'native/macos/.build/release/echopilot-secrets', destination: 'dist/native/macos/.build/release/echopilot-secrets' },
-      { source: 'native/macos/.build/debug/echopilot-secrets', destination: 'dist/native/macos/.build/debug/echopilot-secrets' },
-    ],
-  },
   {
     id: 'execution-helper',
     candidates: [
@@ -343,10 +339,12 @@ export function verifySignArguments(appPath) {
   return ['--verify', '--deep', '--strict', '--verbose=2', appPath];
 }
 
-export function resignHelperArguments({ helperPath, entitlements = null }) {
+export function resignHelperArguments({ helperPath, entitlements = null, signing = null }) {
   const args = ['--force', '--deep', '--options', 'runtime', '--timestamp=none'];
   if (entitlements) args.push('--entitlements', entitlements);
-  args.push('--sign', '-', helperPath);
+  args.push('--sign', signing?.identity??'-');
+  if(signing)args.push('--keychain',signing.keychain);
+  args.push(helperPath);
   return args;
 }
 
@@ -491,6 +489,7 @@ export async function packageLocalApp(options = {}) {
   }
 
   const rootDir = resolve(root);
+  const signing=options.signing??(execute===defaultExecute?await localSigning():null);
   const version = await readPackageVersion(rootDir);
   const safeVersion = version.replace(/[^0-9A-Za-z.+-]/g, '_');
   const electronApp = electronAppOption === null ? resolveElectronApp({ root: rootDir, env }) : resolve(electronAppOption);
@@ -581,7 +580,7 @@ export async function packageLocalApp(options = {}) {
       version,
       bundleIdentifier: BUNDLE_IDENTIFIER,
       electronVersion: await readElectronVersion(electronApp),
-      signature: 'ad-hoc',
+      signature: signing?'local-certificate':'ad-hoc',
       notarized: false,
       distributable: false,
       included: [...copied].sort(),
@@ -598,7 +597,7 @@ export async function packageLocalApp(options = {}) {
       frameworksDirectory: join(appPath, 'Contents', 'Frameworks'),
       skip: [join(resourcesApp, 'dist', 'native', `${PRODUCT_NAME}Voice.app`)],
     })) {
-      await run(execute, CODESIGN, adhocSignArguments(nestedBundle), `re-signing the nested ${basename(nestedBundle)}`);
+      await run(execute, CODESIGN, signingArguments(nestedBundle,signing), `re-signing the nested ${basename(nestedBundle)}`);
     }
 
     if (voiceHelperTouched) {
@@ -609,12 +608,12 @@ export async function packageLocalApp(options = {}) {
       await run(
         execute,
         CODESIGN,
-        resignHelperArguments({ helperPath: join(resourcesApp, 'dist', 'native', `${PRODUCT_NAME}Voice.app`), entitlements: existsSync(entitlements) ? entitlements : null }),
+        resignHelperArguments({ helperPath: join(resourcesApp, 'dist', 'native', `${PRODUCT_NAME}Voice.app`), entitlements: existsSync(entitlements) ? entitlements : null, signing }),
         're-signing the nested voice helper',
       );
     }
 
-    await run(execute, CODESIGN, adhocSignArguments(appPath), 'ad-hoc signing the bundle');
+    await run(execute, CODESIGN, signingArguments(appPath,signing), 'signing the bundle');
     await run(execute, CODESIGN, verifySignArguments(appPath), 'verifying the bundle signature');
 
     await mkdir(dirname(output), { recursive: true });
@@ -623,7 +622,7 @@ export async function packageLocalApp(options = {}) {
     return {
       appPath: output,
       mode: record.mode,
-      signature: 'ad-hoc',
+      signature: record.signature,
       notarized: false,
       distributable: false,
       version,
@@ -660,7 +659,7 @@ async function main(argv) {
   console.log(`\nEchoPilot local bundle (${summary.mode}) assembled from Electron ${summary.electronVersion ?? 'unknown'}:`);
   console.log(`  ${summary.appPath}`);
   console.log(`\nOpen it with:  ${summary.openCommand}`);
-  console.log('Signature: ad-hoc local development signature — no Developer ID, not notarized.');
+  console.log(`Signature: ${summary.signature} local development signature — no Developer ID, not notarized.`);
   if (summary.mode === 'cloud-voice') {
     console.log('Mode: cloud-voice — native cloud audio is included; offline ASR/VAD model packs are omitted.');
   }

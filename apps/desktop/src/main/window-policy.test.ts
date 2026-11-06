@@ -60,7 +60,7 @@ test('the widget follows every Space, including full-screen Spaces, via Electron
   assert.equal(applyForegroundSafeWindowBehavior(widget.window, 'darwin'), true);
   assert.deepEqual(widget.calls, [
     'setVisibleOnAllWorkspaces(true,{"visibleOnFullScreen":true,"skipTransformProcessType":true})',
-    'setAlwaysOnTop(true,floating)',
+    'setAlwaysOnTop(true,status)',
   ]);
 });
 

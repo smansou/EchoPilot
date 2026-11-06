@@ -393,7 +393,7 @@ function createWindow(view: 'widget' | 'dashboard') {
   const window = new BrowserWindow({
     width:isWidget ? 440 : 1060, height:isWidget ? 100 : 760, minWidth:isWidget ? 440 : 800,
     minHeight:isWidget ? 80 : 600, show:false,
-    ...(isWidget ? {frame:false,transparent:true,hasShadow:false,resizable:false} : {titleBarStyle:'hiddenInset' as const}),
+    ...(isWidget ? {frame:false,transparent:true,hasShadow:false,resizable:false,enableLargerThanScreen:true} : {titleBarStyle:'hiddenInset' as const}),
     // Foreground-safe widget options live in `window-policy.ts` so the focus/Space matrix is
     // covered by a deterministic test instead of only by the manual signed-app run.
     ...windowBehavior(view),

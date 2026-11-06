@@ -29,7 +29,7 @@ test('repo checkouts resolve the helper relative to the bundle, independent of t
 });
 
 test('bundled apps resolve the helper under dist/native, matching the native-host convention', () => {
-  const bundled = resolve(PACKAGED_BUNDLE_DIR, '../native/macos/.build/release/echopilot-secrets');
+  const bundled = resolve(PACKAGED_BUNDLE_DIR, '../native/echopilot-secrets');
   assert.equal(resolveNativeHelperPath({ bundleDir: PACKAGED_BUNDLE_DIR, exists: (c) => c === bundled }), bundled);
   for (const candidate of nativeHelperCandidates({ bundleDir: PACKAGED_BUNDLE_DIR })) {
     assert.ok(underRoot(candidate, PACKAGED_BUNDLE_DIR), `candidate escapes the app tree: ${candidate}`);

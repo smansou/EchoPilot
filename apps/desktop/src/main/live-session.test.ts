@@ -5,6 +5,12 @@ function fixture(overrides:Record<string,unknown>={}){let receive!:(event:LiveEv
  return {live,results,calls,history,send:(event:LiveEvent)=>receive(event),observed:()=>observed,closes:()=>closeCount,async start(){await live.start();await live.join(live.status().id!);live.ready(live.status().id!);}};
 }
 const speech=(text:string,start=0):LiveEvent=>({type:'transcript',speaker:'user',text,startMs:start,endMs:start+10});
+test('microphone permission errors explain the fix and can be dismissed back to idle',async()=>{
+ const f=fixture();await f.start();f.live.error(f.live.status().id!,'NotAllowedError');
+ await new Promise(r=>setImmediate(r));assert.equal(f.live.status().phase,'error');
+ assert.match(f.live.status().message,/System Settings.*Microphone/);assert.equal(f.live.status().recording,false);
+ await f.live.stop();assert.equal(f.live.status().phase,'idle');assert.equal(f.live.status().message,'');
+});
 test('continuous conversation retains evidence and delegates only when the voice model asks',async()=>{const f=fixture();try{await f.start();assert.equal(f.live.status().transport,'pcm');assert.match(f.observed()!.context,/Known context/);f.send(speech('Why SQLite?'));await wait();assert.equal(f.calls.length,0);f.send({type:'delegation',id:'d',offsetMs:10,task:'Explain decision'});await wait();assert.equal(f.calls.length,1);assert.equal(f.results[0][2],true);assert.match(f.calls[0].conversation,/Why SQLite/);}finally{await f.live.stop();}assert.equal(f.closes(),1);assert.equal(f.history.length,1);assert.equal(f.history[0].turns[0].speaker,'user');});
 test('metadata-only delegation waits for delayed transcript instead of inventing a task',async()=>{const f=fixture();try{await f.start();f.send({type:'delegation',id:'d',offsetMs:10});await wait();assert.equal(f.calls.length,0);f.send(speech('Find '));f.send(speech('Atlas',11));await wait();assert.equal(f.calls.length,1);assert.match(f.calls[0].conversation,/Find Atlas/);}finally{await f.live.stop();}});
 test('late backend result is quiet after the user changes the request',async()=>{let finish!:(text:string)=>void;const f=fixture({backend:()=>new Promise<string>(resolve=>finish=resolve)});try{await f.start();f.send(speech('Research Atlas'));f.send({type:'delegation',id:'d',offsetMs:10});await wait();f.send(speech('Actually never mind',20));finish('Old answer');await wait();assert.equal(f.results[0][2],false);}finally{await f.live.stop();}});

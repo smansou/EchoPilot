@@ -8,7 +8,7 @@ export async function connectOpenAILive(options:LiveConnectOptions & {fetcher?:t
   if(!options.sdp?.startsWith('v=0')||options.sdp.length>65536)throw Error('Invalid live audio offer.');
   const request=options.fetcher??fetch;
   const response=await request('https://api.openai.com/v1/live/sessions',{method:'POST',headers:{Authorization:`Bearer ${options.key}`,'Content-Type':'application/json'},body:JSON.stringify({session:openAILiveConfig(options.voice,options.context),transport:{type:'webrtc',sdp:options.sdp}}),signal:AbortSignal.any([options.signal,AbortSignal.timeout(15000)])});
-  if(!response.ok)throw Error(response.status===401?'OpenAI rejected the key. Check Live voice settings.':response.status===403?'This OpenAI project does not have GPT-Live access.':`GPT-Live connection failed (${response.status}).`);
+  if(!response.ok)throw Error(response.status===401?'OpenAI rejected the key. Check your provider key in General settings.':response.status===403?'This OpenAI project does not have GPT-Live access. Check the project permissions.':response.status===429?'OpenAI voice quota or rate limit reached. Check API billing and try again.':`GPT-Live connection failed (${response.status}). Please try again.`);
   const result=await response.json() as {session?:{id?:unknown};transport?:{sdp?:unknown}};
   if(typeof result.session?.id!=='string'||!/^[A-Za-z0-9_-]{1,200}$/.test(result.session.id)||typeof result.transport?.sdp!=='string'||!result.transport.sdp.startsWith('v=0')||result.transport.sdp.length>65536)throw Error('GPT-Live returned an invalid session.');
   const sessionId=result.session.id;

@@ -2,6 +2,10 @@ import {test} from 'node:test';import assert from 'node:assert/strict';import {E
 import {connectOpenAILive} from './openai-live';import {connectGeminiLive,geminiLiveSetup} from './gemini-live';import {boundedContextParts,type LiveEvent} from './live-types';import {contextTokens} from './live-context';import {openAILiveConfig} from './live-config';
 class Socket extends EventEmitter{readyState=0;bufferedAmount=0;sent:any[]=[];open(){this.readyState=1;this.emit('open');}send(text:string){this.sent.push(JSON.parse(text));}message(value:unknown){this.emit('message',Buffer.from(JSON.stringify(value)),false);}close(){this.readyState=3;this.emit('close');}terminate(){this.close();}}
 const tick=()=>new Promise(r=>setImmediate(r));
+test('OpenAI quota failure gives a billing action without opening a sideband',async()=>{
+ await assert.rejects(connectOpenAILive({key:'test',sdp:'v=0',voice:'marin',context:'',signal:new AbortController().signal,onEvent(){},
+ fetcher:(async()=>new Response('{}',{status:429})) as typeof fetch,socket(){throw Error('must not open');}}),/quota or rate limit.*billing/);
+});
 test('OpenAI creates GPT-Live with client delegation, preserves session ID and finalizes before closing',async()=>{
  const socket=new Socket();const events:LiveEvent[]=[];let body:any;let endpoint='';
  const joining=connectOpenAILive({key:'test-key',sdp:'v=0\r\n',voice:'willow',context:'known evidence',signal:new AbortController().signal,onEvent:e=>events.push(e),fetcher:(async(url,init)=>{assert.equal(url,'https://api.openai.com/v1/live/sessions');body=JSON.parse(String(init?.body));return Response.json({session:{id:'sess_live_123'},transport:{sdp:'v=0 answer'}});}) as typeof fetch,socket:url=>{endpoint=url;setImmediate(()=>socket.open());return socket as any;}});

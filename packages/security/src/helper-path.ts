@@ -27,6 +27,7 @@ export function nativeHelperCandidates(options: NativeHelperPathOptions): string
   const binary = options.binaryName ?? DEFAULT_HELPER_BINARY;
   const bundleDir = resolve(options.bundleDir);
   return [
+    resolve(bundleDir, '../native', binary),
     resolve(bundleDir, '../native/macos/.build/release', binary),
     resolve(bundleDir, '../native/macos/.build/debug', binary),
     resolve(bundleDir, '../../native/macos/.build/release', binary),

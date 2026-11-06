@@ -1,3 +1,4 @@
+import {notchBounds} from './notch-layout';
 import {clipContext} from './live-context';
 import {encryptedState} from './encrypted-state';
 import {createAssistantMemory} from './assistant-memory';
@@ -92,7 +93,7 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
       if(state.phase==='idle'){widget?.hide();return;}
       options.reveal();
       const active=options.widget();
-      if(active){const d=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());active.setBounds({x:Math.round(d.bounds.x+(d.bounds.width-440)/2),y:d.workArea.y,width:440,height:state.reply||state.phase==='error'?190:100});}
+      if(active){const d=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());active.setBounds(notchBounds(d,!!state.reply||state.phase==='error'));}
       if(state.phase==='done')idleTimer=setTimeout(()=>{if(session.status().id===state.id)session.cancel();},1600);
     }
   const session=createDesktopSession({
@@ -150,7 +151,7 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
       case 'cancel':await cancel();return status();
       case 'live-connect':if(event.sender!==options.widget()?.webContents||typeof request.id!=='string'||(request.sdp!==undefined&&(typeof request.sdp!=='string'||request.sdp.length>65536)))throw Error('Invalid live connection');return live.join(request.id,request.sdp as string|undefined);
       case 'live-ready':if(event.sender===options.widget()?.webContents&&typeof request.id==='string')live.ready(request.id);return status();
-      case 'live-error':if(event.sender===options.widget()?.webContents&&typeof request.id==='string')live.error(request.id);return status();
+      case 'live-error':if(event.sender===options.widget()?.webContents&&typeof request.id==='string')live.error(request.id,typeof request.code==='string'?request.code:undefined);return status();
       case 'live-audio':if(event.sender!==options.widget()?.webContents||typeof request.id!=='string'||!(request.bytes instanceof Uint8Array)||request.bytes.byteLength>16000)throw Error('Invalid live audio');live.audio(request.id,request.bytes);return;
       case 'ready':if(typeof request.id==='string')session.ready(request.id);return session.status();
       case 'error':if(typeof request.id==='string'&&typeof request.message==='string')session.fail(request.id,request.message);return session.status();
@@ -176,5 +177,5 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
   let privacyWasAllowed=options.allowed();
   const background=setInterval(()=>{const allowed=options.allowed();if(!allowed){wake.stop();if(privacyWasAllowed){coding.clear();knowledge.clear();tasks.clear();}}else{void coding.refresh().catch(()=>{});if(!wake.status().calibrating)wake.listen(!live.active()&&['idle','done','error'].includes(session.status().phase));}privacyWasAllowed=allowed;},2000);background.unref();
   if(options.allowed())void coding.refresh().catch(()=>{});
-  return {toggle,cancel,dispose(){clearInterval(background);wake.dispose();tasks.dispose();coding.dispose();app.removeListener('browser-window-focus',refreshPermissions);shared?.dispose();highlight.dispose();cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
+  return {toggle,cancel,dispose(){if(idleTimer)clearTimeout(idleTimer);clearInterval(background);wake.dispose();tasks.dispose();coding.dispose();app.removeListener('browser-window-focus',refreshPermissions);shared?.dispose();highlight.dispose();cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
 }
