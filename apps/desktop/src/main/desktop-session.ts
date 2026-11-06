@@ -33,9 +33,16 @@ export function createDesktopSession(options: {
     if (!options.allowed()) {fail('Leave private or muted mode to start.'); return;}
     controller = new AbortController(); config = {...options.config()}; smart = options.smart();
     const signal = controller.signal;
-    target = options.captureTarget().catch(() => null);
+    target = Promise.resolve().then(() => options.captureTarget()).catch(() => null);
     context = Promise.resolve({text:''});
-    update({id:randomUUID(), mode, phase:'starting', recording:true, message:'Starting microphone…'});
+    const id = randomUUID();
+    update({id, mode, phase:'starting', recording:false, message:'Checking the focused text field…'});
+    void target.then(captured => {
+      if (state.id !== id || state.phase !== 'starting' || signal.aborted) return;
+      if (!options.allowed()) {fail('Leave private or muted mode to start.'); return;}
+      if (!captured) {fail('Click an editable text field before dictating, then try again.'); return;}
+      update({recording:true, message:'Starting microphone…'});
+    });
   }
   async function audio(id: string, bytes: Uint8Array) {
     if (id !== state.id || busy || !['starting','listening','processing','confirming'].includes(state.phase)) return;
@@ -43,6 +50,8 @@ export function createDesktopSession(options: {
     update({recording:false, phase:'processing', message:'Transcribing…'});
     try {
       valid(id, signal);
+      const captured = await target; valid(id, signal);
+      if (!captured) throw Error('Click an editable text field before dictating, then try again.');
       context = smart ? options.context(signal).catch(() => ({text:''})) : Promise.resolve({text:''});
       const text = await options.transcribe(config, bytes, signal); valid(id, signal);
       if (!text) throw Error('Nothing heard. Please try again.');
@@ -52,7 +61,6 @@ export function createDesktopSession(options: {
           try {result = await options.complete(config, {text, context:await context, mode:'dictation'}, signal);} catch {valid(id, signal); result = text;}
           valid(id, signal);
         }
-        const captured = await target; valid(id, signal);
         await options.remember({id:randomUUID(), at:new Date().toISOString(), mode:'dictation', text, result}); valid(id, signal);
         await options.insert(captured, result, signal); valid(id, signal);
         update({phase:'done', message:'Inserted', reply:result});

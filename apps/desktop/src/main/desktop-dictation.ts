@@ -4,7 +4,7 @@ import { desktopObserveDiagnostics } from './desktop-observe';
 import { createDictationGlossary } from '../../../../packages/capture/src/glossary/store';
 import type { DictationGlossaryEntry } from '../../../../packages/capture/src/glossary/model';
 
-export type DictationTarget = Readonly<{appBundleId: string; windowTitle: string; role: string; label: string; value: string; enabled: boolean; focused: boolean; fingerprint: string}>;
+export type DictationTarget = Readonly<{appBundleId: string; windowTitle: string; role: string; label: string; value: string; enabled: boolean; focused: boolean; fingerprint: string; selection?: Readonly<{location: number; length: number}>}>;
 export type DictationPreview = Readonly<{previewId: string; projectId: string; text: string; target: string; app: string; label: string; expiresAt: number; kind: 'insert' | 'undo'}>;
 export type DictationResult = Readonly<{ok: boolean; error?: string; preview?: DictationPreview; receipt?: unknown; prepared?: boolean; undoAvailable?: boolean; draftText?: string; entries?: readonly DictationGlossaryEntry[]}>;
 export type DesktopActionSession = { request(request: Record<string, unknown>): Promise<unknown>; close(): void };
@@ -16,14 +16,21 @@ function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('malformed_response');
   return value as Record<string, unknown>;
 }
-function targetState(value: unknown): DictationTarget {
+function targetState(value: unknown, selectionValue?: unknown): DictationTarget {
   const raw = record(value);
   for (const key of ['appBundleId', 'windowTitle', 'role', 'label', 'value', 'fingerprint']) {
     if (typeof raw[key] !== 'string' || Buffer.byteLength(raw[key] as string) > MAX_TEXT_BYTES) throw Error('unsupported_target');
   }
   if (!['AXTextField', 'AXTextArea'].includes(raw.role as string) || raw.secure === true || raw.subrole === 'AXSecureTextField') throw Error('unsupported_target');
   if (raw.enabled !== true || raw.focused !== true) throw Error('target_not_focused');
-  return raw as unknown as DictationTarget;
+  const candidate = selectionValue ?? raw.selection;
+  if (candidate !== undefined) {
+    const selection = record(candidate);
+    if (!Number.isSafeInteger(selection.location) || !Number.isSafeInteger(selection.length)
+      || (selection.location as number) < 0 || (selection.length as number) < 0
+      || (selection.location as number) + (selection.length as number) > (raw.value as string).length) throw Error('unsupported_target');
+  }
+  return (candidate === undefined ? raw : {...raw, selection: candidate}) as unknown as DictationTarget;
 }
 
 /** One bounded private stdio session; proposals and grants share the same native service instance. */
@@ -163,8 +170,11 @@ export function createDesktopDictationService(options: DictationOptions) {
           const focused = record(await live(session.request({operation: 'focused-target'})));
           const target = focused.targetRef;
           if (typeof target !== 'string' || !/^ax:\d+:(?:\d+(?:\.\d+)*)?$/.test(target)) throw Error('unsupported_target');
-          const state = targetState(focused.state);
-          const after = state.value + text;
+          const state = targetState(focused.state, focused.selection);
+          const selection = state.selection;
+          const after = selection
+            ? state.value.slice(0, selection.location) + text + state.value.slice(selection.location + selection.length)
+            : state.value + text;
           if (Buffer.byteLength(after) > MAX_TEXT_BYTES) throw Error('target_too_large');
           scoped(projectId);
           return {ok: true, preview: preview(projectId, target, state, text, 'insert', after)};
@@ -186,6 +196,15 @@ export function createDesktopDictationService(options: DictationOptions) {
         if (projectId !== item.view.projectId) throw Error('inactive_project');
         if (now() > item.view.expiresAt) throw Error('preview_expired');
         session = open(); activeSession = session;
+        if (item.state.selection !== undefined) {
+          const focused = record(await live(session.request({operation: 'focused-target'})));
+          const currentSelectionValue = focused.selection ?? record(focused.state).selection;
+          if (!currentSelectionValue || typeof currentSelectionValue !== 'object' || Array.isArray(currentSelectionValue)) throw Error('stale_target');
+          const currentSelection = currentSelectionValue as Record<string, unknown>;
+          if (focused.targetRef !== item.view.target
+            || currentSelection.location !== item.state.selection.location
+            || currentSelection.length !== item.state.selection.length) throw Error('stale_target');
+        }
         const state = targetState(await live(session.request({operation: 'inspect', targetRef: item.view.target})));
         if (state.fingerprint !== item.state.fingerprint || state.value !== item.before) throw Error('stale_target');
         const scope = {profileId: 'local', projectId, sensitivity: 'normal'};

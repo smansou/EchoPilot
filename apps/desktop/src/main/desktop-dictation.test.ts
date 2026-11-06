@@ -10,11 +10,12 @@ function harness() {
   let clock = 0;
   let active: string | null = 'p';
   const calls: Record<string, unknown>[] = [];
+  let selection: {location: number; length: number} | undefined;
   let step: Record<string, unknown> | null = null;
   let writes = 0;
   const openSession = (): DesktopActionSession => ({close() {}, async request(request) {
     calls.push(request);
-    if (request.operation === 'focused-target') return {targetRef: 'ax:123:0.1', state: {...state}};
+    if (request.operation === 'focused-target') return {targetRef: 'ax:123:0.1', state: {...state}, ...(selection ? {selection: {...selection}} : {})};
     if (request.operation === 'inspect') return {...state};
     if (request.operation === 'propose') { step = (request.steps as Record<string, unknown>[])[0]!; return {proposalId: 'proposal'}; }
     if (request.operation === 'authorize') return {authorized: true};
@@ -26,7 +27,7 @@ function harness() {
     throw Error('unsupported');
   }});
   const service = createDesktopDictationService({bundleDir: '/fixture', activeProjectId: () => active, now: () => clock, openSession});
-  return {service, calls, get writes() {return writes;}, get state() {return state;}, patch(patch: Partial<typeof state>) {state = {...state, ...patch};}, time(value: number) {clock = value;}, project(value: string | null) {active = value;}};
+  return {service, calls, get writes() {return writes;}, get state() {return state;}, patch(patch: Partial<typeof state>) {state = {...state, ...patch};}, select(value: {location: number; length: number}) {selection = value;}, time(value: number) {clock = value;}, project(value: string | null) {active = value;}};
 }
 
 test('transcript previews only, explicit confirmation edits once and explicit undo restores', async () => {
@@ -66,6 +67,23 @@ test('bounds transcripts and excludes secure/unsupported controls', async () => 
   assert.equal(h.calls.length, 0);
   h.patch({role: 'AXSecureTextField'});
   assert.equal((await h.service.handle({command: 'preview', projectId: 'p', text: 'hello'})).error, 'unsupported_target');
+  assert.equal(h.writes, 0);
+});
+test('preview replaces the focused selection instead of always appending at the end', async () => {
+  const h = harness();
+  h.select({location: 2, length: 3});
+  const preview = (await h.service.handle({command: 'preview', projectId: 'p', text: 'hello'})).preview!;
+  assert.equal(preview.text, 'hello');
+  await h.service.handle({command: 'confirm', projectId: 'p', previewId: preview.previewId, confirmed: true});
+  assert.equal(h.state.value, 'Behelloe ');
+});
+test('preview refuses to replace text if the cursor or selection moves before confirmation', async () => {
+  const h = harness();
+  h.select({location: 2, length: 3});
+  const preview = (await h.service.handle({command: 'preview', projectId: 'p', text: 'hello'})).preview!;
+  h.select({location: 7, length: 0});
+  const result = await h.service.handle({command: 'confirm', projectId: 'p', previewId: preview.previewId, confirmed: true});
+  assert.equal(result.error, 'stale_target');
   assert.equal(h.writes, 0);
 });
 test('undo refuses to overwrite later user edits and wrong-scope confirmations', async () => {
