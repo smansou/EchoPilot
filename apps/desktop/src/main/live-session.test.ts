@@ -37,3 +37,12 @@ test('updated evidence at the same source reference is supplied again',async()=>
  const f=fixture({knowledge:{catalog:async()=>[],retained:()=>[],search:()=>[{ref:'s:1',text}]},connect:async(_provider:any,options:LiveConnectOptions)=>{receive=options.onEvent;return {context:(packet:string)=>packets.push(packet),result(){},close:async()=>true};}});
  try{await f.start();receive(speech('Explain this decision'));await wait();text='Corrected decision';receive(speech(' again',20));await wait();assert.equal(packets.length,2);assert.match(packets[1]!,/Corrected decision/);}finally{await f.live.stop();}
 });
+test('long voice dialogue archives older chapters without dropping streamed words',async()=>{
+ const f=fixture();const words=Array.from({length:165},(_,i)=>`phrase${i} `);
+ await f.start();words.forEach((text,index)=>f.send(speech(text,index*20)));await f.live.stop();
+ assert.ok(f.history.length>=2);assert.equal(f.history.map(chapter=>chapter.text).join(''),words.join(''));
+});
+test('OpenAI background context can continue beyond the old cumulative reconnect threshold',async()=>{
+ let time=0;const f=fixture({now:()=>time,preferences:()=>({provider:'openai',voice:'marin',idleTimeoutSeconds:0})});
+ try{await f.start();const id=f.live.status().id;for(let i=0;i<30;i++){time+=60001;assert.equal(f.live.note('Relevant evidence '.repeat(500)),true);}assert.equal(f.live.status().id,id);assert.equal(f.closes(),0);}finally{await f.live.stop();}
+});
