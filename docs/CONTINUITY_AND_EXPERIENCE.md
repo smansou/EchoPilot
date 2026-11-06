@@ -44,3 +44,11 @@ Home exposes conversation, dictation, work/memory, recent conversations, and scr
 ## Validation
 
 TypeScript, renderer compilation, targeted tests and the full project suite are run during implementation. UI and overlay smoke tests use synthetic data / disposable profiles. Provider-backed voice quality, real microphone capture, TCC permissions, and hardware placement remain manual acceptance checks; no API key or real conversation content is needed by the synthetic tests.
+
+### Verified branch build (November 6, 2026)
+
+- Full project suite: 764 tests passed; TypeScript and production build passed.
+- Desktop UI smoke: Home, skipped introduction, custom provider keys, voice controls, refreshed permissions, gaze controls, and disconnected-display recovery passed.
+- Native companion smoke: hidden-until-speech caption, click-through edges, ordinary-window focus, stable target dedupe, setup cancellation, and destroyed-window recovery passed.
+- Visual explanation smoke: bounded steps, literal text rendering, focus preservation, and recovery passed.
+- `artifacts/local-app/EchoPilot-fluid-companion.app` passed local package qualification (signature, metadata, synthetic startup). Qualification uses disposable profiles; real provider/microphone/hardware acceptance remains the next step.
