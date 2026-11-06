@@ -417,6 +417,11 @@ function openDashboard() {
   dashboard = createWindow('dashboard');
   dashboard.on('closed', () => { dashboard = null; });
 }
+function openSettings(){
+  openDashboard();const window=dashboard;if(!window||window.isDestroyed())return;
+  const navigate=()=>{if(!window.isDestroyed())window.webContents.send('echo:navigate','general');};
+  if(window.webContents.isLoading())window.webContents.once('did-finish-load',navigate);else navigate();
+}
 async function bootstrapJournal() {
   // The checked-in event is useful for smoke tests, but must never masquerade as live activity.
   if (!smoke && process.env.ECHOPILOT_DEMO !== '1') return;
@@ -1250,7 +1255,7 @@ async function ready() {
       default: throw new TypeError('Unsupported privacy request');
     }
   });
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'EchoPilot',submenu:[{label:'Settings',click:openDashboard},{role:'quit'}]},{role:'editMenu'},{role:'windowMenu'}]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'EchoPilot',submenu:[{label:'Open EchoPilot',click:openDashboard},{label:'Settings…',accelerator:'CommandOrControl+,',click:openSettings},{role:'quit'}]},{role:'editMenu'},{role:'windowMenu'}]));
   widget = createWindow('widget');
   widget.on('closed', () => { widget = null; });
   tray = createShellTray({shell:requireShell(),status:widgetStatus,onShowWidget:openWidget,onOpenDashboard:openDashboard,onQuit:() => app.quit()});

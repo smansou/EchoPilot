@@ -11,6 +11,7 @@ export function CompanionHome({request, connected, navigate, onError}: {
   const [pending, setPending] = useState(false);
   const [paused, setPaused] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [intro, setIntro] = useState(() => {
     try { return localStorage.getItem('echo.introduction.v1') !== 'seen'; } catch { return true; }
   });
@@ -21,8 +22,8 @@ export function CompanionHome({request, connected, navigate, onError}: {
       if (flight) return;
       flight = true;
       try {
-        const [context, status] = await Promise.all([request({action:'assistant-state'}), request({action:'status'})]);
-        if (active) { setSessions(Array.isArray(context.sessions) ? context.sessions : []); setPaused(!!context.paused); setState(status); setLoaded(true); }
+        const [context, status, screen] = await Promise.all([request({action:'assistant-state'}), request({action:'status'}), request({action:'shared-screen-status'})]);
+        if (active) { setSessions(Array.isArray(context.sessions) ? context.sessions : []); setPaused(!!context.paused); setState(status); setSharing(!!screen?.enabled); setLoaded(true); }
       } catch { if (active) onError('Could not load your workspace. Try reopening Home.'); }
       finally { flight = false; }
     };
@@ -56,6 +57,7 @@ export function CompanionHome({request, connected, navigate, onError}: {
       <span className="hero-hint">{live?'You can interrupt naturally or say “hang up”.':'Your projects and conversations, within reach.'}</span>
     </section>
     <div className="home-actions"><button onClick={()=>void start('dictation')} disabled={pending}><span className="action-symbol">Aa</span><strong>Dictate anywhere</strong><small>Turn a thought into text</small><kbd>⌃ ⌥ Space</kbd></button><button onClick={()=>navigate('assistant')}><span className="action-symbol">↗</span><strong>Your work & memory</strong><small>Projects, tasks, and what matters</small><span className="action-arrow">→</span></button><button onClick={()=>navigate('history')}><span className="action-symbol">↶</span><strong>Recent conversations</strong><small>Return to something you said</small><span className="action-arrow">→</span></button></div>
+    <section className="home-screen-sharing"><div><strong>Talk about what’s on screen</strong><p>Share readable screen text during a conversation. Point with your cursor; no camera needed.</p></div><button className="toggle" role="switch" aria-label="Share screen context during voice" aria-checked={sharing} onClick={()=>void request({action:'shared-screen-toggle',enabled:!sharing}).then(result=>setSharing(result.enabled)).catch(error=>onError(error instanceof Error?error.message:'Could not change screen sharing.'))}><span/></button></section>
     <section className="home-sessions"><header><div><span className="eyebrow">WITH YOU ACROSS SESSIONS</span><h2>Already in your world</h2></div><button className="text-button" onClick={()=>navigate('assistant')}>View work & memory →</button></header>
       {!loaded?<p className="home-empty">Finding your local sessions…</p>:sessions.length===0?<p className="home-empty">{paused?'Context is paused while private or muted mode is on.':'Your saved Codex and Claude sessions will appear here. You can still start a conversation.'}</p>:<div className="session-grid">{sessions.slice(0,4).map(session=><article key={session.sessionId}><span className="session-agent">{session.agent} <span>· Saved session</span></span><h3>{session.title || session.project.split('/').pop() || 'Untitled session'}</h3><p>{session.project.split('/').pop()}</p><small>Ask about this project by name</small></article>)}</div>}
     </section>

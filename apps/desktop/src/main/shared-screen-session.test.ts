@@ -55,3 +55,8 @@ test('relative search never invents an anchor after gaze is lost',async()=>{
 test('concurrent reads share one observation and await its finished scene',async()=>{
   const h=harness();let finish!:(result:DesktopObserveResult)=>void;try{await h.ready();const before=h.observations();h.time(1700);h.gaze();h.defer(new Promise(resolve=>{finish=resolve;}));const first=h.session.read(),second=h.session.read();assert.equal(h.observations(),before+1);let settled=false;void second.then(()=>{settled=true;});await Promise.resolve();assert.equal(settled,false);const observed=h.evidence();finish({outcome:'observed',evidence:{...observed,nodes:[{...observed.nodes[0]!,label:'Finished observation'}]}});await Promise.all([first,second]);assert.equal(h.session.find({query:'Finished observation'}).targets.length,1);}finally{h.session.dispose();}
 });
+test('cursor pointing supplies screen context without a camera and clears when the voice ends',async()=>{
+ let clock=1000,active=true;const source=harness();const highlights:AttentionResult[]=[];
+ const session=createSharedScreenSession({allowed:()=>true,samples:()=>[],pointer:()=>active?{x:350,y:225}:null,observe:async()=>({outcome:'observed',evidence:{...source.evidence(),observedAtMs:clock}}),voiceSession:()=>active?'voice':null,send:()=>true,highlight:value=>highlights.push(value),now:()=>clock});
+ try{session.enable(true);await session.read();for(clock=1100;clock<=1500;clock+=100)session.tick();assert.equal(session.context()?.pointing,'cursor');assert.equal(session.target()?.label,'One paragraph');active=false;session.tick();assert.equal(session.target(),null);assert.equal(highlights.at(-1)?.target,null);}finally{session.dispose();source.session.dispose();}
+});

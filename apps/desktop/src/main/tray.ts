@@ -43,7 +43,7 @@ export function createShellTray(options: TrayOptions): ShellTray {
     const conflicts = shell.hotkeys.conflicts;
     const template: MenuItemConstructorOptions[] = [
       { label: 'Start dictation', ...shortcut('hold-dictation'), click: () => { shell.invoke('hold-dictation'); } },
-      { label: 'Live agent', ...shortcut('toggle-conversation'), click: () => { shell.invoke('toggle-conversation'); } },
+      { label: 'Start or end conversation', ...shortcut('toggle-conversation'), click: () => { shell.invoke('toggle-conversation'); } },
       { type: 'separator' },
       {
         label: muteControlLabel(status),
@@ -77,7 +77,7 @@ export function createShellTray(options: TrayOptions): ShellTray {
           })),
         },
       { type: 'separator' },
-      { label: 'Mission Control…', ...shortcut('open-mission-control'), click: options.onOpenDashboard },
+      { label: 'Open EchoPilot…', ...shortcut('open-mission-control'), click: options.onOpenDashboard },
       { type: 'separator' },
       { label: 'Quit EchoPilot', click: options.onQuit },
     ];
@@ -86,7 +86,7 @@ export function createShellTray(options: TrayOptions): ShellTray {
 
   function refresh(): void {
     const status = options.status();
-    tray.setToolTip(`EchoPilot · helper ${status.helper}`);
+    tray.setToolTip('EchoPilot');
     tray.setContextMenu(menuFor(status));
   }
 

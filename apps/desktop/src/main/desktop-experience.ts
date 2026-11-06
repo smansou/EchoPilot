@@ -1,3 +1,4 @@
+import {createVisualExplanation} from './visual-explanation';
 import {notchBounds} from './notch-layout';
 import {clipContext} from './live-context';
 import {encryptedState} from './encrypted-state';
@@ -16,7 +17,7 @@ import { connectGeminiLive } from './gemini-live';
 import { resolveProviderSetup } from '../shared/provider-setup';
 import { createSessionKnowledge } from './session-knowledge';
 import { createCodingContext } from './coding-context';
-import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, screen, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, desktopCapturer, ipcMain, safeStorage, screen, shell, systemPreferences } from 'electron';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { createCloudProvider, type CloudConfig, type ScreenContext } from './cloud-provider';
@@ -41,6 +42,7 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
   let shared:ReturnType<typeof createSharedScreenSession>|undefined;
   const gazePreferences=createGazePreferences({directory:app.getPath('userData'),encrypt:text=>safeStorage.isEncryptionAvailable()?safeStorage.encryptString(text):null,decrypt:bytes=>safeStorage.decryptString(bytes)});
   const highlight=createSharedHighlight();
+  const explanation=createVisualExplanation();
   let gazeActivation:ReturnType<typeof createGazeActivation>|undefined;
   const overlay=createGazeOverlay({showPointer:()=>gazePreferences.preferences().showPointer,loadProfile:id=>gazePreferences.profile(id),invalidateProfile:id=>gazePreferences.invalidate(id),saveProfile:(id,profile)=>{gazePreferences.store(id,profile);},onTracking:()=>{if(gazePreferences.preferences().outlines)shared?.enable(true);},onStop:()=>{gazeActivation?.stopped();shared?.enable(false);highlight.hide();},host:options.gaze,bundleDir:options.bundleDir,projectId:()=> 'desktop'});
   gazeActivation=createGazeActivation({preferences:gazePreferences.preferences,allowed:options.allowed,smartDictation:()=>options.setting('dictation.mode')!=='plain',running:overlay.running,display:()=>String(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id),start:overlay.start,stop:overlay.stop});
@@ -55,7 +57,7 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
   const refreshPermissions=()=>{void permissions();};app.on('browser-window-focus',refreshPermissions);
   async function observeContext(signal:AbortSignal) {
       const result:ScreenContext={text:''};
-      if(shared?.status().enabled&&options.gaze.sample()){await shared.read();signal.throwIfAborted();const context=shared.context();if(context){result.text=JSON.stringify(context);return result;}}
+      if(shared?.status().enabled){await shared.read();signal.throwIfAborted();const context=shared.context();if(context){result.text=JSON.stringify(context);return result;}}
       const samples=options.gaze.recentSamples().filter(s=>Date.now()-Date.parse(s.timestamp)<800&&s.quality>=.6);
       const observation=await observe.observe({projectId:'desktop',allowLocalOCR:true});signal.throwIfAborted();
       gazeTarget=null;
@@ -86,8 +88,9 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
       }
       return result;
     }
-  async function remember(item:SessionHistory) {history=[...history,item].slice(-200);if(safeStorage.isEncryptionAvailable()){mkdirSync(app.getPath('userData'),{recursive:true});const temporary=historyPath+'.tmp';writeFileSync(temporary,safeStorage.encryptString(JSON.stringify(history)),{mode:0o600});renameSync(temporary,historyPath);}}
+  async function remember(item:SessionHistory) {history=[...history,item].slice(-200);let bytes=0;history=history.reverse().filter(row=>{bytes+=Buffer.byteLength(JSON.stringify(row));return bytes<=4*1024*1024;}).reverse();if(safeStorage.isEncryptionAvailable()){mkdirSync(app.getPath('userData'),{recursive:true});const temporary=historyPath+'.tmp';writeFileSync(temporary,safeStorage.encryptString(JSON.stringify(history)),{mode:0o600});renameSync(temporary,historyPath);}}
   function changed(state:SessionState) {
+      highlight.speak(state.mode==='agent'?state.reply:'');
       if(['idle','done','error'].includes(state.phase))void gazeActivation?.ended(state.mode).catch(()=>{});
       const widget=options.widget();if(idleTimer)clearTimeout(idleTimer);idleTimer=null;
       if(state.phase==='idle'){widget?.hide();return;}
@@ -103,7 +106,7 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
     remember,changed,
   });
   const knowledge=createSessionKnowledge({library:coding,summarize:(question,evidence,signal)=>cloud.research(config(),question,evidence,signal)});
-  const backend=createAgentBackend({memory,tasks,endConversation:()=>{void live.stop();},sleep:()=>{void live.sleep();},config,cloud,knowledge,screen:observeContext,screenContext:()=>shared?.context(),findScreenTarget:(query,signal)=>{signal.throwIfAborted();return shared?.find(query);},focusScreenTarget:(id,signal)=>{signal.throwIfAborted();return shared?.choose(id);},prepare:async(action,signal)=>{
+  const backend=createAgentBackend({readClipboard:()=>clipboard.readText(),copyText:text=>clipboard.writeText(text),showExplanation:(value,signal)=>explanation.show(value,signal),hideExplanation:explanation.hide,history:()=>history,memory,tasks,endConversation:()=>{void live.stop();},sleep:()=>{void live.sleep();},config,cloud,knowledge,screen:observeContext,screenContext:()=>shared?.context(),findScreenTarget:(query,signal)=>{signal.throwIfAborted();return shared?.find(query);},focusScreenTarget:(id,signal)=>{signal.throwIfAborted();return shared?.choose(id);},prepare:async(action,signal)=>{
       if(action.target==='gaze'&&shared?.status().enabled){const target=shared.actionTarget(action.operation);if(!target)throw Error('Gaze is ambiguous or stale. Name the target so it can be highlighted.');
         if(['window','area','textblock','paragraph','sentence'].includes(target.type)&&action.operation!=='scroll')throw Error('This is a reading area, not a verified actionable control. Name a button or focused text field.');
         const control=await edit.atPoint(target.bounds.x+target.bounds.width/2,target.bounds.y+target.bounds.height/2,target.nativeRole??target.type);signal.throwIfAborted();
@@ -117,16 +120,16 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
     history:()=>history.filter(h=>h.mode==='agent'),remember,changed,media:event=>options.widget()?.webContents.send('echo:live-media',event),
   });
   // User approved bounded screen-text sharing with the configured live/reasoning providers.
-  shared=createSharedScreenSession({allowed:options.allowed,samples:()=>options.gaze.recentSamples(),observe:()=>observe.observe({projectId:'desktop',allowLocalOCR:true,interactive:true}),
+  shared=createSharedScreenSession({allowed:options.allowed,pointer:()=>live.active()&&!overlay.running()?screen.getCursorScreenPoint():null,samples:()=>options.gaze.recentSamples(),observe:()=>observe.observe({projectId:'desktop',allowLocalOCR:true,interactive:true}),
     voiceSession:()=>live.status().phase==='listening'?live.status().id:null,send:content=>live.note(content),highlight:attention=>{overlay.suppressMarker(attention.state==='stable'&&attention.target!==null);highlight.update(attention);}});
-  function status(){return live.status().phase!=='idle'?live.status():session.status();}
+  function status(){return {...(live.status().phase!=='idle'?live.status():session.status()),companionVisible:highlight.visible()};}
   let transition=Promise.resolve();let transitionVersion=0;
 
   function toggle(mode:SessionMode){wake.stop();const version=transitionVersion;transition=transition.catch(()=>{}).then(async()=>{if(version!==transitionVersion)return;
     if(mode==='agent'){session.cancel();if(live.active())await live.stop();else {await live.start();if(live.active())gazeActivation?.auto('agent');}}
     else {await live.stop();if(version===transitionVersion){const starting=['idle','done','error'].includes(session.status().phase);session.toggle('dictation');if(starting&&session.status().recording)gazeActivation?.auto('dictation');}}
   });return transition;}
-  async function cancel(){wake.stop();transitionVersion++;session.cancel();await live.stop();knowledge.clear();}
+  async function cancel(){explanation.hide();wake.stop();transitionVersion++;session.cancel();await live.stop();knowledge.clear();}
   ipcMain.handle('echo:desktop',async(event,input:unknown)=>{
     if(!input||typeof input!=='object')throw Error('Untrusted request');
     const request=input as Record<string,unknown>;
@@ -147,7 +150,13 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
       case 'wake-calibration-sample':if(!(request.bytes instanceof Uint8Array)||typeof request.positive!=='boolean')throw Error('Invalid calibration sample');return wake.sample(request.bytes,request.positive);
       case 'wake-calibration-finish':return wake.finishCalibration();
       case 'wake-calibration-cancel':wake.stop();return {ok:true};
-      case 'toggle':if(request.mode!=='dictation'&&request.mode!=='agent')throw Error('Invalid mode');await toggle(request.mode);return status();
+      case 'toggle':if(request.mode!=='dictation'&&request.mode!=='agent')throw Error('Invalid mode');
+        if(request.mode==='dictation'&&event.sender!==options.widget()?.webContents){
+          // Return focus to the user's app before the native helper captures its text field.
+          BrowserWindow.fromWebContents(event.sender)?.hide();app.hide();
+          await new Promise(resolve=>setTimeout(resolve,250));
+        }
+        await toggle(request.mode);return status();
       case 'cancel':await cancel();return status();
       case 'live-connect':if(event.sender!==options.widget()?.webContents||typeof request.id!=='string'||(request.sdp!==undefined&&(typeof request.sdp!=='string'||request.sdp.length>65536)))throw Error('Invalid live connection');return live.join(request.id,request.sdp as string|undefined);
       case 'live-ready':if(event.sender===options.widget()?.webContents&&typeof request.id==='string')live.ready(request.id);return status();
@@ -157,7 +166,7 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
       case 'error':if(typeof request.id==='string'&&typeof request.message==='string')session.fail(request.id,request.message);return session.status();
       case 'audio':if(event.sender!==options.widget()?.webContents||typeof request.id!=='string'||!(request.bytes instanceof Uint8Array)||request.bytes.byteLength>8_000_000)throw Error('Invalid audio');await session.audio(request.id,request.bytes);return session.status();
       case 'history':return history;
-      case 'clear-history':history=[];if(safeStorage.isEncryptionAvailable())writeFileSync(historyPath,safeStorage.encryptString('[]'),{mode:0o600});return [];
+      case 'clear-history':await cancel();history=[];if(safeStorage.isEncryptionAvailable())writeFileSync(historyPath,safeStorage.encryptString('[]'),{mode:0o600});return [];
       case 'shared-screen-status':return shared?.status();
       case 'shared-screen-toggle':if(typeof request.enabled!=='boolean')throw Error('Choose whether to highlight screen context.');return shared?.enable(request.enabled);
       case 'gaze-preferences':return {...gazePreferences.preferences(),running:overlay.running(),saved:typeof request.displayId==='string'?gazePreferences.profile(request.displayId)!==null:screen.getAllDisplays().some(d=>gazePreferences.profile(String(d.id))!==null)};
@@ -175,7 +184,7 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
     }
   });
   let privacyWasAllowed=options.allowed();
-  const background=setInterval(()=>{const allowed=options.allowed();if(!allowed){wake.stop();if(privacyWasAllowed){coding.clear();knowledge.clear();tasks.clear();}}else{void coding.refresh().catch(()=>{});if(!wake.status().calibrating)wake.listen(!live.active()&&['idle','done','error'].includes(session.status().phase));}privacyWasAllowed=allowed;},2000);background.unref();
+  const background=setInterval(()=>{const allowed=options.allowed();if(!allowed){wake.stop();if(privacyWasAllowed){explanation.hide();coding.clear();knowledge.clear();tasks.clear();}}else{void coding.refresh().catch(()=>{});if(!wake.status().calibrating)wake.listen(!live.active()&&['idle','done','error'].includes(session.status().phase));}privacyWasAllowed=allowed;},2000);background.unref();
   if(options.allowed())void coding.refresh().catch(()=>{});
-  return {toggle,cancel,dispose(){if(idleTimer)clearTimeout(idleTimer);clearInterval(background);wake.dispose();tasks.dispose();coding.dispose();app.removeListener('browser-window-focus',refreshPermissions);shared?.dispose();highlight.dispose();cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
+  return {toggle,cancel,dispose(){if(idleTimer)clearTimeout(idleTimer);clearInterval(background);wake.dispose();tasks.dispose();coding.dispose();app.removeListener('browser-window-focus',refreshPermissions);shared?.dispose();highlight.dispose();explanation.dispose();cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
 }

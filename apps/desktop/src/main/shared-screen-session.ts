@@ -4,7 +4,7 @@ import {screenRegions} from './screen-regions';
 import type {DesktopObserveResult} from './desktop-observe';
 import type {GazeSample} from '../../../../packages/gaze/src/index';
 export type SharedScreenStatus={enabled:boolean;phase:'off'|'waiting-gaze'|'reading'|'tracking'|'paused';message:string;target:{id:string;label:string;kind:string}|null;regions:number;updates:number;bytesInLastMinute:number;lastObservationMs:number;observationDurationMs:number};
-export function createSharedScreenSession(options:{allowed():boolean;samples():readonly GazeSample[];observe():Promise<DesktopObserveResult>;voiceSession():string|null;send(content:string):boolean;highlight(attention:AttentionResult):void;now?():number}){
+export function createSharedScreenSession(options:{allowed():boolean;samples():readonly GazeSample[];pointer?():{x:number;y:number}|null;observe():Promise<DesktopObserveResult>;voiceSession():string|null;send(content:string):boolean;highlight(attention:AttentionResult):void;now?():number}){
   const now=options.now??Date.now;
   const tracker=new SharedAttentionTracker();
   const feed=new SharedScreenContextFeed({intervalMs:1000,maxBytes:1200,bytesPerMinute:8000,maxRegions:4});
@@ -29,7 +29,8 @@ export function createSharedScreenSession(options:{allowed():boolean;samples():r
     const distribution:GazeDistribution={capturedAt:Date.parse(last.timestamp),mean,covariance,quality:last.quality};
     return tracker.update(distribution,time);
   }
-  function currentAttention(time:number){const value=attention(options.samples(),time);if(selected){const region=scene?.regions.find(r=>r.id===selected!.region.id&&r.revision===selected!.region.revision);if(!region||!valid(region)||time-selected.at>5000)selected=null;else return {...value,state:'stable' as const,target:region};}return value;}
+  function pointer(){const point=options.pointer?.();return point&&Number.isFinite(point.x)&&Number.isFinite(point.y)?point:null;}
+  function currentAttention(time:number){const point=pointer();const value=point?tracker.update({capturedAt:time,mean:point,covariance:{xx:16,xy:0,yy:16},quality:1},time):attention(options.samples(),time);if(selected){const region=scene?.regions.find(r=>r.id===selected!.region.id&&r.revision===selected!.region.revision);if(!region||!valid(region)||time-selected.at>5000)selected=null;else return {...value,state:'stable' as const,target:region};}return value;}
   async function readOnce(){if(flight||!enabled||!options.allowed())return;const token=generation,started=now();flight=true;lastPoll=started;status={...status,phase:'reading'};
     try{const result=await options.observe();if(token!==generation||!enabled||!options.allowed())return;
       status={...status,observationDurationMs:now()-started};
@@ -42,11 +43,11 @@ export function createSharedScreenSession(options:{allowed():boolean;samples():r
   }
   function read(){if(observation)return observation;const task=readOnce();observation=task;void task.finally(()=>{if(observation===task)observation=null;});return task;}
   function tick(){if(!enabled)return;const time=now();if(!options.allowed()){generation++;clear('Screen sharing paused while private or muted');status={...status,phase:'paused'};return;}
-    const samples=options.samples();if(!usable(samples.at(-1),time)){if(status.phase!=='waiting-gaze')invalidate('Gaze tracking unavailable');tracker.reset(time);options.highlight(empty(time));pinned=null;selected=null;status={...status,phase:'waiting-gaze',target:null,message:'Calibrate gaze or look back at the screen'};return;}
+    const samples=options.samples();if(!pointer()&&!usable(samples.at(-1),time)){if(status.phase!=='waiting-gaze')invalidate('Gaze tracking unavailable');tracker.reset(time);options.highlight(empty(time));pinned=null;selected=null;status={...status,phase:'waiting-gaze',target:null,message:options.pointer?'Start a conversation to point with your cursor':'Calibrate gaze or look back at the screen'};return;}
     if(status.phase==='waiting-gaze'&&scene&&time-scene.capturedAt<=1200)tracker.observe(scene.regions,scene.capturedAt,time);
     if(time-lastPoll>=700)void read();
     const result=currentAttention(time);options.highlight(result);
-    status={...status,phase:result.target?'tracking':scene?'reading':'paused',target:result.target?{id:result.target.id,label:result.target.label.slice(0,120),kind:result.target.type}:null,message:result.state==='stable'?'Following your gaze':result.state==='settling'?'Hold your gaze briefly to select this area':result.state==='ambiguous'?'Gaze overlaps several targets. Look toward the centre of an area.':scene?.regions.length?'No confident target here yet':status.message};
+    status={...status,phase:result.target?'tracking':scene?'reading':'paused',target:result.target?{id:result.target.id,label:result.target.label.slice(0,120),kind:result.target.type}:null,message:result.state==='stable'?(pointer()?'Following your pointer':'Following your gaze'):result.state==='settling'?'Hold your gaze briefly to select this area':result.state==='ambiguous'?'Gaze overlaps several targets. Look toward the centre of an area.':scene?.regions.length?'No confident target here yet':status.message};
     const sessionId=options.voiceSession();if(sessionId!==voiceId){voiceId=sessionId;feed.reset(true);}
     if(scene){feed.offer({app:scene.app,window:scene.window,revision:scene.revision,capturedAt:scene.capturedAt,attention:result},time);
       if(sessionId){const update=feed.flush(time);if(update){try{if(!options.send(JSON.stringify({sharedScreen:update})))feed.reset(true);else lastNotice='';}catch{feed.reset(true);}}}}
@@ -54,10 +55,10 @@ export function createSharedScreenSession(options:{allowed():boolean;samples():r
   }
   function enable(value:boolean){generation++;enabled=value;clear(value?'Waiting for gaze':'Screen sharing is off');status={...status,enabled:value,phase:value?'waiting-gaze':'off'};if(timer)clearInterval(timer);timer=value?setInterval(tick,50):null;timer?.unref();if(value)tick();return {...status};}
   function describe(region:ScreenRegion|null){return region?{id:region.id,revision:region.revision,kind:region.type,label:region.label.slice(0,260)}:null;}
-  function valid(region:ScreenRegion|null){return region&&scene&&now()-scene.capturedAt<=1200&&usable(options.samples().at(-1),now())&&scene.regions.some(r=>r.id===region.id&&r.revision===region.revision)?region:null;}
+  function valid(region:ScreenRegion|null){return region&&scene&&now()-scene.capturedAt<=1200&&(pointer()!==null||usable(options.samples().at(-1),now()))&&scene.regions.some(r=>r.id===region.id&&r.revision===region.revision)?region:null;}
   return {enable,status:()=>({...status}),tick,read,
     context(){if(!enabled||!options.allowed())return null;if(!scene||now()-scene.capturedAt<0||now()-scene.capturedAt>1200)return null;const fresh=currentAttention(now());feed.offer({app:scene.app,window:scene.window,revision:scene.revision,capturedAt:scene.capturedAt,attention:fresh},now());const current=packet();if(!current)return null;
-      return {screen:current,referent:pinned&&now()-pinned.at<10000?{at:pinned.at,ambiguous:pinned.ambiguous,target:pinned.ambiguous?null:describe(valid(pinned.target)),previous:describe(valid(pinned.previous)),alternatives:pinned.alternatives.filter(r=>valid(r)).slice(0,4).map(r=>({id:r.id,label:r.label.slice(0,180),kind:r.type}))}:null};},
+      return {pointing:pointer()?'cursor':'gaze',screen:current,referent:pinned&&now()-pinned.at<10000?{at:pinned.at,ambiguous:pinned.ambiguous,target:pinned.ambiguous?null:describe(valid(pinned.target)),previous:describe(valid(pinned.previous)),alternatives:pinned.alternatives.filter(r=>valid(r)).slice(0,4).map(r=>({id:r.id,label:r.label.slice(0,180),kind:r.type}))}:null};},
     pin(text:string){if(!enabled||!options.allowed())return;const reference=/\b(previous|before)\b/i.test(text)?'previous':/\b(no|not|other|instead)\b/i.test(text)?'correction':'this';const references=tracker.resolve(reference,now());const chosen=selected&&reference!=='previous'?valid(selected.region):null;pinned={at:now(),target:chosen??references.target,previous:chosen?pinned?.previous??references.previous:references.previous,alternatives:references.alternatives.slice(0,4),ambiguous:chosen?false:references.ambiguous};},
     actionTarget(operation:string){const target=this.target();if(!target)return null;if(operation!=='scroll')return target;let candidate:ScreenRegion|undefined=target;const seen=new Set<string>();while(candidate&&!seen.has(candidate.id)){seen.add(candidate.id);if(candidate.nativeRole==='AXScrollArea')return candidate;candidate=scene?.regions.find(r=>r.id===candidate!.parentId);}return null;},
     target(){if(!enabled||!options.allowed())return null;if(pinned&&now()-pinned.at<10000)return pinned.ambiguous?null:valid(pinned.target);const result=currentAttention(now());return result.state==='stable'?valid(result.target):null;},
