@@ -5,7 +5,7 @@ import type {LiveConnectOptions,LiveConnection} from './live-types';
 export function geminiLiveSetup(voice:string,context:string){return {setup:{
   model:`models/${LIVE_MODELS.gemini}`,
   generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:['Kore','Puck','Aoede'].includes(voice)?voice:'Kore'}}}},
-  systemInstruction:{parts:[{text:LIVE_INSTRUCTIONS+'\nUse delegate_task for backend assistance. '+clipContext(context,7600)}]},
+  systemInstruction:{parts:[{text:LIVE_INSTRUCTIONS.replace('Generate <|SpawnThinking|>', 'Call delegate_task')+'\nUse delegate_task for backend assistance. '+clipContext(context,7600)}]},
   inputAudioTranscription:{},outputAudioTranscription:{},contextWindowCompression:{triggerTokens:16000,slidingWindow:{targetTokens:8000}},
   tools:[{functionDeclarations:[{...DELEGATE_TOOL,behavior:'NON_BLOCKING'}]}],
 }};}

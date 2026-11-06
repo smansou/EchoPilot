@@ -20,3 +20,20 @@ test('silence disconnects live audio at the configured timeout and preserves his
 test('never-sleep preference and pending backend work prevent inactivity teardown',async()=>{let time=0;const f=fixture({now:()=>time,preferences:()=>({provider:'gemini',voice:'Kore',idleTimeoutSeconds:0})});try{await f.start();time=900000;await f.live.checkIdle();assert.equal(f.live.active(),true);}finally{await f.live.stop();}});
 test('explicit fragmented hangup works locally without backend latency; quoted and negative speech do not',async()=>{const f=fixture();try{await f.start();f.send(speech("Don't hang up",0));await new Promise(r=>setTimeout(r,750));assert.equal(f.live.active(),true);f.send({type:'transcript',speaker:'assistant',text:'Okay',startMs:1000,endMs:1100});f.send(speech("That's all, ",2000));f.send(speech('hang up',2020));await new Promise(r=>setTimeout(r,750));assert.equal(f.live.active(),false);assert.equal(f.calls.length,0);}finally{await f.live.stop();}});
 test('question-time evidence is prefetched locally once per source, without mandatory cloud research',async()=>{let pushes=0;let receive!:(event:LiveEvent)=>void;const f=fixture({knowledge:{catalog:async()=>[],retained:()=>[],changed:async()=>[],search:()=>[{ref:'s:L5',text:'Decision: SQLite handles offline search'}]} as any,connect:async(_provider:any,options:LiveConnectOptions)=>{receive=options.onEvent;return {context(){pushes++;},result(){},close:async()=>true};}});try{await f.start();receive(speech('Why did we choose SQLite?'));await wait();assert.equal(pushes,1);receive(speech(' And why does it work offline?',20));await wait();assert.equal(pushes,1);assert.equal(f.calls.length,0);}finally{await f.live.stop();}});
+test('named sessions hydrate deeper evidence quietly and discard results after a topic change',async()=>{
+ let finish!:(value:any)=>void;const packets:string[]=[];let queries=0;
+ const session={agent:'Codex',sessionId:'network',title:'Remote access via Tailscale',project:'/work/network',updatedAt:'v1'};
+ const f=fixture({knowledge:{peek:()=>[session],catalog:async()=>[session],retained:()=>[],search:()=>[],evidence:async()=>{queries++;return new Promise(resolve=>finish=resolve);}},connect:async(_provider:any,options:LiveConnectOptions)=>{(f as any).receive=options.onEvent;return {context:(text:string)=>packets.push(text),result(){},close:async()=>true};}});
+ try{
+  await f.start();(f as any).receive(speech('What did we decide about Tailscale?'));await wait();assert.equal(queries,1);
+  (f as any).receive({type:'transcript',speaker:'assistant',text:'',startMs:100,endMs:150});
+  (f as any).receive(speech('Now explain the audio settings',200));
+  finish({sources:[{ref:'network:1',text:'OLD TOPIC evidence'}],coverage:'Saved records'});await wait();
+  assert.ok(!packets.some(packet=>packet.includes('OLD TOPIC')));assert.equal(f.calls.length,0);
+ }finally{await f.live.stop();}
+});
+test('updated evidence at the same source reference is supplied again',async()=>{
+ let text='Original decision';const packets:string[]=[];let receive!:(event:LiveEvent)=>void;
+ const f=fixture({knowledge:{catalog:async()=>[],retained:()=>[],search:()=>[{ref:'s:1',text}]},connect:async(_provider:any,options:LiveConnectOptions)=>{receive=options.onEvent;return {context:(packet:string)=>packets.push(packet),result(){},close:async()=>true};}});
+ try{await f.start();receive(speech('Explain this decision'));await wait();text='Corrected decision';receive(speech(' again',20));await wait();assert.equal(packets.length,2);assert.match(packets[1]!,/Corrected decision/);}finally{await f.live.stop();}
+});

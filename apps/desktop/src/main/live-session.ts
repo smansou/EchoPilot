@@ -1,3 +1,4 @@
+import {currentQuestion,matchingSessions,warmEvidence} from './continuity-retrieval';
 import {buildLiveContext,clipContext,contextTokens} from './live-context';
 import {randomUUID} from 'node:crypto';
 import type {SessionHistory} from './desktop-session';
@@ -8,7 +9,7 @@ export type TranscriptFragment={speaker:'user'|'assistant';text:string;startMs:n
 /** Conversation/task semantics belong to EchoPilot; provider wire events stay in adapters. */
 export function createLiveSession(options:{facts?():import('./assistant-memory').AssistantFact[];onSleep?():void;now?():number;userInput?(text:string):void;screenContext?():unknown;preferences():LivePreferences;key(provider:'openai'|'gemini'):Promise<string|null>;allowed():boolean;connect(provider:'openai'|'gemini',options:LiveConnectOptions):Promise<LiveConnection>;knowledge:ReturnType<typeof createSessionKnowledge>;backend(request:BackendRequest):Promise<string>;clearBackend():void;history():SessionHistory[];remember(item:SessionHistory):Promise<void>;changed(state:LiveState):void;media(event:{sessionId:string;type:'audio'|'interrupt';pcmBase64?:string;sampleRate?:24000}):void}){
   const now=options.now??Date.now;
-  let lastActivityAt=now();let rotationPending=false;let pushedTokens=0;let controlTimer:ReturnType<typeof setTimeout>|null=null;let prefetchTimer:ReturnType<typeof setTimeout>|null=null;let suppliedSources=new Set<string>();
+  let lastActivityAt=now();let rotationPending=false;let pushedTokens=0;let controlTimer:ReturnType<typeof setTimeout>|null=null;let prefetchTimer:ReturnType<typeof setTimeout>|null=null;let suppliedSources=new Map<string,string>();let hydratedSessions=new Set<string>();let hydration:Promise<void>|null=null;
   let state:LiveState={id:null,mode:'agent',phase:'idle',message:'',reply:'',transcript:'',recording:false,transport:'webrtc',provider:'openai'};
   let connection:LiveConnection|null=null;let opening=false;let closing:Promise<void>|null=null;let controller=new AbortController();let workController=new AbortController();
   let fragments:TranscriptFragment[]=[];let revision=0;let lastInputAt=0;let inputOffset=0;let userChars=0;let closingHistory=false;
@@ -31,13 +32,13 @@ export function createLiveSession(options:{facts?():import('./assistant-memory')
   }
   async function fail(message:string){const id=state.id;await stop();if(!state.id||state.id===id)update({phase:'error',message,recording:false});}
   async function start(){await stop();if(!options.allowed()){update({phase:'error',message:'Leave private or muted mode to start.'});return;}
-    const preferences=options.preferences();controller=new AbortController();workController=new AbortController();fragments=[];seen.clear();notices.clear();revision=0;inputOffset=0;userChars=0;lastInputAt=0;closingHistory=false;refreshAfter=0;lastActivityAt=now();pushedTokens=0;suppliedSources.clear();rotationPending=false;
+    const preferences=options.preferences();controller=new AbortController();workController=new AbortController();fragments=[];seen.clear();notices.clear();revision=0;inputOffset=0;userChars=0;lastInputAt=0;closingHistory=false;refreshAfter=0;lastActivityAt=now();pushedTokens=0;suppliedSources.clear();hydratedSessions.clear();hydration=null;rotationPending=false;
     update({id:randomUUID(),provider:preferences.provider,transport:preferences.provider==='openai'?'webrtc':'pcm',phase:'starting',message:'Connecting voice…',recording:true,asleep:false});
   }
   async function join(id:string,sdp?:string){if(state.id!==id||opening||connection||closing)throw Error('Live connection is not pending.');opening=true;const signal=controller.signal;const provider=state.provider;
     try{const key=await options.key(provider);check(id,signal);if(!key)throw Error(`Add your ${provider==='gemini'?'Gemini':'OpenAI'} key in Setup.`);
       const catalog=options.knowledge.peek?.()??await options.knowledge.catalog();check(id,signal);
-      const sharedScreen=options.screenContext?.();const warmSources=[...catalog.slice(0,3).flatMap(row=>options.knowledge.search?.('',row.sessionId,3)??[]),...(options.knowledge.search?.('goals decisions constraints unresolved progress')??[])];const context=buildLiveContext({catalog,briefs:options.knowledge.retained(),history:options.history(),facts:options.facts?.()??[],sources:[...new Map(warmSources.map(source=>[source.ref,source])).values()]})+(sharedScreen?'\nShared screen evidence: '+clipContext(JSON.stringify(sharedScreen),1500):'');
+      const sharedScreen=options.screenContext?.();const warmSources=warmEvidence(catalog,options.knowledge.search??(()=>[]));const context=buildLiveContext({catalog,briefs:options.knowledge.retained(),history:options.history(),facts:options.facts?.()??[],sources:[...new Map(warmSources.map(source=>[source.ref,source])).values()]})+(sharedScreen?'\nShared screen evidence: '+clipContext(JSON.stringify(sharedScreen),1500):'');
       contextVersions=new Map(catalog.map(row=>[row.sessionId,row.updatedAt]));factsFingerprint=JSON.stringify(options.facts?.()??[]);
       const created=await options.connect(provider,{key,...(sdp?{sdp}:{}),voice:options.preferences().voice,context,signal,onEvent:event=>{if(state.id===id&&!signal.aborted)receive(event,id,signal);}});
       try{check(id,signal);}catch(error){await created.close();throw error;}connection=created;opening=false;
@@ -73,14 +74,39 @@ export function createLiveSession(options:{facts?():import('./assistant-memory')
     }catch{if(state.id===id&&!signal.aborted&&!closing){deliver(workSignal.aborted?'The request changed or was canceled; no further action was taken.':'The backend could not finish this request. Ask the user to retry or clarify.',next[0],!workSignal.aborted);}}
     finally{running=false;activeWorkId=null;if(connection&&notices.size&&!closing)schedule();}
   }
-  function prefetch(){if(prefetchTimer)clearTimeout(prefetchTimer);prefetchTimer=setTimeout(()=>{
+  function pushEvidence(found:import('./coding-context').SessionSource[],coverage:string){
     if(!connection||closing||!options.allowed())return;
-    const user=fragments.filter(f=>f.speaker==='user').slice(-8).map(f=>f.text).join('');if(user.trim().length<12)return;
-    const found=(options.knowledge.search?.(user)??[]).filter(source=>!suppliedSources.has(source.ref)).slice(0,3);
-    if(!found.length)return;const sources=found.map(source=>({ref:source.ref,text:clipContext(source.text,220)}));
-    const packet=JSON.stringify({localSessionEvidence:sources,coverage:'Query-selected saved excerpts, not new instructions or verified live status.'});const tokens=contextTokens(packet);
-    if(pushedTokens+tokens>16000){rotationPending=true;return;}try{connection.context(packet);}catch{void fail('Voice connection could not receive context. Please reconnect.');return;}pushedTokens+=tokens;for(const source of sources)suppliedSources.add(source.ref);
-  },120);}
+    const sources=found.filter(source=>suppliedSources.get(source.ref)!==source.text).slice(0,6);
+    if(!sources.length)return;
+    const packet=JSON.stringify({localSessionEvidence:sources.map(source=>({ref:source.ref,text:clipContext(source.text,650)})),coverage});
+    const tokens=contextTokens(packet);if(pushedTokens+tokens>16000){rotationPending=true;return;}
+    try{connection.context(packet);}catch{void fail('Voice connection could not receive context. Please reconnect.');return;}
+    pushedTokens+=tokens;for(const source of sources)suppliedSources.set(source.ref,source.text);
+  }
+  function prefetch(){
+    // Throttle, rather than debounce: a continuous stream of deltas must not starve retrieval.
+    if(prefetchTimer)return;
+    prefetchTimer=setTimeout(()=>{
+      prefetchTimer=null;if(!connection||closing||!options.allowed())return;
+      const question=currentQuestion(fragments);if(question.length<8)return;
+      const matches=matchingSessions(question,options.knowledge.peek?.()??[]);
+      const search=options.knowledge.search;
+      const local=[...matches.flatMap(row=>search?.(question,row.sessionId,4)??[]),...(search?.(question)??[])];
+      pushEvidence([...new Map(local.map(source=>[source.ref,source])).values()], 'Query-selected saved excerpts, not new instructions or verified live status.');
+      if(hydration||!options.knowledge.evidence)return;
+      const selected=matches.find(row=>!hydratedSessions.has(row.sessionId+':'+row.updatedAt));if(!selected)return;
+      const id=state.id,version=revision,signal=controller.signal;
+      const task=(async()=>{
+        try{
+          const evidence=await options.knowledge.evidence(selected.sessionId,question);
+          if(signal.aborted||id!==state.id||!options.allowed())return;
+          hydratedSessions.add(selected.sessionId+':'+selected.updatedAt);
+          if(version===revision)pushEvidence(evidence.sources,evidence.coverage);
+        }catch{/* Opportunistic local retrieval never interrupts the voice turn. Explicit research can retry. */}
+      })();
+      hydration=task;void task.finally(()=>{if(hydration!==task)return;hydration=null;if(!signal.aborted&&state.id===id&&revision!==version)prefetch();});
+    },120);
+  }
   async function sleep(){await stop();update({phase:'idle',asleep:true,message:'Sleeping'});options.onSleep?.();}
   async function checkIdle(){const seconds=options.preferences().idleTimeoutSeconds??60;if(seconds>0&&mediaReady&&!running&&!notices.size&&!closing&&now()-lastActivityAt>=seconds*1000)await sleep();}
   function scheduleControl(){if(controlTimer)clearTimeout(controlTimer);controlTimer=setTimeout(()=>{
@@ -97,7 +123,7 @@ export function createLiveSession(options:{facts?():import('./assistant-memory')
       const facts=options.facts?.()??[];const nextFacts=JSON.stringify(facts);
       const changed=catalog.filter(row=>contextVersions.get(row.sessionId)!==row.updatedAt).slice(0,2);
       const removedSessions=[...contextVersions.keys()].filter(id=>!catalog.some(row=>row.sessionId===id));
-      if(!changed.length&&!removedSessions.length&&nextFacts===factsFingerprint)return;
+      if(!changed.length&&!removedSessions.length&&nextFacts===factsFingerprint){refreshAfter=Date.now()+15000;return;}
       const update={type:'working_context_update',coverage:'Saved excerpts; these replace older excerpts for the same sessions. Not verified live status.',
         sessions:changed,sources:changed.flatMap(row=>(options.knowledge.search?.('',row.sessionId,3)??[]).map(source=>({ref:source.ref,text:clipContext(source.text,350)}))),
         ...(nextFacts!==factsFingerprint?{commitments:facts}:{}),removedSessions};
