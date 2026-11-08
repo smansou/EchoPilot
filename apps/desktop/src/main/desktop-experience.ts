@@ -27,8 +27,8 @@ import { createDesktopObserveHost } from './desktop-observe';
 import { createGazeOverlay } from './gaze-overlay';
 import type { createGazeHost } from './gaze-host';
 import type { SecretStore } from '../../../../packages/security/src/types';
-export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<SecretStore,'get'>; setting(key:string):string; allowed():boolean; trusted(event:Electron.IpcMainInvokeEvent):boolean; widget():BrowserWindow|null; reveal():void; gaze:ReturnType<typeof createGazeHost>}) {
-  const crypto={available:()=>safeStorage.isEncryptionAvailable(),encrypt:(text:string)=>safeStorage.encryptString(text),decrypt:(value:Buffer)=>safeStorage.decryptString(value)};
+export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:string; secrets:Pick<SecretStore,'get'>; setting(key:string):string; allowed():boolean; trusted(event:Electron.IpcMainInvokeEvent):boolean; widget():BrowserWindow|null; reveal():void; gaze:ReturnType<typeof createGazeHost>}) {
+  const crypto={available:()=>!options.ephemeral&&safeStorage.isEncryptionAvailable(),encrypt:(text:string)=>safeStorage.encryptString(text),decrypt:(value:Buffer)=>safeStorage.decryptString(value)};
   const indexState=encryptedState(app.getPath('userData'),'assistant-index',crypto);
   const memoryState=encryptedState(app.getPath('userData'),'assistant-memory',crypto);
   const wakeState=encryptedState(app.getPath('userData'),'voice-preferences',crypto);
@@ -88,7 +88,7 @@ export function createDesktopExperience(options:{bundleDir:string; secrets:Pick<
       }
       return result;
     }
-  async function remember(item:SessionHistory) {history=[...history,item].slice(-200);let bytes=0;history=history.reverse().filter(row=>{bytes+=Buffer.byteLength(JSON.stringify(row));return bytes<=4*1024*1024;}).reverse();if(safeStorage.isEncryptionAvailable()){mkdirSync(app.getPath('userData'),{recursive:true});const temporary=historyPath+'.tmp';writeFileSync(temporary,safeStorage.encryptString(JSON.stringify(history)),{mode:0o600});renameSync(temporary,historyPath);}}
+  async function remember(item:SessionHistory) {history=[...history,item].slice(-200);let bytes=0;history=history.reverse().filter(row=>{bytes+=Buffer.byteLength(JSON.stringify(row));return bytes<=4*1024*1024;}).reverse();if(crypto.available()){mkdirSync(app.getPath('userData'),{recursive:true});const temporary=historyPath+'.tmp';writeFileSync(temporary,safeStorage.encryptString(JSON.stringify(history)),{mode:0o600});renameSync(temporary,historyPath);}}
   function changed(state:SessionState) {
       highlight.speak(state.mode==='agent'?state.reply:'');
       if(['idle','done','error'].includes(state.phase))void gazeActivation?.ended(state.mode).catch(()=>{});

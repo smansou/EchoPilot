@@ -535,7 +535,7 @@ async function ready() {
     const arrangementGeneration = Number.parseInt(createHash('sha256').update(JSON.stringify(all.map(d => [d.id, d.bounds, d.scaleFactor]))).digest('hex').slice(0, 8), 16);
     return all.map(d => ({ displayId: String(d.id), label: d.internal ? 'Built-in display' : d.label || 'External display', internal: d.internal, originX: d.bounds.x, originY: d.bounds.y, width: d.bounds.width, height: d.bounds.height, scale: d.scaleFactor, arrangementGeneration }));
   } });
-  experience = createDesktopExperience({bundleDir:__dirname, gaze:gazeHost,
+  experience = createDesktopExperience({ephemeral:smoke,bundleDir:__dirname, gaze:gazeHost,
     secrets:{get:async provider => {getSecurityKernel();return createKeychainSecretStore(secretHelperBridge!).get(provider);}},
     setting:key => product?.settings().find(s=>s.key===key)?.value ?? '',
     allowed:()=>processPrivacy.capture()===null && !microphoneMuted && !coordinator.getState().muted,
