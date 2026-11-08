@@ -1,6 +1,7 @@
+import {anthropicRequest,anthropicResponse} from './anthropic-adapter';
 import type { SecretStore } from '../../../../packages/security/src/types';
 
-export type CloudConfig = { provider: 'openai' | 'openrouter' | 'gemini'; textModel: string; speechModel: string };
+export type CloudConfig = { provider: 'openai' | 'openrouter' | 'gemini' | 'anthropic'; textModel: string; speechModel: string; speechProvider?:'openai'|'gemini' };
 export type ScreenContext = { text: string; image?: string; gaze?: string };
 const BASES = { openai: 'https://api.openai.com/v1', openrouter: 'https://openrouter.ai/api/v1', gemini:'https://generativelanguage.googleapis.com/v1beta/openai' };
 export function createCloudProvider(options: { secrets: Pick<SecretStore, 'get'>; fetcher?: typeof fetch }) {
@@ -9,6 +10,10 @@ export function createCloudProvider(options: { secrets: Pick<SecretStore, 'get'>
     const key = await options.secrets.get(config.provider);
     if (!key) throw Error(`Add your ${config.provider === 'openrouter' ? 'OpenRouter' : config.provider === 'gemini' ? 'Gemini' : 'OpenAI'} key in Settings.`);
     signal.throwIfAborted();
+    if(config.provider==='anthropic'){
+      const response=await request('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'x-api-key':key,'anthropic-version':'2023-06-01','Content-Type':'application/json'},body:JSON.stringify(anthropicRequest(JSON.parse(String(body)))),signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])});
+      if(!response.ok)throw Error(response.status===401?'Anthropic rejected this key. Check Connections.':`Claude request failed (${response.status}).`);const result=await response.json();signal.throwIfAborted();return anthropicResponse(result);
+    }
     const response = await request(`${BASES[config.provider]}${path}`, { method: 'POST', headers: { Authorization:`Bearer ${key}`, ...(json ? { 'Content-Type': 'application/json' } : {}) }, body, signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]) });
     if (!response.ok) throw Error(response.status === 401 ? 'Your API key was rejected. Check Settings.' : response.status === 429 ? 'Provider limit reached. Try again shortly.' : `Provider request failed (${response.status}).`);
     const data = await response.json() as Record<string, any>;
@@ -35,6 +40,7 @@ export function createCloudProvider(options: { secrets: Pick<SecretStore, 'get'>
       return data.choices[0].message.content;
     },
     async transcribe(config: CloudConfig, audio: Uint8Array, signal: AbortSignal): Promise<string> {
+      if(config.provider==='anthropic'){const provider=config.speechProvider||'openai';config={...config,provider,speechModel:provider==='gemini'?'gemini-3.5-flash-lite':'gpt-4o-mini-transcribe'};}
       if (audio.byteLength < 100 || audio.byteLength > 8_000_000) throw Error('Recording is empty or too long. Please try again.');
       if(config.provider==='gemini'){
         const key=await options.secrets.get('gemini');if(!key)throw Error('Add your Gemini key in Settings.');signal.throwIfAborted();

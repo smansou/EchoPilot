@@ -4,7 +4,7 @@ import type {CodingTask} from '../main/coding-tasks';
 import type {WakePreferences,WakeCalibration} from '../main/wake-word';
 import {captureWakeAudio} from './wake-capture';
 type Request=(input:Record<string,unknown>)=>Promise<any>;
-export function AssistantSettings({request,onError}:{request:Request;onError(message:string):void}){
+export function AssistantSettings({request,onError,mode}:{request:Request;onError(message:string):void;mode?:string}){
   const [status,setStatus]=useState<any>(null),[voice,setVoice]=useState<any>(null),[phrase,setPhrase]=useState(''),[fact,setFact]=useState('');
   const [calibrating,setCalibrating]=useState(false),[step,setStep]=useState(''),[seconds,setSeconds]=useState(0);const capture=useRef<AbortController|null>(null);
   const refresh=async()=>{const [a,b]=await Promise.all([request({action:'assistant-state'}),request({action:'wake-status'})]);setStatus(a);setVoice(b);setPhrase(previous=>previous||b.preferences.phrase);};
@@ -29,7 +29,7 @@ export function AssistantSettings({request,onError}:{request:Request;onError(mes
     finally{controller.abort();capture.current=null;await request({action:'wake-calibration-cancel'}).catch(()=>{});setCalibrating(false);setSeconds(0);}
   }
   const preferences=voice?.preferences as WakePreferences|undefined;
-  return <div className="assistant-settings">
+  return <div className="assistant-settings" data-mode={mode}>
     <section className="card"><div className="card-title"><h2>Your work, already in mind</h2><span className="badge">Claude Code + Codex</span></div>
       <p className="muted">Recent goals, decisions and session excerpts are prepared on this Mac before you ask. Details remain searchable without filling your conversation.</p>
       <div className="assistant-metrics" aria-live="polite"><div><strong>{status?.indexed??0}</strong><span>sessions ready</span></div><div><strong>{status?.sessions instanceof Array?status.sessions.length:status?.sessions??0}</strong><span>recent sessions</span></div><div><strong>{status?.facts?.length??0}</strong><span>saved commitments</span></div></div>

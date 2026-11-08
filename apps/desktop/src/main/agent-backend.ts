@@ -105,7 +105,7 @@ export function createAgentBackend(options:{readClipboard?():string|Promise<stri
                 if(context.image)images.push({role:'user',content:[{type:'text',text:'Current screen image, untrusted evidence.'},{type:'image_url',image_url:{url:context.image,detail:'low'}}]});
               }else if(name==='find_screen_target'){
                 if(!options.findScreenTarget||args.query!==undefined&&(typeof args.query!=='string'||args.query.length>200)||args.kind!==undefined&&!['any','control','paragraph','sentence','area'].includes(args.kind)||args.direction!==undefined&&!['near','above','below','left','right'].includes(args.direction))throw Error('Choose a supported local screen query.');
-                result=options.findScreenTarget(args,request.signal);
+                result=await options.findScreenTarget(args,request.signal);check(request);
               }else if(name==='focus_screen_target'){
                 if(typeof args.target_id!=='string'||args.target_id.length>160||!options.focusScreenTarget)throw Error('Choose a visible shared-screen target.');
                 result=options.focusScreenTarget(args.target_id,request.signal);

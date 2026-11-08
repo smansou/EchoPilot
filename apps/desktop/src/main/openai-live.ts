@@ -34,7 +34,7 @@ export async function connectOpenAILive(options:LiveConnectOptions & {fetcher?:t
           if(event.type==='error'){const id=event.error?.client_event_id;if(typeof id==='string'&&pending.has(id)){clearTimeout(pending.get(id));pending.delete(id);}if(!closing)options.onEvent({type:'failure',message:'GPT-Live rejected a session update.'});return;}
           if(closing)return;
           if((event.type==='session.input_transcript.delta'||event.type==='session.output_transcript.delta')&&typeof event.delta==='string'&&event.delta.length<=16000&&Number.isFinite(event.start_ms)&&Number.isFinite(event.end_ms)&&event.end_ms>=event.start_ms){options.onEvent({type:'transcript',speaker:event.type.includes('input_')?'user':'assistant',text:event.delta,startMs:event.start_ms,endMs:event.end_ms,...(typeof event.event_id==='string'?{id:event.event_id}:{})});}
-          else if(event.type==='session.delegation.created'&&event.delegation?.target==='client'&&typeof event.delegation.id==='string'&&Number.isFinite(event.offset_ms)){options.onEvent({type:'delegation',id:event.delegation.id,offsetMs:event.offset_ms});}
+          else if(event.type==='session.delegation.created'&&event.delegation?.target==='client'&&typeof event.delegation.id==='string'&&Number.isFinite(event.offset_ms)){send({type:'session.thinking.append',event_id:randomUUID(),delegation_id:event.delegation.id,content:''});options.onEvent({type:'delegation',id:event.delegation.id,offsetMs:event.offset_ms});}
         }catch{if(!closing)options.onEvent({type:'failure',message:'GPT-Live returned an invalid event.'});}
       });
     });
