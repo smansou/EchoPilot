@@ -51,6 +51,35 @@ public struct AXTargetAddress: Equatable, Sendable {
     }
 }
 
+/// Resolves a focused AX element by walking its reported parents back to the app root.
+/// This avoids scanning large Electron/browser accessibility trees to rediscover a node that AX
+/// already identified as focused. Child indices keep the serialized target ref re-resolvable by a
+/// later helper process.
+enum AXParentChainPath {
+    static func resolve<Element>(
+        root: Element,
+        target: Element,
+        maxDepth: Int,
+        equals: (Element, Element) -> Bool,
+        parent: (Element) -> Element?,
+        children: (Element) -> [Element]?
+    ) -> [Int]? {
+        guard maxDepth >= 0 else { return nil }
+        var current = target
+        var reversed: [Int] = []
+        for depth in 0...maxDepth {
+            if equals(current, root) { return Array(reversed.reversed()) }
+            guard depth < maxDepth,
+                  let parentElement = parent(current),
+                  let siblings = children(parentElement),
+                  let index = siblings.firstIndex(where: { equals($0, current) }) else { return nil }
+            reversed.append(index)
+            current = parentElement
+        }
+        return nil
+    }
+}
+
 /// The C02 operations the adapter can express through AX, plus the read that proves a target exists.
 public enum AXOperation: String, Codable, Sendable {
     case read

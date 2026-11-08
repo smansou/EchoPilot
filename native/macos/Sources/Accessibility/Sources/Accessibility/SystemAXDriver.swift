@@ -120,9 +120,19 @@ public final class SystemAXDriver: AXDriver {
             throw AXDriverError.unsupportedOperation("secure_field")
         }
         if editableOnly && !["AXTextField", "AXTextArea"].contains(stringAttribute(focused, kAXRoleAttribute) ?? "") { return nil }
+        let deadline = Date().addingTimeInterval(3)
+        if let path = AXParentChainPath.resolve(
+            root: application,
+            target: focused,
+            maxDepth: 64,
+            equals: { CFEqual($0, $1) },
+            parent: { self.elementAttribute($0, kAXParentAttribute) },
+            children: { Date() < deadline ? self.children(of: $0) : nil }
+        ), !path.isEmpty {
+            return AXTargetAddress(pid: app.processIdentifier, path: path).targetRef
+        }
         var pending: [(AXUIElement, [Int])] = [(application, [])]
         var visited = 0
-        let deadline = Date().addingTimeInterval(3)
         while let (element, path) = pending.popLast() {
             visited += 1
             guard visited <= 256, Date() < deadline else { return nil }

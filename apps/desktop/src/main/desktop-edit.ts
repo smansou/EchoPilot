@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { openDesktopActionSession } from './desktop-dictation';
+import { openDesktopActionSession, type DesktopActionSession } from './desktop-dictation';
 import type { AgentAction } from './desktop-session';
 type Target = {targetRef:string; state:{appBundleId:string; windowTitle:string; role:string; label:string; value:string; fingerprint:string; focused:boolean; enabled:boolean}; selection?:{location:number;length:number};bounds?:{x:number;y:number;width:number;height:number}};
-export function createDesktopEdit(bundleDir:string) {
-  async function read(operation:string, extra:Record<string,unknown> = {}):Promise<any> {const session = openDesktopActionSession(bundleDir); try {return await session.request({operation,...extra});} finally {session.close();}}
+export function createDesktopEdit(bundleDir:string, openSession:(bundleDir:string)=>DesktopActionSession = openDesktopActionSession) {
+  async function read(operation:string, extra:Record<string,unknown> = {}):Promise<any> {const session = openSession(bundleDir); try {return await session.request({operation,...extra});} finally {session.close();}}
   function target(value:unknown):Target {
     const item = value as Target;
     if (!item || !/^ax:\d+:(?:\d+(?:\.\d+)*)?$/.test(item.targetRef) || !item.state?.enabled || /secure|password/i.test(item.state.role) || typeof item.state.fingerprint !== 'string') throw Error('No supported control found.');
@@ -28,8 +28,18 @@ export function createDesktopEdit(bundleDir:string) {
       if (receipt.status !== 'completed') throw Error('The app did not confirm the action.');
     } finally {signal.removeEventListener('abort',abort); session.close();}
   }
+  async function capture():Promise<Target> {
+    const status = await read('status') as {permission?:string};
+    if (status.permission !== 'granted') throw Error('Allow EchoPilot access in System Settings → Privacy & Security → Accessibility, then try dictation again.');
+    try { return target(await read('focused-target')); }
+    catch (error) {
+      if (error instanceof Error && error.message === 'secure_field') throw Error('This field is secure. Choose a regular text field to dictate.');
+      if (error instanceof Error && ['native_denied','No supported control found.'].includes(error.message)) throw Error('Click inside an enabled, editable text field, then try dictation again.');
+      throw error;
+    }
+  }
   return {
-    capture:async () => target(await read('focused-target')),
+    capture,
     atPoint:async (x:number,y:number,preferredRole?:string) => target(await read('target-at-point',{x,y,...(preferredRole?{preferredRole}:{})})),
     async insert(value:unknown,text:string,signal:AbortSignal) {
       const item = target(value);

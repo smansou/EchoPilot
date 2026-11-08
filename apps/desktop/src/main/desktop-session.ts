@@ -16,6 +16,7 @@ export function createDesktopSession(options: {
   let state: SessionState = { id: null, mode: 'dictation', phase: 'idle', message: '', transcript: '', reply: '', recording: false };
   let controller = new AbortController();
   let target: Promise<unknown> = Promise.resolve(null);
+  let targetFailure: string | null = null;
   let context: Promise<ScreenContext> = Promise.resolve({text: ''});
   let config: CloudConfig;
   let busy = false;
@@ -33,14 +34,18 @@ export function createDesktopSession(options: {
     if (!options.allowed()) {fail('Leave private or muted mode to start.'); return;}
     controller = new AbortController(); config = {...options.config()}; smart = options.smart();
     const signal = controller.signal;
-    target = Promise.resolve().then(() => options.captureTarget()).catch(() => null);
+    targetFailure = null;
+    target = Promise.resolve().then(() => options.captureTarget()).catch(error => {
+      targetFailure = error instanceof Error ? error.message : null;
+      return null;
+    });
     context = Promise.resolve({text:''});
     const id = randomUUID();
     update({id, mode, phase:'starting', recording:false, message:'Checking the focused text field…'});
     void target.then(captured => {
       if (state.id !== id || state.phase !== 'starting' || signal.aborted) return;
       if (!options.allowed()) {fail('Leave private or muted mode to start.'); return;}
-      if (!captured) {fail('Click an editable text field before dictating, then try again.'); return;}
+      if (!captured) {fail(targetFailure || 'Click an editable text field before dictating, then try again.'); return;}
       update({recording:true, message:'Starting microphone…'});
     });
   }
@@ -51,7 +56,7 @@ export function createDesktopSession(options: {
     try {
       valid(id, signal);
       const captured = await target; valid(id, signal);
-      if (!captured) throw Error('Click an editable text field before dictating, then try again.');
+      if (!captured) throw Error(targetFailure || 'Click an editable text field before dictating, then try again.');
       context = smart ? options.context(signal).catch(() => ({text:''})) : Promise.resolve({text:''});
       const text = await options.transcribe(config, bytes, signal); valid(id, signal);
       if (!text) throw Error('Nothing heard. Please try again.');
