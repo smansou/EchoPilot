@@ -1,3 +1,4 @@
+import {configureEdgeWindow} from './native-window';
 import { createDesktopExperience } from './desktop-experience';
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol, session, Menu, screen, shell as externalShell, type IpcMainInvokeEvent } from 'electron';
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
@@ -380,7 +381,7 @@ function toggleConversation(): void {
 function openWidget() {
   // Survives Mission Control closure, Cmd-W, and Space changes: a live window is re-revealed
   // without activation, a closed/destroyed one is recreated.
-  if (widget && widgetWindowAction(widget) === 'reveal') { revealWidgetWindow(widget); return; }
+  if (widget && widgetWindowAction(widget) === 'reveal') { revealWidgetWindow(widget); configureEdgeWindow(widget,app.getAppPath()); return; }
   widget = createWindow('widget');
   widget.on('closed', () => { widget = null; });
 }
@@ -393,7 +394,7 @@ function createWindow(view: 'widget' | 'dashboard') {
   const window = new BrowserWindow({
     width:isWidget ? 440 : 1060, height:isWidget ? 100 : 760, minWidth:isWidget ? 440 : 800,
     minHeight:isWidget ? 80 : 600, show:false,
-    ...(isWidget ? {frame:false,transparent:true,hasShadow:false,resizable:false,enableLargerThanScreen:true} : {titleBarStyle:'hiddenInset' as const}),
+    ...(isWidget ? {frame:false,transparent:true,hasShadow:false,resizable:false,enableLargerThanScreen:true,type:'panel' as const,fullscreenable:false} : {titleBarStyle:'hiddenInset' as const}),
     // Foreground-safe widget options live in `window-policy.ts` so the focus/Space matrix is
     // covered by a deterministic test instead of only by the manual signed-app run.
     ...windowBehavior(view),
@@ -403,6 +404,7 @@ function createWindow(view: 'widget' | 'dashboard') {
   window.webContents.setWindowOpenHandler(() => ({action:'deny'}));
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('will-attach-webview', event => event.preventDefault());
+  if(isWidget){configureEdgeWindow(window,app.getAppPath());window.setIgnoreMouseEvents(true,{forward:true});}
   if(isWidget)window.webContents.on('render-process-gone',()=>experience?.cancel());
   if (isWidget) applyForegroundSafeWindowBehavior(window);
   window.once('ready-to-show', () => {
