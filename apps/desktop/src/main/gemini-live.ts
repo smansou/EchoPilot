@@ -32,8 +32,10 @@ export async function connectGeminiLive(options:LiveConnectOptions & {socket?:(k
           if(event.setupComplete){ready=true;clearTimeout(timer);resolve();return;}if(!ready)return;
           const content=event.serverContent;
           if(content?.interrupted)options.onEvent({type:'interrupt'});
-          for(const [field,speaker] of [['inputTranscription','user'],['outputTranscription','assistant']] as const){const text=content?.[field]?.text;if(typeof text==='string'&&text.length<=16000){const at=now()-started;options.onEvent({type:'transcript',speaker,text,startMs:at,endMs:at,id:`gemini-${++serial}`});}}
-          for(const part of content?.modelTurn?.parts??[]){const data=part.inlineData;if(typeof data?.data==='string'&&data.data.length<=192000&&/^audio\/pcm(?:;rate=24000)?$/.test(data.mimeType??''))options.onEvent({type:'audio',pcmBase64:data.data,sampleRate:24000});}
+          for(const [field,speaker] of [['inputTranscription','user'],['outputTranscription','assistant']] as const){if(content?.interrupted&&speaker==='assistant')continue;const text=content?.[field]?.text;if(typeof text==='string'&&text.length<=16000){const at=now()-started;options.onEvent({type:'transcript',speaker,text,startMs:at,endMs:at,id:`gemini-${++serial}`});}}
+          // Interruption invalidates the interrupted output, including any audio in
+          // the same envelope. Never refill the renderer queue just after clearing it.
+          for(const part of content?.interrupted?[]:content?.modelTurn?.parts??[]){const data=part.inlineData;if(typeof data?.data==='string'&&data.data.length<=192000&&/^audio\/pcm(?:;rate=24000)?$/.test(data.mimeType??''))options.onEvent({type:'audio',pcmBase64:data.data,sampleRate:24000});}
           for(const call of event.toolCall?.functionCalls??[]){if(call.name!=='delegate_task'||typeof call.id!=='string'||pending.has(call.id))continue;pending.add(call.id);options.onEvent({type:'delegation',id:call.id,offsetMs:now()-started,...(typeof call.args?.task==='string'?{task:call.args.task.slice(0,2000)}:{})});}
           for(const id of event.toolCallCancellation?.ids??[]){pending.delete(id);options.onEvent({type:'cancel-work',id});}
           if(event.goAway)options.onEvent({type:'failure',message:'Gemini is ending this connection. Reconnect to continue.'});

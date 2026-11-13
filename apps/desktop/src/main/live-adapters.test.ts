@@ -21,11 +21,22 @@ test('Gemini waits for setup, streams PCM, normalizes transcripts and interrupti
  const socket=new Socket();const events:LiveEvent[]=[];let resolved=false;const joining=connectGeminiLive({key:'fake',voice:'Kore',context:'evidence',signal:new AbortController().signal,onEvent:e=>events.push(e),socket:()=>socket as any});joining.then(()=>resolved=true);socket.open();await tick();assert.equal(resolved,false);const setup=socket.sent[0].setup;assert.equal(setup.model,'models/gemini-3.8-live');assert.equal(setup.tools[0].functionDeclarations[0].behavior,'NON_BLOCKING');assert.equal(setup.generationConfig.thinkingConfig,undefined);
  socket.message({setupComplete:{}});const live=await joining;live.audio!(new Uint8Array([1,0,2,0]));assert.equal(socket.sent.at(-1).realtimeInput.audio.mimeType,'audio/pcm;rate=16000');
  socket.message({serverContent:{inputTranscription:{text:'hello'},modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm;rate=24000',data:'AAAAAA=='}}]},interrupted:true}});
- assert.deepEqual(events.map(e=>e.type),['interrupt','transcript','audio']);
+ assert.deepEqual(events.map(e=>e.type),['interrupt','transcript']);
+ socket.message({serverContent:{modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm;rate=24000',data:'AAAAAA=='}}]}}});assert.equal(events.at(-1)?.type,'audio');
  socket.message({toolCall:{functionCalls:[{id:'a',name:'delegate_task',args:{task:'Find Atlas'}}]}});live.result('Found Atlas','a',true);assert.deepEqual(socket.sent.at(-1).toolResponse.functionResponses[0],{id:'a',name:'delegate_task',response:{result:'Found Atlas'},scheduling:'WHEN_IDLE'});
  socket.message({toolCall:{functionCalls:[{id:'quiet',name:'delegate_task',args:{task:'Background'}}]}});live.result('Quiet facts','quiet',false);assert.equal(socket.sent.at(-1).toolResponse.functionResponses[0].scheduling,'SILENT');
  socket.message({toolCall:{functionCalls:[{id:'b',name:'delegate_task',args:{task:'Observe'}}]}});socket.message({toolCallCancellation:{ids:['b']}});const count=socket.sent.length;live.result('stale','b',true);assert.equal(socket.sent.length,count);
  live.context('updated facts');assert.equal(socket.sent.at(-1).clientContent.turnComplete,false);await live.close();assert.equal(socket.readyState,3);assert.throws(()=>live.audio!(new Uint8Array(3)),/Invalid/);
 });
 test('Gemini configuration omits unsupported reasoning and proactivity toggles',()=>{const setup=geminiLiveSetup('missing','brief').setup;assert.equal(setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName,'Kore');assert.equal('thinkingConfig' in setup,false);assert.equal('proactivity' in setup,false);});
+test('Gemini interruption keeps the user correction and suppresses canceled assistant captions and audio',async()=>{
+ const socket=new Socket();const events:LiveEvent[]=[];const joining=connectGeminiLive({key:'fake',voice:'Kore',context:'',signal:new AbortController().signal,onEvent:event=>events.push(event),socket:()=>socket as any,now:()=>100});
+ socket.open();socket.message({setupComplete:{}});const live=await joining;
+ try{
+  socket.message({serverContent:{interrupted:true,inputTranscription:{text:'Wait, use the other project'},outputTranscription:{text:'Continuing the canceled answer'},modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm;rate=24000',data:'AAAAAA=='}}]}}});
+  assert.deepEqual(events,[{type:'interrupt'},{type:'transcript',speaker:'user',text:'Wait, use the other project',startMs:0,endMs:0,id:'gemini-1'}]);
+  socket.message({serverContent:{outputTranscription:{text:'The other project'},modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm;rate=24000',data:'AAAAAA=='}}]}}});
+  assert.deepEqual(events.slice(2),[{type:'transcript',speaker:'assistant',text:'The other project',startMs:0,endMs:0,id:'gemini-2'},{type:'audio',pcmBase64:'AAAAAA==',sampleRate:24000}]);
+ }finally{await live.close();}
+});
 test('already canceled connection never creates a provider socket or sends a request',async()=>{const controller=new AbortController();controller.abort();const options={key:'fake',voice:'Kore',sdp:'v=0',context:'',signal:controller.signal,onEvent(){}};await assert.rejects(connectGeminiLive({...options,socket(){throw Error('must not create');}}),{name:'AbortError'});await assert.rejects(connectOpenAILive({...options,fetcher:(async()=>{throw Error('must not send');}) as typeof fetch}),{name:'AbortError'});});

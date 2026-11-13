@@ -4,7 +4,7 @@ export async function startLivePCM(options:{openingAudio?():Uint8Array[];id:stri
   let stream:MediaStream|null=null;let input:AudioContext|null=null;let output:AudioContext|null=null;let capture:AudioWorkletNode|null=null;let unsubscribe=()=>{};let closed=false;let quiet=false;let pending=0;let connected=false;let next=0;
   let openingFrames:Uint8Array[]=[];let openingBytes=0;let flushing=false;
   const sources=new Set<AudioBufferSourceNode>();
-  function interrupt(){for(const source of sources){try{source.stop();}catch{}}sources.clear();next=0;}
+  function interrupt(){for(const source of sources){try{source.stop();}catch{}source.disconnect();}sources.clear();next=0;}
   function silence(){quiet=true;stream?.getAudioTracks().forEach(t=>t.enabled=false);interrupt();}
   function close(){if(closed)return;closed=true;for(const frame of openingFrames)frame.fill(0);openingFrames=[];silence();unsubscribe();capture?.disconnect();stream?.getTracks().forEach(t=>t.stop());void input?.close();void output?.close();options.signal.removeEventListener('abort',close);}
   const fail=()=>{if(!closed){close();options.onFailure();}};

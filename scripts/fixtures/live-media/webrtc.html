@@ -1,0 +1,20 @@
+<script type="module">
+import {startLiveWebRTC} from './live-webrtc.mjs';
+try {
+ const synthetic=new AudioContext({sampleRate:16000});const destination=synthetic.createMediaStreamDestination();const nativeTrack=destination.stream.getAudioTracks()[0];
+ navigator.mediaDevices.getUserMedia=async()=>destination.stream;
+ const OriginalPeer=RTCPeerConnection;let local;globalThis.RTCPeerConnection=class extends OriginalPeer{constructor(){super();local=this;}};
+ const remote=new OriginalPeer();let channel;remote.ondatachannel=event=>{channel=event.channel;channel.onopen=()=>channel.send('{"type":"session.started"}');};
+ let ready=false;const controller=new AbortController();let failed=false;
+ const handle=await startLiveWebRTC({id:'synthetic',signal:controller.signal,openingAudio:()=>[new Uint8Array(new Int16Array(16000*3).fill(8192).buffer)],request:async request=>{
+  if(request.action==='live-connect'){await remote.setRemoteDescription({type:'offer',sdp:request.sdp});await remote.setLocalDescription(await remote.createAnswer());await new Promise(resolve=>{if(remote.iceGatheringState==='complete')resolve();else remote.onicegatheringstatechange=()=>{if(remote.iceGatheringState==='complete')resolve();};});return {sdp:remote.localDescription.sdp};}
+  if(request.action==='live-ready')ready=true;return {};
+ },onFailure(){failed=true;}});
+ const waitFor=async predicate=>{const deadline=performance.now()+5000;while(!predicate()){if(performance.now()>deadline)throw Error('Timed out');await new Promise(resolve=>setTimeout(resolve,10));}};
+ await waitFor(()=>ready);const sender=local.getSenders()[0];if(sender.track===nativeTrack)throw Error('Expected startup replay track');
+ const start=performance.now();channel.send('{"type":"session.output_transcript.delta","delta":"Hello"}');await waitFor(()=>sender.track===nativeTrack);
+ if(failed)throw Error('Transport reported failure');
+ const switchedAfterMs=performance.now()-start;handle.quiet();if(nativeTrack.enabled)throw Error('quiet left microphone enabled');handle.close();remote.close();await synthetic.close();
+ console.log('VOICE_CHECK_RESULT '+JSON.stringify({ok:true,engine:navigator.userAgent,queuedStartupSeconds:3,nativeTrackSwitchedAfterMs:switchedAfterMs,microphoneState:nativeTrack.readyState}));
+}catch(error){console.log('VOICE_CHECK_RESULT '+JSON.stringify({ok:false,error:String(error),stack:error.stack}));}
+</script>

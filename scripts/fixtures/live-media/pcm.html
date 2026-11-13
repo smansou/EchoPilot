@@ -1,0 +1,31 @@
+<script type="module">
+import {startLivePCM} from './live-pcm.mjs';
+try {
+  // Synthetic input only: never request or record a physical microphone.
+  const synthetic=new AudioContext({sampleRate:16000});
+  const destination=synthetic.createMediaStreamDestination();
+  navigator.mediaDevices.getUserMedia=async()=>destination.stream;
+  const sources=[];
+  const create=AudioContext.prototype.createBufferSource;
+  AudioContext.prototype.createBufferSource=function(){
+    const source=create.call(this);const record={ended:false,start:null,at:null,disconnected:false};sources.push(record);
+    source.addEventListener('ended',()=>record.ended=true);
+    const start=source.start.bind(source);source.start=(at)=>{record.start=at;record.at=this.currentTime;start(at);};
+    const disconnect=source.disconnect.bind(source);source.disconnect=()=>{record.disconnected=true;disconnect();};
+    return source;
+  };
+  let receive;const controller=new AbortController();
+  const handle=await startLivePCM({id:'synthetic',signal:controller.signal,request:async()=>({}),subscribe:listener=>{receive=listener;return()=>{};},onFailure(){throw Error('PCM failed');}});
+  const pcm=btoa('\0'.repeat(48000));
+  for(let i=0;i<4;i++)receive({sessionId:'synthetic',type:'audio',pcmBase64:pcm});
+  if(sources.length!==4||sources[3].start-sources[0].start<2.9)throw Error('Did not schedule a multi-second queue');
+  receive({sessionId:'synthetic',type:'interrupt'});
+  if(sources.some(source=>!source.disconnected))throw Error('Interrupt left an output connected');
+  receive({sessionId:'synthetic',type:'audio',pcmBase64:btoa('\0'.repeat(4800))});
+  const replacement=sources[4];if(replacement.start-replacement.at>.02)throw Error('New turn retained stale output schedule');
+  await new Promise(resolve=>setTimeout(resolve,150));
+  if(sources.slice(0,4).some(source=>!source.ended))throw Error('An interrupted source is still active');
+  handle.close();await synthetic.close();
+  console.log('VOICE_CHECK_RESULT '+JSON.stringify({ok:true,engine:navigator.userAgent,interruptedQueuedSources:4,nextTurnDelaySeconds:replacement.start-replacement.at}));
+}catch(error){console.log('VOICE_CHECK_RESULT '+JSON.stringify({ok:false,error:String(error),stack:error.stack}));}
+</script>
