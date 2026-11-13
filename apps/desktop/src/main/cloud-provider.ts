@@ -1,12 +1,18 @@
+import {responsesRequest,readResponsesStream} from './openai-responses';
 import {anthropicRequest,anthropicResponse} from './anthropic-adapter';
 import type { SecretStore } from '../../../../packages/security/src/types';
 
-export type CloudConfig = { provider: 'openai' | 'openrouter' | 'gemini' | 'anthropic'; textModel: string; speechModel: string; speechProvider?:'openai'|'gemini' };
+export type CloudConfig = { provider: 'openai' | 'openrouter' | 'gemini' | 'anthropic' | 'chatgpt'; textModel: string; speechModel: string; speechProvider?:'openai'|'gemini' };
 export type ScreenContext = { text: string; image?: string; gaze?: string };
 const BASES = { openai: 'https://api.openai.com/v1', openrouter: 'https://openrouter.ai/api/v1', gemini:'https://generativelanguage.googleapis.com/v1beta/openai' };
-export function createCloudProvider(options: { secrets: Pick<SecretStore, 'get'>; fetcher?: typeof fetch }) {
+export function createCloudProvider(options: { secrets: Pick<SecretStore, 'get'>; fetcher?: typeof fetch; account?:{access():Promise<string>} }) {
   const request = options.fetcher ?? fetch;
   async function send(config: CloudConfig, path: string, body: BodyInit, signal: AbortSignal, json = true) {
+    if(config.provider==='chatgpt'||(config.provider==='openai'&&path==='/chat/completions')){
+      const key=config.provider==='chatgpt'?await options.account?.access():await options.secrets.get('openai');if(!key)throw Error('Connect your OpenAI account in Connections.');signal.throwIfAborted();
+      const payload=responsesRequest(JSON.parse(String(body)));if(!payload.model)throw Error('Choose an assistant model in Connections.');
+      const requestSignal=AbortSignal.any([signal,AbortSignal.timeout(90000)]);const response=await request('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(payload),redirect:'error',signal:requestSignal});return readResponsesStream(response,requestSignal);
+    }
     const key = await options.secrets.get(config.provider);
     if (!key) throw Error(`Add your ${config.provider === 'openrouter' ? 'OpenRouter' : config.provider === 'gemini' ? 'Gemini' : 'OpenAI'} key in Settings.`);
     signal.throwIfAborted();
@@ -40,7 +46,7 @@ export function createCloudProvider(options: { secrets: Pick<SecretStore, 'get'>
       return data.choices[0].message.content;
     },
     async transcribe(config: CloudConfig, audio: Uint8Array, signal: AbortSignal): Promise<string> {
-      if(config.provider==='anthropic'){const provider=config.speechProvider||'openai';config={...config,provider,speechModel:provider==='gemini'?'gemini-3.5-flash-lite':'gpt-4o-mini-transcribe'};}
+      if(config.provider==='anthropic'||config.provider==='chatgpt'){const provider=config.speechProvider||'openai';config={...config,provider,speechModel:provider==='gemini'?'gemini-3.5-flash-lite':'gpt-4o-mini-transcribe'};}
       if (audio.byteLength < 100 || audio.byteLength > 8_000_000) throw Error('Recording is empty or too long. Please try again.');
       if(config.provider==='gemini'){
         const key=await options.secrets.get('gemini');if(!key)throw Error('Add your Gemini key in Settings.');signal.throwIfAborted();
