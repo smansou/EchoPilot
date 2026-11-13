@@ -34,7 +34,7 @@ function targetState(value: unknown, selectionValue?: unknown): DictationTarget 
 }
 
 /** One bounded private stdio session; proposals and grants share the same native service instance. */
-export function openDesktopActionSession(bundleDir: string): DesktopActionSession {
+export function openDesktopActionSession(bundleDir: string, options:{lifetimeMs?:number} = {}): DesktopActionSession {
   const diagnostics = desktopObserveDiagnostics({bundleDir});
   if (!diagnostics.helperPath) throw Error('helper_missing');
   const child = spawn(diagnostics.helperPath, [], {stdio: ['pipe', 'pipe', 'pipe']});
@@ -49,7 +49,9 @@ export function openDesktopActionSession(bundleDir: string): DesktopActionSessio
     waiter = null;
     child.kill('SIGKILL');
   }
-  const deadline = setTimeout(close, 10_000);
+  const lifetime=options.lifetimeMs??10_000;
+  if(!Number.isFinite(lifetime)||lifetime<1||lifetime>120_000){child.kill('SIGKILL');throw Error('invalid_helper_lifetime');}
+  const deadline = setTimeout(close, lifetime);
   deadline.unref();
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', (chunk: string) => {

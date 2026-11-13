@@ -1,5 +1,4 @@
-import {createPermissionGuide} from './permission-guide';
-import {desktopObserveDiagnostics} from './desktop-observe';
+import {createDesktopPermissions,type MediaStatus} from './desktop-permissions';
 import {createChatGPTAccount} from './chatgpt-account';
 import {discoverModels} from './model-catalog';
 import {createVisualExplanation} from './visual-explanation';
@@ -45,11 +44,12 @@ export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:st
   const edit=createDesktopEdit(options.bundleDir);
   const observe=createDesktopObserveHost({bundleDir:options.bundleDir,timeoutMs:2500});
   let shared:ReturnType<typeof createSharedScreenSession>|undefined;
+  let screenContextWanted=options.setting('screen.contextEnabled')==='on';
   const gazePreferences=createGazePreferences({directory:app.getPath('userData'),encrypt:text=>safeStorage.isEncryptionAvailable()?safeStorage.encryptString(text):null,decrypt:bytes=>safeStorage.decryptString(bytes)});
   const highlight=createSharedHighlight();
   const explanation=createVisualExplanation();
   let gazeActivation:ReturnType<typeof createGazeActivation>|undefined;
-  const overlay=createGazeOverlay({showPointer:()=>gazePreferences.preferences().showPointer,loadProfile:id=>gazePreferences.profile(id),invalidateProfile:id=>gazePreferences.invalidate(id),saveProfile:(id,profile)=>{gazePreferences.store(id,profile);},onTracking:()=>{if(gazePreferences.preferences().outlines)shared?.enable(true);},onStop:()=>{gazeActivation?.stopped();shared?.enable(false);highlight.hide();},host:options.gaze,bundleDir:options.bundleDir,projectId:()=> 'desktop'});
+  const overlay=createGazeOverlay({showPointer:()=>gazePreferences.preferences().showPointer,loadProfile:id=>gazePreferences.profile(id),invalidateProfile:id=>gazePreferences.invalidate(id),saveProfile:(id,profile)=>{gazePreferences.store(id,profile);},onTracking:()=>{if(screenContextWanted&&gazePreferences.preferences().outlines)refreshPermissions();},onStop:()=>{gazeActivation?.stopped();shared?.enable(false);highlight.hide();},host:options.gaze,bundleDir:options.bundleDir,projectId:()=> 'desktop'});
   gazeActivation=createGazeActivation({preferences:gazePreferences.preferences,allowed:options.allowed,smartDictation:()=>options.setting('dictation.mode')!=='plain',running:overlay.running,display:()=>String(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id),start:overlay.start,stop:overlay.stop});
   const historyPath=join(app.getPath('userData'),'desktop-history.enc');
   let history:SessionHistory[]=[];
@@ -57,15 +57,25 @@ export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:st
   let gazeTarget:Awaited<ReturnType<typeof edit.atPoint>>|null=null;
   let idleTimer:ReturnType<typeof setTimeout>|null=null;
   const config=():CloudConfig=>{const setup=resolveProviderSetup(options.setting);return {provider:setup.reasoning,textModel:setup.textModel,speechModel:setup.speechModel,speechProvider:setup.voice};};
-  let permissionFlight:Promise<{microphone:string;camera:string;screen:string;screenApp:string;screenHelper:string;accessibility:boolean}>|null=null;
-  function permissions(){if(permissionFlight)return permissionFlight;const task=(async()=>{let accessibility=systemPreferences.isTrustedAccessibilityClient(false),screenPermission=systemPreferences.getMediaAccessStatus('screen');const screenApp=screenPermission;let screenHelper='unknown';let helper:ReturnType<typeof openDesktopActionSession>|null=null;try{helper=openDesktopActionSession(options.bundleDir);const result=await helper.request({operation:'status'}) as {permission?:string;screenRecording?:boolean};accessibility=result.permission==='granted';if(typeof result.screenRecording==='boolean'){screenHelper=result.screenRecording?'granted':'denied';screenPermission=screenApp==='granted'&&result.screenRecording?'granted':'denied';}}catch{}finally{helper?.close();}return {microphone:systemPreferences.getMediaAccessStatus('microphone'),camera:systemPreferences.getMediaAccessStatus('camera'),screen:screenPermission,screenApp,screenHelper,accessibility};})();permissionFlight=task;void task.finally(()=>{if(permissionFlight===task)permissionFlight=null;});return task;}
-  const permissionGuide=createPermissionGuide({bundleDir:options.bundleDir,desktopHelper:()=>desktopObserveDiagnostics({bundleDir:options.bundleDir}).helperPath,permissions});
-  const refreshPermissions=()=>{void permissions();};app.on('browser-window-focus',refreshPermissions);
+  let accessibilityRequest:ReturnType<typeof openDesktopActionSession>|null=null;
+  let accessibilityRequestTimer:ReturnType<typeof setTimeout>|null=null;
+  function closeAccessibilityRequest(){accessibilityRequest?.close();accessibilityRequest=null;if(accessibilityRequestTimer)clearTimeout(accessibilityRequestTimer);accessibilityRequestTimer=null;}
+  const permissionHost=createDesktopPermissions({
+    media:type=>systemPreferences.getMediaAccessStatus(type) as MediaStatus,
+    desktop:async prompt=>{const helper=openDesktopActionSession(options.bundleDir,prompt?{lifetimeMs:120000}:{});if(prompt){closeAccessibilityRequest();accessibilityRequest=helper;accessibilityRequestTimer=setTimeout(closeAccessibilityRequest,120000);}try{return await helper.request({operation:prompt?'request-accessibility':'status'}) as {permission?:string;microphone?:string;camera?:string};}catch(error){if(prompt)closeAccessibilityRequest();throw error;}finally{if(!prompt)helper.close();}},
+    askMedia:type=>systemPreferences.askForMediaAccess(type),
+    askScreen:async()=>{await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:0,height:0},fetchWindowIcons:false});},
+    openSettings:pane=>shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${pane}`),
+    changed:value=>{if(value.accessibility===true)closeAccessibilityRequest();for(const window of BrowserWindow.getAllWindows())if(window.webContents.getURL()==='echo://app/index.html?view=dashboard')window.webContents.send('echo:permissions-updated',value);},
+  });
+  const permissions=()=>permissionHost.read();
+  const refreshPermissions=()=>{void permissions().then(access=>{const enabled=screenContextWanted&&access.screen==='granted'&&access.accessibility===true;if(shared&&shared.status().enabled!==enabled)shared.enable(enabled);}).catch(()=>{});};app.on('browser-window-focus',refreshPermissions);app.on('activate',refreshPermissions);
+  async function enableScreenContext(enabled:boolean){screenContextWanted=enabled;if(!shared)return; if(!enabled)return shared.enable(false);let access=await permissions();if(access.screen!=='granted')access=await permissionHost.request('Screen Recording');if(access.screen!=='granted')return shared.enable(false);if(access.accessibility!==true)access=await permissionHost.request('Accessibility');return shared.enable(access.screen==='granted'&&access.accessibility===true);}
   async function observeContext(signal:AbortSignal) {
       const result:ScreenContext={text:''};
       if(shared?.status().enabled){await shared.read();signal.throwIfAborted();const context=shared.context();if(context){result.text=JSON.stringify(context);return result;}}
       const samples=options.gaze.recentSamples().filter(s=>Date.now()-Date.parse(s.timestamp)<800&&s.quality>=.6);
-      const observation=await observe.observe({projectId:'desktop',allowLocalOCR:true});signal.throwIfAborted();
+      const observation=await observe.observe({projectId:'desktop',allowLocalOCR:false});signal.throwIfAborted();
       gazeTarget=null;
       if(observation.outcome==='observed') {
         result.text=`App: ${observation.evidence.application.name}\nWindow: ${observation.evidence.window.title}\n`+observation.evidence.nodes.filter(n=>!n.redacted&&!/secure|password/i.test(n.role+' '+n.subrole)).slice(0,60).map(n=>[n.role,n.label,n.value].filter(Boolean).join(': ').slice(0,250)).join('\n');
@@ -113,7 +123,7 @@ export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:st
   });
   let selectedSession:string|null=null;
   const knowledge=createSessionKnowledge({library:coding,summarize:(question,evidence,signal)=>cloud.research(config(),question,evidence,signal)});
-  const backend=createAgentBackend({readClipboard:()=>clipboard.readText(),copyText:text=>clipboard.writeText(text),showExplanation:(value,signal)=>explanation.show(value,signal),hideExplanation:explanation.hide,history:()=>history,memory,tasks,endConversation:()=>{void live.stop();},sleep:()=>{void live.sleep();},config,cloud,knowledge,screen:async signal=>{if(shared&&!shared.status().enabled)shared.enable(true);return observeContext(signal);},screenContext:()=>shared?.context(),findScreenTarget:async(query,signal)=>{signal.throwIfAborted();if(shared&&!shared.status().enabled)shared.enable(true);await shared?.read();signal.throwIfAborted();return shared?.find(query);},focusScreenTarget:(id,signal)=>{signal.throwIfAborted();return shared?.choose(id);},prepare:async(action,signal)=>{
+  const backend=createAgentBackend({readClipboard:()=>clipboard.readText(),copyText:text=>clipboard.writeText(text),showExplanation:(value,signal)=>explanation.show(value,signal),hideExplanation:explanation.hide,history:()=>history,memory,tasks,endConversation:()=>{void live.stop();},sleep:()=>{void live.sleep();},config,cloud,knowledge,screen:async signal=>{if(!shared?.status().enabled)throw Error('Screen context is off. Turn it on in Settings → Permissions & privacy.');return observeContext(signal);},screenContext:()=>shared?.context(),findScreenTarget:async(query,signal)=>{signal.throwIfAborted();if(!shared?.status().enabled)throw Error('Screen context is off. Turn it on in Settings → Permissions & privacy.');await shared?.read();signal.throwIfAborted();return shared?.find(query);},focusScreenTarget:(id,signal)=>{signal.throwIfAborted();return shared?.choose(id);},prepare:async(action,signal)=>{
       if(action.target==='gaze'&&shared?.status().enabled){const target=shared.actionTarget(action.operation);if(!target)throw Error('Gaze is ambiguous or stale. Name the target so it can be highlighted.');
         if(['window','area','textblock','paragraph','sentence'].includes(target.type)&&action.operation!=='scroll')throw Error('This is a reading area, not a verified actionable control. Name a button or focused text field.');
         const control=await edit.atPoint(target.bounds.x+target.bounds.width/2,target.bounds.y+target.bounds.height/2,target.nativeRole??target.type);signal.throwIfAborted();
@@ -127,14 +137,14 @@ export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:st
     history:()=>history.filter(h=>h.mode==='agent'),remember,changed,media:event=>options.widget()?.webContents.send('echo:live-media',event),
   });
   // User approved bounded screen-text sharing with the configured live/reasoning providers.
-  shared=createSharedScreenSession({allowed:options.allowed,pointer:()=>live.active()&&!overlay.running()?screen.getCursorScreenPoint():null,samples:()=>options.gaze.recentSamples(),observe:()=>observe.observe({projectId:'desktop',allowLocalOCR:true,interactive:true}),
+  shared=createSharedScreenSession({allowed:options.allowed,pointer:()=>live.active()&&!overlay.running()?screen.getCursorScreenPoint():null,samples:()=>options.gaze.recentSamples(),observe:()=>observe.observe({projectId:'desktop',allowLocalOCR:false,interactive:false}),
     voiceSession:()=>live.status().phase==='listening'?live.status().id:null,send:content=>live.note(content),highlight:attention=>{overlay.suppressMarker(attention.state==='stable'&&attention.target!==null);highlight.update(attention);}});
   function status(){return {...(live.status().phase!=='idle'?live.status():session.status()),companionVisible:highlight.visible()};}
   let transition=Promise.resolve();let transitionVersion=0;
 
   function toggle(mode:SessionMode){wake.stop();const version=transitionVersion;transition=transition.catch(()=>{}).then(async()=>{if(version!==transitionVersion)return;
     if(mode==='agent'){session.cancel();if(live.active())await live.stop();else {await live.start();if(live.active())gazeActivation?.auto('agent');}}
-    else {await live.stop();if(version===transitionVersion){const starting=['idle','done','error'].includes(session.status().phase);session.toggle('dictation');if(starting&&session.status().recording)gazeActivation?.auto('dictation');}}
+    else {await live.stop();if(version===transitionVersion){const starting=['idle','done','error'].includes(session.status().phase);if(starting&&(await permissionHost.request('Accessibility')).accessibility!==true)return;if(version!==transitionVersion)return;session.toggle('dictation');if(starting&&session.status().recording)gazeActivation?.auto('dictation');}}
   });return transition;}
   async function cancel(){explanation.hide();wake.stop();transitionVersion++;session.cancel();await live.stop();knowledge.clear();}
   ipcMain.handle('echo:desktop',async(event,input:unknown)=>{
@@ -183,20 +193,21 @@ export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:st
       case 'audio':if(event.sender!==options.widget()?.webContents||typeof request.id!=='string'||!(request.bytes instanceof Uint8Array)||request.bytes.byteLength>8_000_000)throw Error('Invalid audio');await session.audio(request.id,request.bytes);return session.status();
       case 'history':return history;
       case 'clear-history':await cancel();history=[];if(safeStorage.isEncryptionAvailable())writeFileSync(historyPath,safeStorage.encryptString('[]'),{mode:0o600});return [];
-      case 'shared-screen-status':return shared?.status();
-      case 'shared-screen-toggle':if(typeof request.enabled!=='boolean')throw Error('Choose whether to highlight screen context.');return shared?.enable(request.enabled);
+      case 'shared-screen-status':return {...shared?.status(),requested:screenContextWanted};
+      case 'shared-screen-toggle':if(typeof request.enabled!=='boolean')throw Error('Choose whether to highlight screen context.');await enableScreenContext(request.enabled);return {...shared?.status(),requested:screenContextWanted};
       case 'gaze-preferences':return {...gazePreferences.preferences(),running:overlay.running(),saved:typeof request.displayId==='string'?gazePreferences.profile(request.displayId)!==null:screen.getAllDisplays().some(d=>gazePreferences.profile(String(d.id))!==null)};
-      case 'gaze-preferences-set':{const preferences=gazePreferences.update(request.preferences);if(!preferences.outlines)shared?.enable(false);else if(overlay.running())shared?.enable(true);return preferences;}
+      case 'gaze-preferences-set':{const preferences=gazePreferences.update(request.preferences);if(!preferences.outlines)shared?.enable(false);else if(overlay.running()&&screenContextWanted)refreshPermissions();return preferences;}
       case 'gaze-forget':await gazeActivation.stop();gazePreferences.forget();return {ok:true};
-      case 'gaze-start':if(typeof request.displayId!=='string')throw Error('Choose a display');await gazeActivation.manualStart(request.displayId,request.recalibrate===true);return {ok:true};
+      case 'gaze-start':if((await permissionHost.request('Camera')).camera!=='granted')throw Error('Camera access is required for gaze.');if(typeof request.displayId!=='string')throw Error('Choose a display');await gazeActivation.manualStart(request.displayId,request.recalibrate===true);return {ok:true};
       case 'gaze-stop':await gazeActivation.stop();return {ok:true};
-      case 'open-permission':return permissionGuide.open(request.permission);
+      case 'open-permission':return permissionHost.request(request.permission);
       case 'permissions':return permissions();
+      case 'restart-for-permissions':await cancel();app.relaunch();app.quit();return;
       default:throw Error('Unknown desktop command');
     }
   });
   let privacyWasAllowed=options.allowed();
-  const background=setInterval(()=>{const allowed=options.allowed();if(!allowed){wake.stop();if(privacyWasAllowed){explanation.hide();coding.clear();knowledge.clear();tasks.clear();}}else{void coding.refresh().catch(()=>{});if(!wake.status().calibrating)wake.listen(!live.active()&&['idle','done','error'].includes(session.status().phase));}privacyWasAllowed=allowed;},2000);background.unref();
+  const background=setInterval(()=>{if(BrowserWindow.getAllWindows().some(window=>window.isVisible()&&window.webContents.getURL()==='echo://app/index.html?view=dashboard'))refreshPermissions();const allowed=options.allowed();if(!allowed){wake.stop();if(privacyWasAllowed){explanation.hide();coding.clear();knowledge.clear();tasks.clear();}}else{void coding.refresh().catch(()=>{});if(!wake.status().calibrating)wake.listen(!live.active()&&['idle','done','error'].includes(session.status().phase));}privacyWasAllowed=allowed;},2000);background.unref();
   if(options.allowed())void coding.refresh().catch(()=>{});
-  return {toggle,cancel,dispose(){if(idleTimer)clearTimeout(idleTimer);clearInterval(background);permissionGuide.dispose();account.cancel();wake.dispose();tasks.dispose();coding.dispose();app.removeListener('browser-window-focus',refreshPermissions);shared?.dispose();highlight.dispose();explanation.dispose();cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
+  return {toggle,cancel,dispose(){if(idleTimer)clearTimeout(idleTimer);clearInterval(background);closeAccessibilityRequest();account.cancel();wake.dispose();tasks.dispose();coding.dispose();app.removeListener('browser-window-focus',refreshPermissions);app.removeListener('activate',refreshPermissions);shared?.dispose();highlight.dispose();explanation.dispose();cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
 }

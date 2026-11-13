@@ -1,22 +1,24 @@
-# Guided permission setup
+# Native permission flow
 
-The Permissions & privacy buttons open the specific macOS pane and a small floating Cleo guide. Accessibility offers the exact desktop helper used by dictation and app observation. Screen Recording offers both the app bundle (for screenshots) and desktop helper (for local text/OCR). Each item supports native file drag through Electron `webContents.startDrag`, with a Finder reveal fallback. Paths are resolved in the main process from the currently running app, never accepted from renderer input.
+Cleo uses platform requests directly, without its own permission modal or draggable-file guide. Microphone/camera use Electron's `systemPreferences.askForMediaAccess`. Screen access uses `desktopCapturer.getSources` (the native capture path) with thumbnails disabled during the permission request. Accessibility uses Apple's `AXIsProcessTrustedWithOptions` with the prompt option in the desktop process that performs AX work; that process stays alive while the person responds.
 
-The guide polls read-only permission status while open, shows success once macOS reports access, and updates the main Settings page. macOS still controls the permission switches, authentication, and any required app restart. Camera and microphone first use the standard system prompt when undecided, then show toggle instructions; those panes do not accept dragged apps.
+Permission requests happen on a user action: starting dictation, requesting an individual permission in Settings, enabling screen context, or starting gaze. Passive status checks never prompt. Screen context is in Settings → Permissions & privacy, persists its preference, and waits for required access before starting. Disabling it stops context. Backend screen tools no longer silently enable an off setting.
 
-The guide has its own restricted IPC. Only its exact main-frame URL and owned window can invoke guide actions or start a drag. It does not become a trusted general desktop/account renderer.
+The status path is independent of provider/Keychain startup, refreshes on focus/activation and while the app window is visible, and publishes changes to Settings. There is no Check Permissions button. Screen Recording uses the capturing app's status, not a conjunction with the unrelated helper's screen-capture status. Desktop helper failures appear as unavailable status, not as a false permission denial. Camera/microphone status comes only from the app that uses them. For denied media, Settings offers the native pane plus a restart recovery action, because Electron documents that manual changes can require a restart. Another process’s media grant is never presented as authorization for Cleo.
 
-## Credentials across updates
+macOS owns the dialogs and permission switches. Accessibility and previously denied media access can require Apple's Settings pane; camera/microphone changes can require restart. Cleo opens the appropriate native pane when the native request cannot be repeated. It does not claim to bypass those restrictions.
 
-The existing profile directory, Keychain service names, bundle ID, and encryption namespace are retained across the Cleo rename and updates. Provider keys remain in Keychain. Successful provider-key reads are cached only in the main process for one app launch, sharing concurrent reads. Replacement/deletion invalidates the cache; missing keys and failures are not cached. The cache is cleared at quit.
+Provider credentials retain the existing Keychain services/profile/encryption namespace and per-launch read cache. No signing trust, Keychain ACL, TCC database, or permission grant was modified automatically.
 
-This reduces repeated Keychain reads during voice tool requests. It does not bypass macOS authorization or guarantee that Keychain/TCC approval survives an ad-hoc rebuild or a changed installation path. This Mac currently has no valid code-signing identity available. Stable trusted signing and a consistent installed app path are needed for reliable approval continuity. No certificate trust, Keychain ACL, or macOS permission was changed automatically.
+## Sources used
 
-## Verification
+- Apple Human Interface Guidelines, Privacy: request when the feature needs access; use system authorization and clear purpose strings: https://developer.apple.com/design/human-interface-guidelines/privacy
+- Apple's ScreenCaptureKit sample: native screen request and restart considerations: https://developer.apple.com/documentation/screencapturekit/capturing-screen-content-in-macos
+- Electron's established media request/status APIs and denial/restart behavior: https://www.electronjs.org/docs/latest/api/system-preferences
+- Apple AX prompt API: https://developer.apple.com/documentation/applicationservices/1459186-axisprocesstrustedwithoptions
 
-- Typecheck and full project suite: 791 tests passed.
-- New tests cover exact permission target selection, non-draggable camera/microphone guidance, concurrent Keychain read sharing, replacement/deletion races, and failed-read recovery.
-- Electron UI fixture verifies the guide's draggable item and access controls, alongside existing application UI checks.
-- The actual drop into System Settings and permission grants need the user's local acceptance test; automated checks do not grant or bypass them.
+## Verification boundaries
 
-Official native drag API: https://www.electronjs.org/docs/latest/tutorial/native-file-drag-drop/
+Permission-controller tests cover native request routing, external/manual changes, status independence, denied access, restart-required media state, and helper failures. The Electron UI fixture checks that screen context is absent from Home, appears in Settings, has no custom guide/manual check step, and displays permission changes automatically. The rebuilt native helper’s status schema is checked through its real stdio protocol without requesting access. Native helper tests also run.
+
+These checks do not grant macOS permissions and are not proof of a completed live authorization flow on the user's current installation.

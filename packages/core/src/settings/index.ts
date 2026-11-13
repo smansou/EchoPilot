@@ -137,6 +137,7 @@ const SHIPPED_SCHEMA: readonly SettingsSchemaEntry[] = Object.freeze([
   Object.freeze({ key: 'live.openaiVoice', family: 'voice', label: 'OpenAI voice', default: 'marin', values: ['marin','willow'] }),
   Object.freeze({ key: 'live.geminiVoice', family: 'voice', label: 'Gemini voice', default: 'Kore', values: ['Kore','Puck','Aoede'] }),
   Object.freeze({ key: 'providers.openrouterModel', family: 'providers', label: 'OpenRouter model', default: 'openai/gpt-4.1-mini' }),
+  Object.freeze({ key: 'screen.contextEnabled', family: 'providers', label: 'Screen context during voice', default: 'off', values: ['off', 'on'] }),
   Object.freeze({ key: 'dictation.mode', family: 'dictation', label: 'Dictation', default: 'smart', values: ['smart', 'plain'] }),
   Object.freeze({
     key: 'verbosity.level',

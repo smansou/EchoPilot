@@ -1,6 +1,7 @@
 import DesktopAX
 import Foundation
 import CoreGraphics
+import ApplicationServices
 
 // `echopilot-desktop` is the private stdio helper the Electron main process spawns for a granted
 // desktop action (C02). One JSON request per line in, one JSON response per line out; it listens on
@@ -150,6 +151,10 @@ private func handle(_ line: String) throws -> Data {
             return try Response.failure("unsupported_target", encoder: encoder)
         }
         return try Response.success(FocusedTargetReport(selection: try driver.selectionRange(target), targetRef: target, state: state), encoder: encoder)
+    case "request-accessibility":
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        return try Response.success(StatusReport(permission: SystemAXDriver.permissionStatus, screenRecording: CGPreflightScreenCaptureAccess()), encoder: encoder)
     case "status":
         return try Response.success(StatusReport(permission: SystemAXDriver.permissionStatus, screenRecording: CGPreflightScreenCaptureAccess()), encoder: encoder)
     case "propose":
