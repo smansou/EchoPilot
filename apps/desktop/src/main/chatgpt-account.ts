@@ -86,7 +86,8 @@ export async function verifyIdentity(
     typeof claims.sub !== "string" ||
     !claims.sub ||
     (nonce !== undefined && claims.nonce !== nonce) ||
-    (claims.azp && claims.azp !== clientId)
+    (claims.azp && claims.azp !== clientId) ||
+    (Array.isArray(claims.aud) && claims.aud.length > 1 && claims.azp !== clientId)
   )
     throw Error("ChatGPT identity did not match this sign-in.");
   return {
@@ -166,7 +167,8 @@ export function createChatGPTAccount(options: {
     if (
       typeof data.access_token !== "string" ||
       typeof data.expires_in !== "number" ||
-      data.expires_in <= 0
+      data.expires_in <= 0 ||
+      (data.token_type !== undefined && String(data.token_type).toLowerCase() !== "bearer")
     )
       throw Error("ChatGPT returned invalid credentials.");
     return data;
@@ -254,7 +256,6 @@ export function createChatGPTAccount(options: {
     if (!options.crypto.available())
       throw Error("Unlock macOS Keychain before signing in.");
     const controller = new AbortController();
-    pending = controller;
     const signal = AbortSignal.any([
       controller.signal,
       AbortSignal.timeout(600000),
@@ -320,6 +321,7 @@ export function createChatGPTAccount(options: {
     });
     const abort = () =>
       rejectCallback(Error("ChatGPT sign-in cancelled or timed out."));
+    pending = controller;
     signal.addEventListener("abort", abort, { once: true });
     try {
       await new Promise<void>((resolve, reject) => {
@@ -347,7 +349,7 @@ export function createChatGPTAccount(options: {
           .digest("base64url"),
         ...(p.idToken ? { id_token_hint: p.idToken } : {}),
       }).toString();
-      await options.openBrowser(url.href);
+      try { await options.openBrowser(url.href); } catch { throw Error("Could not open your browser. Try signing in again."); }
       const result = await callback;
       signal.throwIfAborted();
       p.clientId = result.clientId;
@@ -381,6 +383,7 @@ export function createChatGPTAccount(options: {
           "This sign-in belongs to another account. Use Add account instead.",
         );
       Object.assign(p, identity);
+      p.scopes = [];
       credentials(p, data);
       saved.profiles = saved.profiles.map((v) => (v.id === p.id ? p : v));
       saved.active = p.id;

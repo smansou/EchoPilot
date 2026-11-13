@@ -1,3 +1,5 @@
+import {createChatGPTAccount} from './chatgpt-account';
+import {discoverModels} from './model-catalog';
 import {createVisualExplanation} from './visual-explanation';
 import {notchBounds} from './notch-layout';
 import {clipContext} from './live-context';
@@ -36,7 +38,8 @@ export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:st
   const memory=createAssistantMemory({load:memoryState.load,save:memoryState.save});
   const wake=createWakeWord({bundleDir:options.bundleDir,allowed:options.allowed,load:wakeState.load,save:wakeState.save,wake:()=>{wake.stop();void toggle('agent');}});
   const tasks=createCodingTasks({library:coding,allowed:options.allowed,changed:task=>{if(['completed','failed'].includes(task.status))live.note(JSON.stringify({codingTask:{id:task.id,agent:task.agent,project:task.project,status:task.status,error:task.error,output:clipContext(task.output,600)}}));}});
-  const cloud=createCloudProvider({secrets:options.secrets});
+  const account=createChatGPTAccount({directory:app.getPath('userData'),crypto,openBrowser:url=>shell.openExternal(url)});
+  const cloud=createCloudProvider({secrets:options.secrets,account});
   const edit=createDesktopEdit(options.bundleDir);
   const observe=createDesktopObserveHost({bundleDir:options.bundleDir,timeoutMs:2500});
   let shared:ReturnType<typeof createSharedScreenSession>|undefined;
@@ -138,6 +141,13 @@ export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:st
     if(!options.trusted(event))throw Error('Untrusted request');
     switch(request.action){
       case 'widget-interactive':if(event.sender===options.widget()?.webContents&&typeof request.interactive==='boolean')options.widget()?.setIgnoreMouseEvents(!request.interactive,{forward:true});return {ok:true};
+      case 'chatgpt-status':return account.status();
+      case 'chatgpt-sign-in':await cancel();return account.signIn(request.newProfile===true);
+      case 'chatgpt-cancel':account.cancel();return account.status();
+      case 'chatgpt-select':if(typeof request.id!=='string')throw Error('Choose an account.');await cancel();return account.select(request.id);
+      case 'chatgpt-disconnect':await cancel();return account.disconnect();
+      case 'chatgpt-usage':await shell.openExternal('https://chatgpt.com/settings/usage');return {ok:true};
+      case 'assistant-models':{const setup=resolveProviderSetup(options.setting);if(setup.reasoning==='chatgpt')return account.models();return discoverModels(setup.reasoning,await options.secrets.get(setup.reasoning)||'');}
       case 'status':return status();
       case 'select-session':if(!options.allowed()||typeof request.sessionId!=='string'||!coding.resolve(request.sessionId))throw Error('This saved session is unavailable. Refresh your projects and try again.');selectedSession=request.sessionId;return {selected:true};
       case 'assistant-state':return options.allowed()?{...coding.status(),facts:memory.list(),sessions:coding.peek(),tasks:tasks.list()}:{sessions:0,indexed:0,facts:[],tasks:[],paused:true};
@@ -189,5 +199,5 @@ export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:st
   let privacyWasAllowed=options.allowed();
   const background=setInterval(()=>{const allowed=options.allowed();if(!allowed){wake.stop();if(privacyWasAllowed){explanation.hide();coding.clear();knowledge.clear();tasks.clear();}}else{void coding.refresh().catch(()=>{});if(!wake.status().calibrating)wake.listen(!live.active()&&['idle','done','error'].includes(session.status().phase));}privacyWasAllowed=allowed;},2000);background.unref();
   if(options.allowed())void coding.refresh().catch(()=>{});
-  return {toggle,cancel,dispose(){if(idleTimer)clearTimeout(idleTimer);clearInterval(background);wake.dispose();tasks.dispose();coding.dispose();app.removeListener('browser-window-focus',refreshPermissions);shared?.dispose();highlight.dispose();explanation.dispose();cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
+  return {toggle,cancel,dispose(){if(idleTimer)clearTimeout(idleTimer);clearInterval(background);account.cancel();wake.dispose();tasks.dispose();coding.dispose();app.removeListener('browser-window-focus',refreshPermissions);shared?.dispose();highlight.dispose();explanation.dispose();cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
 }
