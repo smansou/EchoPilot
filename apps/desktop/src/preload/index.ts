@@ -8,6 +8,10 @@ import {
 } from '../../../../packages/security/src/channels';
 contextBridge.exposeInMainWorld('echo', Object.freeze({
   onNavigate: (listener:(page:string)=>void)=>{const handler=(_event:unknown,page:unknown)=>{if(page==='general')listener(page);};ipcRenderer.on('echo:navigate',handler);return ()=>ipcRenderer.removeListener('echo:navigate',handler);},
+  onPermissionsUpdated: (listener:(value:unknown)=>void)=>{const handler=(_event:unknown,value:unknown)=>listener(value);ipcRenderer.on('echo:permissions-updated',handler);return()=>ipcRenderer.removeListener('echo:permissions-updated',handler);},
+  permissionGuide: (input:Record<string,unknown>)=>ipcRenderer.invoke('echo:permission-guide',input),
+  startPermissionDrag: (id:string)=>{if(id==='app'||id==='desktop')ipcRenderer.send('echo:permission-drag',id);},
+  onPermissionError: (listener:(message:string)=>void)=>{const handler=(_event:unknown,message:unknown)=>{if(typeof message==='string'&&message.length<300)listener(message);};ipcRenderer.on('echo:permission-error',handler);return()=>ipcRenderer.removeListener('echo:permission-error',handler);},
   desktop: (input: Record<string, unknown>) => ipcRenderer.invoke('echo:desktop', input),
   onLiveMedia: (listener: (event: {sessionId:string;type:'audio'|'interrupt';pcmBase64?:string;sampleRate?:24000}) => void) => {
     const handler=(_event:unknown,value:any)=>{if(!value||typeof value.sessionId!=='string'||value.sessionId.length>100)return;if(value.type==='interrupt')listener({sessionId:value.sessionId,type:'interrupt'});else if(value.type==='audio'&&value.sampleRate===24000&&typeof value.pcmBase64==='string'&&value.pcmBase64.length<=192000&&/^[A-Za-z0-9+/]*={0,2}$/.test(value.pcmBase64))listener({sessionId:value.sessionId,type:'audio',pcmBase64:value.pcmBase64,sampleRate:24000});};

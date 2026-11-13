@@ -1,0 +1,103 @@
+.permission-guide {
+  min-height: 100vh;
+  padding: 28px 24px;
+  background: #f7f6fb;
+  color: #302941;
+  font:
+    13px/1.55 -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}
+.pg-eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.8px;
+  color: #9681ad;
+  font-weight: 650;
+}
+.permission-guide h1 {
+  font-size: 26px;
+  letter-spacing: -0.8px;
+  line-height: 1.2;
+  margin: 14px 0;
+}
+.permission-guide p {
+  color: #82748f;
+  margin: 12px 0;
+}
+.pg-item {
+  border: 1px solid #dcd1eb;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #fff, #eee7f9);
+  text-align: center;
+  padding: 12px;
+  margin: 14px 0;
+}
+.pg-item > div {
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 4px;
+}
+.pg-item img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  margin-bottom: 6px;
+}
+.pg-item strong {
+  font-size: 14px;
+}
+.pg-item span,
+.pg-item small {
+  display: block;
+  font-size: 10px;
+  color: #9a87b0;
+  margin-top: 4px;
+}
+.permission-guide button {
+  font: inherit;
+  border: 1px solid #ddd3e9;
+  border-radius: 9px;
+  padding: 9px 12px;
+  background: #fff;
+  color: #77618e;
+  cursor: pointer;
+}
+.permission-guide button.pg-primary {
+  background: #7957b0;
+  color: #fff;
+  border-color: #7957b0;
+}
+.pg-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+.permission-guide button.pg-link {
+  border: 0;
+  background: transparent;
+  padding: 4px;
+  font-size: 10px;
+  color: #947da9;
+}
+.pg-note {
+  font-size: 10px;
+}
+.pg-later {
+  display: block;
+  margin: 16px auto 0;
+}
+.pg-success {
+  background: #e5f4ec;
+  padding: 15px;
+  border-radius: 12px;
+}
+.pg-error {
+  color: #a33c59 !important;
+}
+.permission-guide button:focus-visible,
+.pg-item > div:focus-visible {
+  outline: 3px solid #b19ad2;
+  outline-offset: 3px;
+}

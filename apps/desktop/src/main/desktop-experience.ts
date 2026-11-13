@@ -1,3 +1,5 @@
+import {createPermissionGuide} from './permission-guide';
+import {desktopObserveDiagnostics} from './desktop-observe';
 import {createChatGPTAccount} from './chatgpt-account';
 import {discoverModels} from './model-catalog';
 import {createVisualExplanation} from './visual-explanation';
@@ -55,8 +57,9 @@ export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:st
   let gazeTarget:Awaited<ReturnType<typeof edit.atPoint>>|null=null;
   let idleTimer:ReturnType<typeof setTimeout>|null=null;
   const config=():CloudConfig=>{const setup=resolveProviderSetup(options.setting);return {provider:setup.reasoning,textModel:setup.textModel,speechModel:setup.speechModel,speechProvider:setup.voice};};
-  let permissionFlight:Promise<{microphone:string;camera:string;screen:string;accessibility:boolean}>|null=null;
-  function permissions(){if(permissionFlight)return permissionFlight;const task=(async()=>{let accessibility=systemPreferences.isTrustedAccessibilityClient(false),screenPermission=systemPreferences.getMediaAccessStatus('screen');let helper:ReturnType<typeof openDesktopActionSession>|null=null;try{helper=openDesktopActionSession(options.bundleDir);const result=await helper.request({operation:'status'}) as {permission?:string;screenRecording?:boolean};accessibility=result.permission==='granted';if(typeof result.screenRecording==='boolean')screenPermission=result.screenRecording?'granted':'denied';}catch{}finally{helper?.close();}return {microphone:systemPreferences.getMediaAccessStatus('microphone'),camera:systemPreferences.getMediaAccessStatus('camera'),screen:screenPermission,accessibility};})();permissionFlight=task;void task.finally(()=>{if(permissionFlight===task)permissionFlight=null;});return task;}
+  let permissionFlight:Promise<{microphone:string;camera:string;screen:string;screenApp:string;screenHelper:string;accessibility:boolean}>|null=null;
+  function permissions(){if(permissionFlight)return permissionFlight;const task=(async()=>{let accessibility=systemPreferences.isTrustedAccessibilityClient(false),screenPermission=systemPreferences.getMediaAccessStatus('screen');const screenApp=screenPermission;let screenHelper='unknown';let helper:ReturnType<typeof openDesktopActionSession>|null=null;try{helper=openDesktopActionSession(options.bundleDir);const result=await helper.request({operation:'status'}) as {permission?:string;screenRecording?:boolean};accessibility=result.permission==='granted';if(typeof result.screenRecording==='boolean'){screenHelper=result.screenRecording?'granted':'denied';screenPermission=screenApp==='granted'&&result.screenRecording?'granted':'denied';}}catch{}finally{helper?.close();}return {microphone:systemPreferences.getMediaAccessStatus('microphone'),camera:systemPreferences.getMediaAccessStatus('camera'),screen:screenPermission,screenApp,screenHelper,accessibility};})();permissionFlight=task;void task.finally(()=>{if(permissionFlight===task)permissionFlight=null;});return task;}
+  const permissionGuide=createPermissionGuide({bundleDir:options.bundleDir,desktopHelper:()=>desktopObserveDiagnostics({bundleDir:options.bundleDir}).helperPath,permissions});
   const refreshPermissions=()=>{void permissions();};app.on('browser-window-focus',refreshPermissions);
   async function observeContext(signal:AbortSignal) {
       const result:ScreenContext={text:''};
@@ -187,11 +190,7 @@ export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:st
       case 'gaze-forget':await gazeActivation.stop();gazePreferences.forget();return {ok:true};
       case 'gaze-start':if(typeof request.displayId!=='string')throw Error('Choose a display');await gazeActivation.manualStart(request.displayId,request.recalibrate===true);return {ok:true};
       case 'gaze-stop':await gazeActivation.stop();return {ok:true};
-      case 'open-permission': {
-        const panes:Record<string,string>={Microphone:'Privacy_Microphone',Accessibility:'Privacy_Accessibility','Screen Recording':'Privacy_ScreenCapture',Camera:'Privacy_Camera'};
-        if(typeof request.permission!=='string'||!panes[request.permission])throw Error('Unknown permission');
-        await shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${panes[request.permission]}`);return {ok:true};
-      }
+      case 'open-permission':return permissionGuide.open(request.permission);
       case 'permissions':return permissions();
       default:throw Error('Unknown desktop command');
     }
@@ -199,5 +198,5 @@ export function createDesktopExperience(options:{ephemeral?:boolean;bundleDir:st
   let privacyWasAllowed=options.allowed();
   const background=setInterval(()=>{const allowed=options.allowed();if(!allowed){wake.stop();if(privacyWasAllowed){explanation.hide();coding.clear();knowledge.clear();tasks.clear();}}else{void coding.refresh().catch(()=>{});if(!wake.status().calibrating)wake.listen(!live.active()&&['idle','done','error'].includes(session.status().phase));}privacyWasAllowed=allowed;},2000);background.unref();
   if(options.allowed())void coding.refresh().catch(()=>{});
-  return {toggle,cancel,dispose(){if(idleTimer)clearTimeout(idleTimer);clearInterval(background);account.cancel();wake.dispose();tasks.dispose();coding.dispose();app.removeListener('browser-window-focus',refreshPermissions);shared?.dispose();highlight.dispose();explanation.dispose();cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
+  return {toggle,cancel,dispose(){if(idleTimer)clearTimeout(idleTimer);clearInterval(background);permissionGuide.dispose();account.cancel();wake.dispose();tasks.dispose();coding.dispose();app.removeListener('browser-window-focus',refreshPermissions);shared?.dispose();highlight.dispose();explanation.dispose();cancel();void overlay.stop();ipcMain.removeHandler('echo:desktop');},overlay};
 }

@@ -1,3 +1,4 @@
+import {cachedSecretStore} from './cached-secret-store';
 import {configureEdgeWindow} from './native-window';
 import { createDesktopExperience } from './desktop-experience';
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol, session, Menu, screen, shell as externalShell, type IpcMainInvokeEvent } from 'electron';
@@ -202,6 +203,7 @@ const rendererRoot = resolve(__dirname, '../renderer');
 const fixtureJournalPath = resolve(__dirname, '../../fixtures/bootstrap/session.jsonl');
 let secretHelperBridge: NativeHelperBridge | null = null;
 let securityKernel: SecurityKernel | null = null;
+let providerSecrets: ReturnType<typeof cachedSecretStore> | null = null;
 let textProvider: OpenAITextProvider | null = null;
 /**
  * The native helper is spawned with stdio pipes only: it is reachable from this parent process and
@@ -214,7 +216,7 @@ function resolveSecretHelperPath(): string {
 function getSecurityKernel(): SecurityKernel {
   if (securityKernel) return securityKernel;
   secretHelperBridge = createNativeHelperBridge({ helperPath: resolveSecretHelperPath() });
-  const secrets = createKeychainSecretStore(secretHelperBridge);
+  const secrets = providerSecrets = cachedSecretStore(createKeychainSecretStore(secretHelperBridge));
   textProvider = createOpenAITextProvider({
     secrets,
     model: () => (product?.settings().find((setting) => setting.key === 'providers.textModel')?.value ?? 'gpt-6-sol') as TextModel,
@@ -541,7 +543,7 @@ async function ready() {
     return all.map(d => ({ displayId: String(d.id), label: d.internal ? 'Built-in display' : d.label || 'External display', internal: d.internal, originX: d.bounds.x, originY: d.bounds.y, width: d.bounds.width, height: d.bounds.height, scale: d.scaleFactor, arrangementGeneration }));
   } });
   experience = createDesktopExperience({ephemeral:smoke,bundleDir:__dirname, gaze:gazeHost,
-    secrets:{get:async provider => {getSecurityKernel();return createKeychainSecretStore(secretHelperBridge!).get(provider);}},
+    secrets:{get:async provider => {getSecurityKernel();return providerSecrets!.get(provider);}},
     setting:key => product?.settings().find(s=>s.key===key)?.value ?? '',
     allowed:()=>processPrivacy.capture()===null && !microphoneMuted && !coordinator.getState().muted,
     trusted:isTrustedRenderer, widget:()=>widget, reveal:openWidget});
@@ -1400,7 +1402,7 @@ async function ready() {
     }
   }
 }
-app.on('will-quit', () => { secretHelperBridge?.dispose(); secretHelperBridge = null; securityKernel = null; });
+app.on('will-quit', () => { providerSecrets?.clear();providerSecrets=null; secretHelperBridge?.dispose(); secretHelperBridge = null; securityKernel = null; });
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance',openDashboard);
