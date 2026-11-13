@@ -1,4 +1,159 @@
-# Live handoff
+# Cleo live handoff
+
+## Current checkpoint — November 13, 2026 — Cleo native permissions and voice
+
+**Read this section first. It supersedes older active-checkout, installed-build, UI, permission-guide, and branch statements below. Historical sections remain for context.**
+
+### Active source, delivery, and authorization
+
+- Checkout: `/Users/sobhi/.codex/worktrees/4d44/EchoPilot`.
+- Branch: `feature/chatgpt-connections`.
+- Remote: `https://github.com/smansou/Cleo.git` (the repository is now named Cleo; internal workspace/package identifiers still use EchoPilot).
+- Last application change: `3070a07`; preceding voice commit: `f6b588c`. Both and all earlier November 13 chunks are pushed. This handoff documentation update follows them.
+- **Do not merge.** The user explicitly authorized progressive commits/pushes and wants to test locally together before merging.
+- Latest delivered app: `/Users/sobhi/.codex/worktrees/4d44/EchoPilot/artifacts/local-app/Cleo-Native-Nov13.app`.
+- Its adjacent `.app.qualification.json` reports `local-qualified`. It is an ad-hoc local development bundle, not a notarized distributable release. This session did not replace `/Applications` with this build.
+- Earlier `Cleo-Permissions-Nov13.app`, `Cleo-F-Nov13.app`, `Cleo-Nov13.app`, and `EchoPilot-Nov13.app` are superseded test bundles. In particular, the Permissions build contains the rejected custom guide.
+- **Quit an older running copy before opening the latest app.** The stable profile/single-instance lock can otherwise route a new launch back to the old process.
+
+### User requirements and corrections to preserve
+
+The user wants a polished, simple, useful voice companion with continuous cross-session understanding, background delegation, an edge-anchored notch, a physically convincing orb, and screen pointing/outlines/visual explanations. Gaze remains lower priority. Their real reports take precedence over fixture results.
+
+In this session the user specifically required:
+
+1. Account/subscription sign-in as an assistant connection option and all available models from the active connection, rather than a hardcoded GPT-4.1/mini shortlist. **The user still chooses the model.** Direct providers use readable dropdowns; OpenRouter retains model-ID entry.
+2. Rename the product to **Cleo** and replace Electron's app icon only after showing options and obtaining their choice.
+3. Iterate icon design in a browser, with direct user control over the same orb's asymmetric position/size. Preserve the proposed light/dark gradients. Most of the sphere should remain visible when cropped at a corner/edge.
+4. Use **F provisionally**; the final icon may change later.
+5. Native, contextual macOS permission requests and automatic, accurate permission state. **No custom permission modal, draggable-file guide, or Check Permissions step.** Screen context belongs in Settings, not Home. Enabling the feature should initiate the relevant native request.
+6. Voice interruption must follow established, reliable implementations. The user explicitly requested a **fresh-session separate agent** for this work, and clarified that it must learn from official/mature implementations, not obscure low-star repositories or invent new voice machinery.
+7. Never equate mocked/synthetic tests with successful real authorization, pointing, insertion, or live voice dialogue.
+
+### November 13 commits and final disposition
+
+| Commit | Work |
+| --- | --- |
+| `7cfa6e8` | ChatGPT account authentication, Responses adapter, connection-specific model discovery, and removal of static settings model enums. |
+| `ad9819b` | Account sign-in/model catalogs wired into Connections, separate audio connection, UI verification and notes. |
+| `06216c9` | Cleo display-name/package rename and orb proposals A–F; retained technical identifiers/data compatibility. |
+| `e286c2d` | Browser orb studio with dragging, position/radius controls, presets, previews, local save and exports. |
+| `fd1c7ae` | User-approved provisional F icon, macOS icon generation and bundle integration. |
+| `1c5b3f6` | Initial permission drag guide and per-launch credential cache. **The guide was rejected and removed in `3070a07`; retain only the useful credential cache.** Its UI/tests did not establish a successful real macOS permission flow. |
+| `f6b588c` | Voice microphone replay handoff/queue cleanup, Gemini interruption boundary, and real Chromium media regression harness. |
+| `3070a07` | Native permission requests, automatic/current Settings state, screen context relocation/persistence, and deletion of the custom guide. |
+
+### Assistant accounts and dynamic model selection
+
+Files: `main/chatgpt-account.ts`, `main/openai-responses.ts`, `main/model-catalog.ts`, `shared/model-catalog.ts`, `shared/provider-setup.ts`, `renderer/ProviderSetup.tsx`, settings schema, and their tests.
+
+- Added **ChatGPT account → Continue with ChatGPT**. It uses the documented public dynamic-registration flow: persistent installation host ID, system browser, IPv4 loopback callback, state/nonce/PKCE, issued client ID, signed ID-token verification, encrypted credentials, distinct saved profiles, serialized refresh rotation, account switching and sign-out/revocation. Browser launch failures do not expose authorization URLs.
+- No other app's saved tokens are read. No DevKit source was copied; the implementation follows the public protocol independently. The inspected DevKit had a noncommercial license.
+- Account reasoning uses public `POST /v1/responses`, `store:false`, `stream:true`, and succeeds only after `response.completed`. The adapter preserves tool calls/results, screen images, and encrypted reasoning items. It handles incomplete streams and subscription-sharing errors. OpenAI API-key reasoning also uses Responses.
+- **Subscription assistant access does not replace the live audio API connection.** OpenAI/Gemini audio remains separately configured with an API key. Account eligibility, limits and model availability depend on the actual account; do not claim live sign-in was tested.
+- ChatGPT model display names/order come from the active account catalog. OpenAI, Anthropic and Gemini API catalogs are fetched with their saved keys, including pagination. Specialized models remain visible but disabled as assistant choices when identifiable. Catalog visibility is not proof every model supports every tool or is callable under current quota.
+- Removed fixed model enums that would reject newly discovered models on save. Existing provider configurations remain usable. A new ChatGPT connection can start with its first advertised assistant model; the user can change it. Changing audio provider preserves the assistant selection.
+- Detailed record: [account connections](ACCOUNT_CONNECTIONS_2026-11-13.md).
+
+### Cleo name, icon, and browser editor
+
+- Cleo is the visible UI/menu/window/package/executable name. Stable bundle ID, package names, IPC, helper paths, archive format, profile directory and Keychain service names remain unchanged.
+- The profile remains under the existing `EchoPilot` application-support namespace. Electron's pre-ready internal name remains EchoPilot to preserve its macOS Safe Storage namespace; `ready()` sets the visible runtime name to Cleo. Do not casually change this and strand encrypted history/account data.
+- User approved **F / left-edge crop** provisionally. Installed asset source: `assets/branding/cleo.svg`; generated `cleo.png` and `cleo.icns` sit beside it. Packaging copies the ICNS into bundle Resources and sets `CFBundleIconFile`.
+- Rebuild icon on macOS with `node scripts/build-app-icon.mjs` (Electron executable override may be necessary, below). Source proposals A–F and their README remain in `assets/branding/proposals/`.
+- Browser editor: `assets/branding/editor/`; launch `node scripts/orb-studio.mjs`, then open `http://127.0.0.1:4176`.
+- It was opened and left as a deliverable in Chrome. The server was started during this session; verify whether it is still running before restarting. No ongoing agent monitoring is promised.
+- Editor preserves the proposed gradients/shading, starts from D by default, and offers all A–F presets. Dragging, arrow-key nudges, numeric/sliding X/Y/radius, Undo, reset, background selection, small-size previews, SVG download and settings copy are provided.
+- Edits remain in browser local storage. **Save this composition** writes `artifacts/branding/selection.json` and `selection.svg`; it does not automatically replace the app icon. Wait for the user to say to use their saved composition. Do not overwrite their live browser edits with a fresh preset.
+- Records: [rename](CLEO_RENAME.md), [orb editor](../assets/branding/editor/README.md).
+
+### Permission correction — final implementation, not the rejected guide
+
+The user's real test of `Cleo-Permissions-Nov13.app` failed: the custom guide was unwanted, manual changes were not reflected for Accessibility/screen/camera, and even Check Permissions appeared ineffective. Microphone did update through its normal native prompt. Do not describe that build as accepted.
+
+Removed `permission-guide.ts`, `permission-plan.ts` and its tests, `PermissionGuide.tsx`, guide CSS, dedicated guide IPC and native-drag bridge methods. They are not the current flow.
+
+Final behavior:
+
+- `main/desktop-permissions.ts` is a thin, injected adapter over platform request/status operations. Passive reads never request authorization.
+- Microphone/camera request through Electron's `systemPreferences.askForMediaAccess`. Previously denied media goes to Apple's pane, with a conditional restart recovery action because Electron documents that changed denials can require restart. **Never infer that another process's media grant means Cleo is authorized.**
+- Screen request goes through `desktopCapturer.getSources` with thumbnails disabled for the request. Status follows the app that captures screenshots. The earlier conjunction with a separate helper's Screen Recording result was removed.
+- Accessibility is requested with `AXIsProcessTrustedWithOptions` and the prompt option in the desktop helper that performs AX operations. The requesting helper is kept alive for up to two minutes while the person responds; ordinary desktop RPC lifetime remains ten seconds. Close it when access is observed or the app disposes.
+- Accessibility status comes from the actual AX helper. Probe failure is an unavailable/unknown check with an actionable error, not a fabricated denial.
+- Main-window focus/activation and visible-window polling re-read status and publish `echo:permissions-updated`. The renderer also loads permissions independently of provider setup. **A late provider/Keychain startup response cannot overwrite a newer permission state.** The real Electron UI fixture reproduces this ordering with a delayed provider response and verifies the granted state survives.
+- No Check Permissions button. Permission rows use native request/recovery actions directly. macOS may still require Settings or restart; no application can silently grant these permissions.
+- Home no longer has a screen-context toggle/card. Settings → Permissions & privacy owns it. Preference key: `screen.contextEnabled` (`off`/`on`). The requested preference waits for required access and starts automatically when read status permits; disabling stops context.
+- Shared voice screen observation uses AX rather than asking a second process for OCR/screenshot permission. App screenshots stay on the main capture path. Backend screen tools do not silently turn on an off setting.
+- Initial dictation requests native Accessibility access if needed. Gaze requests native camera access when used; gaze remains experimental.
+- Detailed record and official references: [native permission setup](PERMISSION_SETUP.md).
+
+### Credentials and repeated prompts
+
+The per-launch `cached-secret-store.ts` is retained from the otherwise superseded guide commit. Kernel/text provider and desktop cloud requests share it. Successful reads stay only in main-process memory; concurrent reads are shared; replacement/deletion invalidate cached values; failures/missing secrets are not cached; quit clears the cache.
+
+Existing credentials remain in their stable Keychain/profile namespaces across updates. This reduces repeated reads during a launch, not macOS's authorization requirements across arbitrary rebuilt app identities/paths. A read-only signing inventory found **zero valid code-signing identities** available on this Mac. An existing local signing configuration exists, but these delivered bundles remain ad-hoc. No new certificate trust, signing-key setup, Keychain ACL change, TCC reset/database edit, or permission grant was performed. Stable trusted signing and a consistent installed path remain deployment work; do not promise these local rebuilds never ask for OS approval.
+
+### Voice — fresh-session delegated work and established references
+
+A separate `voice_interruptions` agent was started with no inherited conversation history, as the user requested. It owned voice files; the parent reviewed/integrated the changes and retained a reproducible native-browser harness. It read the official OpenAI example/session/prompting docs, the mature LiveKit GPT-Live integration, and Google's Live interruption guidance; see [voice implementation/evidence](VOICE_NATIVE_AUDIO.md).
+
+- Existing OpenAI voice is **GPT-Live `gpt-live-1`, `/v1/live/sessions`**, not the Realtime protocol. Do not graft Realtime VAD/cancel/truncate schemas onto it.
+- Found a concrete transport defect: the wake/startup replay AudioWorklet remained permanently between mic and WebRTC. A non-silent backlog fed/consumed at the same 1x rate could keep future speech and interruption several seconds late.
+- Replay now ends when caught up or when GPT-Live starts assistant output, then the sender switches to the original native microphone track and releases replay resources. Quiet/close cannot restore capture during asynchronous track replacement.
+- Startup tradeoff remains explicit: a full-duplex backchannel can cause an unsent startup tail to be dropped in favor of current mic input. Do not claim both lossless delayed replay and zero live latency.
+- Gemini PCM interruption stops **and disconnects** all queued WebAudio sources and resets scheduling. An interrupted envelope cannot re-add canceled audio or assistant captions; user transcription and subsequent turns still flow.
+- Native interruption prompt clarified. No new local VAD or invented GPT-Live cancellation/truncation commands were added. GPT-Live's final yield timing is provider/model-controlled; LiveKit documents this limitation too.
+
+### Verification actually completed
+
+- TypeScript typecheck passed.
+- Full project suite passed: **800 tests**, including packaging checks. Final targeted permission/dictation checks also passed after the last permission refinements.
+- Native Accessibility package: **53 XCTest + 4 Swift Testing tests** passed. Native desktop helper rebuilt and signed; its final read-only status response was decoded through the actual stdio protocol. This confirms framing/schema, not granted access from the user's app.
+- Electron UI fixture passed: dynamic model/account controls and preserved audio/assistant choices; Home without screen context; Settings with screen context, no custom guide/manual check; permission events surviving delayed provider initialization; transparent notch background.
+- `scripts/check-live-media-chromium.mjs` passed with actual Electron 44/Chromium 152, synthetic input only. Real local WebRTC peers/worklet held three seconds of startup audio, then switched to native mic about **12.6 ms** after the simulated assistant event. Real WebAudio interruption stopped/disconnected four queued one-second sources, with next turn scheduled at **15 ms** rather than inheriting the old queue. These timings are local browser mechanics, **not provider barge-in measurements**.
+- `Cleo-Native-Nov13.app` passed `scripts/qualify-local-app.mjs`: strict signature/plist and disposable-profile startup qualification. Release/distribution blockers remain expected.
+- UI screenshots are under `artifacts/ui-live/`; icon/editor previews under `artifacts/branding/`. These local artifacts are ignored by Git and can disappear.
+- Logs for this checkpoint: `/tmp/cleo-native-flow-{build,tests,media,package,qualification}.txt`, `/tmp/cleo-native-flow-swift-tests.txt`, `/tmp/cleo-native-permissions-build.txt`. Treat temporary logs as expendable; source/docs/harnesses are persistent.
+
+### Local toolchain and reproduction
+
+Node 24 is available at `/Users/sobhi/.nvm/versions/node/v24.21.0/bin/node`. This checkout's `node_modules` entries point into existing b637/a7ca dependency installations; `@echopilot` entries point to this checkout's packages. Do not modify old worktrees or assume dependencies were freshly installed here.
+
+The usable Electron binary in this environment is:
+
+`/Users/sobhi/.codex/worktrees/81a5/EchoPilot/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`
+
+For scripts importing `electron`, use `ELECTRON_OVERRIDE_DIST_PATH=/tmp/echo-electron-runtime`; UI smoke also honors `ECHOPILOT_ELECTRON_PATH` set to the binary above. Normal dependency resolution in the older installation can otherwise try to download/use a broken Electron installation.
+
+Useful commands:
+
+```sh
+node node_modules/typescript/bin/tsc --noEmit
+node scripts/test-project.mjs
+swift test --package-path native/macos/Sources/Accessibility
+bash native/macos/Sources/Accessibility/build.sh
+node scripts/build.mjs
+node scripts/check-live-media-chromium.mjs /Users/sobhi/.codex/worktrees/81a5/EchoPilot/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
+ELECTRON_OVERRIDE_DIST_PATH=/tmp/echo-electron-runtime ECHOPILOT_ELECTRON_PATH=/Users/sobhi/.codex/worktrees/81a5/EchoPilot/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron node scripts/desktop-ui-smoke.mjs
+node scripts/package-local.mjs --no-build --cloud-voice --electron-app /Users/sobhi/.codex/worktrees/81a5/EchoPilot/node_modules/electron/dist/Electron.app --out artifacts/local-app/Cleo-Native-Nov13.app
+node scripts/qualify-local-app.mjs artifacts/local-app/Cleo-Native-Nov13.app
+```
+
+Use `--replace-existing` only for an authorized existing local test output. Host Electron/native GUI/localhost tests and build signing required normal tool escalation in this sandbox. Avoid sandbox crash-dialog loops. No approval-review rejection remained unresolved in this checkpoint. Formatting used a temporary npm cache at `/tmp/echopilot-npm-cache` after the user's default npm cache reported ownership problems; no global cache permissions were changed.
+
+### Remaining acceptance — next session must not skip this
+
+1. User has **not yet accepted/tested the latest Native build**. Their confirmed permission failure refers to the superseded custom-guide build.
+2. Test native first requests and changes made in Apple's Settings, returning/focusing the app and observing current status. Confirm the AX requester/actual dictation worker receives the grant. Distinguish denied, unavailable, and OS restart requirements. Do not infer success from checking another process.
+3. Test a real voice dialogue with interruption mid-sentence, correction, and stop. No paid provider calls or physical microphone recording occurred during this session's checks; provider yield speed is unmeasured.
+4. Test actual screen context, orb movement/outlines/explanations and cross-app insertion after permissions are usable. Earlier controlled screen-tool tests are not proof those features work live.
+5. Test real ChatGPT sign-in, account catalog and account-authenticated tool/inference flow with the user. OAuth/Responses tests used controlled responses and a local callback, not a live account.
+6. User may refine icon composition in the browser; F remains provisional. Save is not approval to install unless they instruct it.
+7. Keep gaze for later fine-tuning. Keep all changes unmerged until the user completes local testing and authorizes merge.
+
+Prior November 6–8 architecture/UI/notch/dictation/context work was inherited at `ea192a5`; consult [continuity/experience](CONTINUITY_AND_EXPERIENCE.md) and [November 8 rebuild](REBUILD_2026-11-08.md). Do not redo that work solely because older historical handoffs mention different checkouts.
+
+---
 
 ## October 17, 2026 — hands-free calibration and persistent gaze
 
