@@ -94,7 +94,7 @@ const HOTKEY_ACTION_LABELS: Record<HotkeyAction, string> = Object.freeze({
   'mute-microphone': 'Mute microphone',
   'stop-speech': 'Stop speech',
   replay: 'Replay latest',
-  'open-mission-control': 'Open EchoPilot',
+  'open-mission-control': 'Open Cleo',
 });
 
 /** Human-readable name shared by the tray menu and the widget conflict list. */

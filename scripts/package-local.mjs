@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Local macOS .app packaging for EchoPilot.
+// Local macOS .app packaging for Cleo.
 //
 // This assembles an *openable local development bundle* — not a release artifact:
 //   - the official Electron.app already installed in node_modules is copied into a uniquely
@@ -7,7 +7,7 @@
 //   - the compiled `dist` output, the release status file, and the on-disk model metadata and
 //     licenses are assembled into Contents/Resources/app, the app.getAppPath() root the runtime
 //     resolves dist/..., models/..., workers/... and scripts/release/installers.json from;
-//   - the bundle is renamed to EchoPilot with the stable local identifier
+//   - the bundle is renamed to Cleo with the stable local identifier
 //     com.echopilot.desktop.local and is ad-hoc signed and verified.
 //
 // There is no Developer ID signature, no notarization, no application-secret access, no Apple account or
@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import {localSigning,signingArguments} from './local-signing.mjs';
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const PRODUCT_NAME = 'EchoPilot';
+export const PRODUCT_NAME = 'Cleo';
 export const BUNDLE_IDENTIFIER = 'com.echopilot.desktop.local';
 export const BUNDLE_DIRECTORY = `${PRODUCT_NAME}.app`;
 export const ARTIFACTS_DIRECTORY = join('artifacts', 'local-app');
@@ -47,7 +47,7 @@ export class PackagingError extends Error {
 
 export function usage() {
   return [
-    'Local EchoPilot .app packaging (ad-hoc development bundle; no Developer ID, no notarization).',
+    'Local Cleo .app packaging (ad-hoc development bundle; no Developer ID, no notarization).',
     '',
     '  pnpm package [options]',
     '',
@@ -321,8 +321,8 @@ export function plistPatchArguments({ plist, version, productName = PRODUCT_NAME
     ['-replace', 'CFBundleIdentifier', '-string', bundleIdentifier, plist],
     ['-replace', 'CFBundleShortVersionString', '-string', version, plist],
     ['-replace', 'CFBundleVersion', '-string', version, plist],
-    ['-replace', 'NSMicrophoneUsageDescription', '-string', 'EchoPilot uses the microphone when you start dictation or a live conversation. Audio is sent to your selected provider.', plist],
-    ['-replace', 'NSCameraUsageDescription', '-string', 'EchoPilot uses the camera only when you enable gaze, to estimate eye direction locally without saving camera frames.', plist],
+    ['-replace', 'NSMicrophoneUsageDescription', '-string', 'Cleo uses the microphone when you start dictation or a live conversation. Audio is sent to your selected provider.', plist],
+    ['-replace', 'NSCameraUsageDescription', '-string', 'Cleo uses the camera only when you enable gaze, to estimate eye direction locally without saving camera frames.', plist],
   ];
 }
 
@@ -510,7 +510,7 @@ export async function packageLocalApp(options = {}) {
   const plan = buildPayloadPlan({ root: rootDir, uiOnly });
   let missing = missingRequiredPayload({ root: rootDir, uiOnly });
   if (build && missing.every((relativePath) => /^dist\/(main|preload|renderer)(\/|$)/.test(relativePath))) {
-    log('EchoPilot packaging: refreshing the TypeScript bundle once (node scripts/build.mjs).');
+    log('Cleo packaging: refreshing the TypeScript bundle once (node scripts/build.mjs).');
     await run(execute, process.execPath, [join(rootDir, 'scripts', 'build.mjs')], 'the TypeScript build');
     missing = missingRequiredPayload({ root: rootDir, uiOnly });
   }
@@ -540,7 +540,7 @@ export async function packageLocalApp(options = {}) {
   let voiceHelperTouched = false;
   try {
     // The official Electron distribution is copied whole (its own signatures stay intact); only
-    // the main executable name and the Info.plist identity are rewritten for EchoPilot.
+    // the main executable name and the Info.plist identity are rewritten for Cleo.
     await cp(electronApp, appPath, { recursive: true, force: true, verbatimSymlinks: true, filter: (source) => !isDeniedName(basename(source)) });
     await rename(join(appPath, 'Contents', 'MacOS', ELECTRON_BINARY), join(appPath, 'Contents', 'MacOS', PRODUCT_NAME));
 
@@ -595,7 +595,7 @@ export async function packageLocalApp(options = {}) {
     // final `codesign --verify --deep --strict` pass succeeds instead of failing on pristine code.
     for (const nestedBundle of findNestedBundles({
       frameworksDirectory: join(appPath, 'Contents', 'Frameworks'),
-      skip: [join(resourcesApp, 'dist', 'native', `${PRODUCT_NAME}Voice.app`)],
+      skip: [join(resourcesApp, 'dist', 'native', 'EchoPilotVoice.app')],
     })) {
       await run(execute, CODESIGN, signingArguments(nestedBundle,signing), `re-signing the nested ${basename(nestedBundle)}`);
     }
@@ -603,12 +603,12 @@ export async function packageLocalApp(options = {}) {
     if (voiceHelperTouched) {
       const entitlements = join(rootDir, 'native', 'macos', 'VoiceHelper', 'entitlements.plist');
       if (!existsSync(entitlements)) {
-        warn('EchoPilot packaging: native/macos/VoiceHelper/entitlements.plist is missing; re-signing the nested voice helper without the audio-input entitlement.');
+        warn('Cleo packaging: native/macos/VoiceHelper/entitlements.plist is missing; re-signing the nested voice helper without the audio-input entitlement.');
       }
       await run(
         execute,
         CODESIGN,
-        resignHelperArguments({ helperPath: join(resourcesApp, 'dist', 'native', `${PRODUCT_NAME}Voice.app`), entitlements: existsSync(entitlements) ? entitlements : null, signing }),
+        resignHelperArguments({ helperPath: join(resourcesApp, 'dist', 'native', 'EchoPilotVoice.app'), entitlements: existsSync(entitlements) ? entitlements : null, signing }),
         're-signing the nested voice helper',
       );
     }
@@ -656,7 +656,7 @@ async function main(argv) {
     console.log(JSON.stringify(summary));
     return;
   }
-  console.log(`\nEchoPilot local bundle (${summary.mode}) assembled from Electron ${summary.electronVersion ?? 'unknown'}:`);
+  console.log(`\nCleo local bundle (${summary.mode}) assembled from Electron ${summary.electronVersion ?? 'unknown'}:`);
   console.log(`  ${summary.appPath}`);
   console.log(`\nOpen it with:  ${summary.openCommand}`);
   console.log(`Signature: ${summary.signature} local development signature — no Developer ID, not notarized.`);
@@ -677,7 +677,7 @@ async function main(argv) {
 const invokedAsScript = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedAsScript) {
   main(process.argv.slice(2)).catch((error) => {
-    console.error(`\nEchoPilot packaging failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`\nCleo packaging failed: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
   });
 }

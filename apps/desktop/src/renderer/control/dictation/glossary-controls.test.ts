@@ -105,7 +105,7 @@ function entry(overrides: Partial<EntryView> & Pick<EntryView, 'term' | 'scope' 
   };
 }
 
-const PROJECT_ENTRY = entry({term: 'EchoPilot', scope: 'project', ownerProjectId: ATLAS});
+const PROJECT_ENTRY = entry({term: 'Cleo', scope: 'project', ownerProjectId: ATLAS});
 const GLOBAL_ENTRY = entry({term: 'SQLite', scope: 'global', ownerProjectId: null, variants: ['sequel lite']});
 const GRANTED_ENTRY = entry({term: 'BeaconTerm', scope: 'project', ownerProjectId: BEACON, grantedTo: [ATLAS], variants: ['beacon term']});
 
@@ -120,12 +120,12 @@ function row(term: string): ControlRow {
 }
 
 test('A03-C2 the glossary controls offer global promotion only for a confirmed project entry', () => {
-  const project = row('EchoPilot');
+  const project = row('Cleo');
   assert.equal(project.scope, 'project');
   assert.equal(project.canPromoteToGlobal, true, 'a confirmed entry this project owns can be promoted');
   assert.ok(project.promoteAction, 'the promotable row carries the promotion action');
   assert.equal(project.promoteAction.kind, 'promote_to_global');
-  assert.equal(project.promoteAction.term, 'EchoPilot');
+  assert.equal(project.promoteAction.term, 'Cleo');
   assert.equal(project.promoteAction.requiresExplicitConfirmation, true, 'promotion always requires explicit confirmation');
 
   const global = row('SQLite');
@@ -141,16 +141,16 @@ test('A03-C2 the glossary controls offer global promotion only for a confirmed p
 
 test('A03-C2 a global promotion exists only as an explicit confirmed user request', () => {
   assert.throws(
-    () => controls.promotionRequest({projectId: ATLAS, term: 'EchoPilot'}),
+    () => controls.promotionRequest({projectId: ATLAS, term: 'Cleo'}),
     'a promotion without explicit user confirmation is refused',
   );
   assert.throws(
-    () => controls.promotionRequest({projectId: ATLAS, term: 'EchoPilot', confirmed: false}),
+    () => controls.promotionRequest({projectId: ATLAS, term: 'Cleo', confirmed: false}),
     'confirmed: false is refused too',
   );
   assert.deepEqual(
-    {...controls.promotionRequest({projectId: ATLAS, term: 'EchoPilot', confirmed: true})},
-    {projectId: ATLAS, term: 'EchoPilot', scope: 'global'},
+    {...controls.promotionRequest({projectId: ATLAS, term: 'Cleo', confirmed: true})},
+    {projectId: ATLAS, term: 'Cleo', scope: 'global'},
     'an explicit confirmation builds the global promotion for that term',
   );
 });

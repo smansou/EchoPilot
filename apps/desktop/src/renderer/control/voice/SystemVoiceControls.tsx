@@ -77,7 +77,7 @@ export function SystemVoiceControls({ player, muted }: { player: SystemPlayback;
         </select></label>
     </div>
     <div className="signal-actions">
-      <button className="signal-primary" disabled={muted || playback.phase === 'unavailable'} onClick={() => void play(() => player.speak('EchoPilot is alongside you. A clearer signal for the work ahead.'))}>Preview voice</button>
+      <button className="signal-primary" disabled={muted || playback.phase === 'unavailable'} onClick={() => void play(() => player.speak('Cleo is alongside you. A clearer signal for the work ahead.'))}>Preview voice</button>
       <button className="signal-secondary" disabled={playback.phase !== 'speaking'} onClick={() => player.stop()}>Stop speaking</button>
       <button className="signal-secondary" disabled={muted || !playback.remaining || playback.phase === 'speaking'} onClick={() => void play(() => player.resume())}>Resume</button>
       <button className="signal-secondary" disabled={muted || !playback.lastHeard} onClick={() => void play(() => player.replay())}>Replay last heard sentence</button>

@@ -8,7 +8,7 @@ const profile = await mkdtemp(join(tmpdir(), 'echopilot-voice-smoke-'));
 const appIndex = process.argv.indexOf('--app');
 const appBundle = appIndex === -1 ? null : process.argv[appIndex + 1];
 if (appIndex !== -1 && (!appBundle || !appBundle.endsWith('.app'))) throw new Error('--app requires the path to a packaged .app bundle');
-const executable = appBundle ? join(appBundle, 'Contents', 'MacOS', 'EchoPilot') : electron;
+const executable = appBundle ? join(appBundle, 'Contents', 'MacOS', 'Cleo') : electron;
 try {
   await new Promise((resolve, reject) => {
     const child = spawn(executable, [...(appBundle ? [] : ['.']), '--voice-smoke', `--profile=${profile}`], {

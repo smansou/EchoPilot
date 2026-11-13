@@ -77,16 +77,16 @@ export function createShellTray(options: TrayOptions): ShellTray {
           })),
         },
       { type: 'separator' },
-      { label: 'Open EchoPilot…', ...shortcut('open-mission-control'), click: options.onOpenDashboard },
+      { label: 'Open Cleo…', ...shortcut('open-mission-control'), click: options.onOpenDashboard },
       { type: 'separator' },
-      { label: 'Quit EchoPilot', click: options.onQuit },
+      { label: 'Quit Cleo', click: options.onQuit },
     ];
     return Menu.buildFromTemplate(template);
   }
 
   function refresh(): void {
     const status = options.status();
-    tray.setToolTip('EchoPilot');
+    tray.setToolTip('Cleo');
     tray.setContextMenu(menuFor(status));
   }
 

@@ -6,7 +6,7 @@ import { verifyPack } from './release/verify-pack.mjs';
 import { isDeniedName } from './package-local.mjs';
 
 const appPath = process.argv[2] && resolve(process.argv[2]);
-if (!appPath?.endsWith('.app')) throw new Error('Usage: pnpm package:verify <EchoPilot.app> [--voice]');
+if (!appPath?.endsWith('.app')) throw new Error('Usage: pnpm package:verify <Cleo.app> [--voice]');
 const root = resolve(import.meta.dirname, '..');
 const appRoot = join(appPath, 'Contents/Resources/app');
 const record = JSON.parse(await readFile(join(appRoot, 'local-bundle.json'), 'utf8'));

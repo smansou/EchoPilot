@@ -127,19 +127,19 @@ test('durable glossary corrects prepared drafts after restart without cross-proj
   const options = {bundleDir: '/fixture', activeProjectId: () => projectId, glossaryDirectory: directory, openSession(): DesktopActionSession {throw Error('native must not be called');}};
   let service = createDesktopDictationService(options);
   try {
-    const correction = {command: 'learnCorrection', projectId: 'p', raw: 'echo pilot', corrected: 'EchoPilot'};
+    const correction = {command: 'learnCorrection', projectId: 'p', raw: 'echo pilot', corrected: 'Cleo'};
     assert.equal((await service.handle(correction)).error, 'confirmation_required');
     assert.equal((await service.handle({...correction, confirmed: true})).ok, true);
     service.dispose();
     service = createDesktopDictationService(options);
-    assert.equal((await service.handle({command: 'prepare-draft', projectId: 'p', text: 'open echo pilot'})).draftText, 'open EchoPilot');
+    assert.equal((await service.handle({command: 'prepare-draft', projectId: 'p', text: 'open echo pilot'})).draftText, 'open Cleo');
     projectId = 'other';
     assert.equal((await service.handle({command: 'prepare-draft', projectId, text: 'open echo pilot'})).draftText, 'open echo pilot');
-    assert.equal((await service.handle({command: 'promoteTerm', projectId, term: 'EchoPilot', confirmed: true})).ok, false);
+    assert.equal((await service.handle({command: 'promoteTerm', projectId, term: 'Cleo', confirmed: true})).ok, false);
     projectId = 'p';
-    assert.equal((await service.handle({command: 'promoteTerm', projectId, term: 'EchoPilot'})).error, 'confirmation_required');
-    assert.equal((await service.handle({command: 'promoteTerm', projectId, term: 'EchoPilot', confirmed: true})).ok, true);
+    assert.equal((await service.handle({command: 'promoteTerm', projectId, term: 'Cleo'})).error, 'confirmation_required');
+    assert.equal((await service.handle({command: 'promoteTerm', projectId, term: 'Cleo', confirmed: true})).ok, true);
     projectId = 'other';
-    assert.equal((await service.handle({command: 'prepare-draft', projectId, text: 'open echo pilot'})).draftText, 'open EchoPilot');
+    assert.equal((await service.handle({command: 'prepare-draft', projectId, text: 'open echo pilot'})).draftText, 'open Cleo');
   } finally {service.dispose(); await rm(directory, {recursive: true, force: true});}
 });

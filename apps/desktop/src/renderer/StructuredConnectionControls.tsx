@@ -21,7 +21,7 @@ export function StructuredConnectionControls({projectId, request}: {projectId: s
   }
   return <section aria-label="VS Code selection connector"><h3>VS Code selection connector</h3>
     <p>Optional local selection sharing. Install the supplied extension yourself, then pair the exact selected workspace. Editor edits and browser integration are unavailable.</p>
-    <p>Extension source: packages/desktop-tools/integrations/vscode. In VS Code, run “EchoPilot: Pair Local Selection Connector”, paste the temporary JSON, then select text and run “EchoPilot: Review and Share Selection”.</p>
+    <p>Extension source: packages/desktop-tools/integrations/vscode. In VS Code, run “Cleo: Pair Local Selection Connector”, paste the temporary JSON, then select text and run “Cleo: Review and Share Selection”.</p>
     <button disabled={!projectId || busy} onClick={() => void action('pair')}>Enable temporary local connection</button>
     <button disabled={!projectId || busy} onClick={() => void action('status')}>Refresh shared selection</button>
     <button disabled={!projectId || busy} onClick={() => void action('disconnect')}>Disconnect and clear selection</button>

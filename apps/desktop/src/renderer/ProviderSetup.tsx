@@ -228,7 +228,7 @@ export function ProviderSetup({
         <div className="account-connection">
           <h3>Use your ChatGPT plan</h3>
           <p className="footnote">
-            Sign in in your browser and allow EchoPilot to use your plan.
+            Sign in in your browser and allow Cleo to use your plan.
             Available for eligible accounts; usage counts toward your plan
             limits.
           </p>

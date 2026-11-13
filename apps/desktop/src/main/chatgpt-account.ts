@@ -118,7 +118,7 @@ export function createChatGPTAccount(options: {
       if (value?.profiles) saved = value;
       else if (existsSync(join(options.directory, "chatgpt-account.enc")))
         throw Error(
-          "Could not unlock the saved ChatGPT connection. Check macOS Keychain and restart EchoPilot.",
+          "Could not unlock the saved ChatGPT connection. Check macOS Keychain and restart Cleo.",
         );
       loaded = true;
     }
@@ -299,7 +299,7 @@ export function createChatGPTAccount(options: {
         return;
       }
       if (url.searchParams.has("error")) {
-        res.end("Sign-in was cancelled. Return to EchoPilot.");
+        res.end("Sign-in was cancelled. Return to Cleo.");
         rejectCallback(Error("ChatGPT sign-in was not authorized."));
         return;
       }
@@ -316,7 +316,7 @@ export function createChatGPTAccount(options: {
         return;
       }
       res.setHeader("Content-Type", "text/plain");
-      res.end("You can return to EchoPilot. Finishing sign-in…");
+      res.end("You can return to Cleo. Finishing sign-in…");
       resolveCallback({ code, clientId });
     });
     const abort = () =>
@@ -335,7 +335,7 @@ export function createChatGPTAccount(options: {
       const url = new URL(AUTH + "/api/accounts/authorize");
       url.search = new URLSearchParams({
         client_id: p.clientId || "dynamic_agent_client",
-        ...(!p.clientId ? { agent_name_hint: "EchoPilot" } : {}),
+        ...(!p.clientId ? { agent_name_hint: "Cleo" } : {}),
         ext_agent_host_id: hostId,
         response_type: "code",
         redirect_uri: redirect,
@@ -468,7 +468,7 @@ export function createChatGPTAccount(options: {
       }
       if (failed)
         throw Error(
-          "Signed out locally. Remote disconnection could not be confirmed; disconnect EchoPilot in ChatGPT settings.",
+          "Signed out locally. Remote disconnection could not be confirmed; disconnect Cleo in ChatGPT settings.",
         );
       return status();
     },

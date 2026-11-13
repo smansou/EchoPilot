@@ -28,7 +28,7 @@ export function createGazeOverlay(options:{host:ReturnType<typeof createGazeHost
     try{
       hostStarted=true;const result=await options.host.handle({command:'start',projectId:options.projectId(),displayId,enabled:true});
       if(token!==generation)throw Error('Gaze setup was canceled.');if(!result.ok)throw Error('Gaze could not start.');
-      const created=new BrowserWindow({...display.workArea,title:'EchoPilot · Gaze calibration',frame:true,transparent:false,alwaysOnTop:false,fullscreenable:false,movable:false,resizable:false,maximizable:false,minimizable:true,closable:true,show:false,backgroundColor:'#191820',webPreferences:{preload:resolve(options.bundleDir,'../preload/index.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false}});
+      const created=new BrowserWindow({...display.workArea,title:'Cleo · Gaze calibration',frame:true,transparent:false,alwaysOnTop:false,fullscreenable:false,movable:false,resizable:false,maximizable:false,minimizable:true,closable:true,show:false,backgroundColor:'#191820',webPreferences:{preload:resolve(options.bundleDir,'../preload/index.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false}});
       window=created;created.setMenuBarVisibility(false);
       created.webContents.setWindowOpenHandler(()=>({action:'deny'}));created.webContents.on('will-navigate',e=>e.preventDefault());
       created.once('closed',()=>{if(token===generation&&window===created)void close();});

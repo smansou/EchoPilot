@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "productName": "Cleo",
   "description": "TypeScript-first hands-free agent companion",
   "main": "dist/main/index.cjs",
   "packageManager": "pnpm@11.19.0",

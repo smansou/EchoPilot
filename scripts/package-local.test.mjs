@@ -64,7 +64,7 @@ async function makeFixture(t, { voice = true, asr = true, silero = true, reasone
   await write(join(root, 'scripts', 'release', 'installers.json'), '{"release":"echopilot-desktop"}\n');
   await write(join(root, 'dist', 'main', 'index.cjs'), '// fixture main\n');
   await write(join(root, 'dist', 'preload', 'index.cjs'), '// fixture preload\n');
-  await write(join(root, 'dist', 'renderer', 'index.html'), '<!doctype html><title>EchoPilot</title>\n');
+  await write(join(root, 'dist', 'renderer', 'index.html'), '<!doctype html><title>Cleo</title>\n');
   await write(join(root, 'dist', 'native', 'PlatformHost'), '#!/bin/sh\nexit 0\n');
   await write(join(root, 'dist', 'native', 'echopilot-desktop'), '#!/bin/sh\nexit 0\n');
   await write(join(root, 'dist', 'native', 'echopilot-secrets'), '#!/bin/sh\nexit 0\n');
@@ -143,13 +143,13 @@ test('parseArgs accepts the documented flags and defaults', () => {
   });
   const options = parseArgs([
     '--ui-only', '--replace-existing', '--no-build', '--json',
-    '--out', '/tmp/EchoPilot.app', '--electron-app', '/tmp/Electron.app',
+    '--out', '/tmp/Cleo.app', '--electron-app', '/tmp/Electron.app',
   ]);
   assert.equal(options.uiOnly, true);
   assert.equal(options.replaceExisting, true);
   assert.equal(options.build, false);
   assert.equal(options.json, true);
-  assert.equal(options.out, '/tmp/EchoPilot.app');
+  assert.equal(options.out, '/tmp/Cleo.app');
   assert.equal(options.electronApp, '/tmp/Electron.app');
   assert.equal(parseArgs(['--out=/tmp/Other.app']).out, '/tmp/Other.app');
   assert.equal(parseArgs(['-h']).help, true);
@@ -168,14 +168,14 @@ test('parseArgs rejects unknown flags, missing values and non-.app outputs', () 
 test('plutil and codesign invocations are exact argv arrays, never shell text', () => {
   const plist = '/tmp/My Bundle.app/Contents/Info.plist';
   assert.deepEqual(plistPatchArguments({ plist, version: '1.2.3' }), [
-    ['-replace', 'CFBundleExecutable', '-string', 'EchoPilot', plist],
-    ['-replace', 'CFBundleName', '-string', 'EchoPilot', plist],
-    ['-replace', 'CFBundleDisplayName', '-string', 'EchoPilot', plist],
+    ['-replace', 'CFBundleExecutable', '-string', 'Cleo', plist],
+    ['-replace', 'CFBundleName', '-string', 'Cleo', plist],
+    ['-replace', 'CFBundleDisplayName', '-string', 'Cleo', plist],
     ['-replace', 'CFBundleIdentifier', '-string', BUNDLE_IDENTIFIER, plist],
     ['-replace', 'CFBundleShortVersionString', '-string', '1.2.3', plist],
     ['-replace', 'CFBundleVersion', '-string', '1.2.3', plist],
-    ['-replace', 'NSMicrophoneUsageDescription', '-string', 'EchoPilot uses the microphone when you start dictation or a live conversation. Audio is sent to your selected provider.', plist],
-    ['-replace', 'NSCameraUsageDescription', '-string', 'EchoPilot uses the camera only when you enable gaze, to estimate eye direction locally without saving camera frames.', plist],
+    ['-replace', 'NSMicrophoneUsageDescription', '-string', 'Cleo uses the microphone when you start dictation or a live conversation. Audio is sent to your selected provider.', plist],
+    ['-replace', 'NSCameraUsageDescription', '-string', 'Cleo uses the camera only when you enable gaze, to estimate eye direction locally without saving camera frames.', plist],
   ]);
   assert.deepEqual(plistReadArguments(plist), [
     { key: 'CFBundleExecutable', args: ['-extract', 'CFBundleExecutable', 'raw', '-o', '-', plist] },
@@ -297,21 +297,21 @@ test('allocateOutputPath allocates unique versioned names', async (t) => {
   t.after(() => rm(base, { recursive: true, force: true }));
   const stamp = () => '2026-09-30T10:11:12.345Z';
   const first = allocateOutputPath({ base, version: '0.1.0', stamp, nonce: () => 'aaaaaa' });
-  assert.equal(first, join(base, 'EchoPilot-0.1.0-2026-09-30-101112Z-aaaaaa.app'));
+  assert.equal(first, join(base, 'Cleo-0.1.0-2026-09-30-101112Z-aaaaaa.app'));
   await mkdir(first);
   const nonces = ['aaaaaa', 'bbbbbb'];
   const second = allocateOutputPath({ base, version: '0.1.0', stamp, nonce: () => nonces.shift() });
-  assert.equal(second, join(base, 'EchoPilot-0.1.0-2026-09-30-101112Z-bbbbbb.app'));
+  assert.equal(second, join(base, 'Cleo-0.1.0-2026-09-30-101112Z-bbbbbb.app'));
 });
 
-test('isNarrowReplacement only accepts EchoPilot-*.app inside the artifacts directory', () => {
+test('isNarrowReplacement only accepts Cleo-*.app inside the artifacts directory', () => {
   const root = '/repo';
   const base = join(root, ARTIFACTS_DIRECTORY);
-  assert.equal(isNarrowReplacement({ root, output: join(base, 'EchoPilot-0.1.0-stamp-nonce.app') }), true);
-  assert.equal(isNarrowReplacement({ root, output: join(root, 'artifacts', 'EchoPilot-0.1.0.app') }), false);
+  assert.equal(isNarrowReplacement({ root, output: join(base, 'Cleo-0.1.0-stamp-nonce.app') }), true);
+  assert.equal(isNarrowReplacement({ root, output: join(root, 'artifacts', 'Cleo-0.1.0.app') }), false);
   assert.equal(isNarrowReplacement({ root, output: base }), false);
   assert.equal(isNarrowReplacement({ root, output: join(base, 'Other.app') }), false);
-  assert.equal(isNarrowReplacement({ root, output: join(base, 'EchoPilot.app') }), false);
+  assert.equal(isNarrowReplacement({ root, output: join(base, 'Cleo.app') }), false);
 });
 
 test('packageLocalApp rejects non-macOS hosts', async (t) => {
@@ -342,7 +342,7 @@ test('packageLocalApp preserves relative Electron framework links inside the del
   assert.equal(await readFile(join(delivered, 'Resources/test.txt'), 'utf8'), 'framework resource');
 });
 
-test('packageLocalApp assembles an EchoPilot bundle with the official Electron identity', async (t) => {
+test('packageLocalApp assembles an Cleo bundle with the official Electron identity', async (t) => {
   const fixture = await makeFixture(t, { reasoner: true, optionalHelpers: true });
   const { calls, execute } = makeExecute();
   const summary = await runPackage(fixture, execute);
@@ -354,16 +354,16 @@ test('packageLocalApp assembles an EchoPilot bundle with the official Electron i
   assert.equal(summary.version, '0.1.0');
   assert.equal(summary.electronVersion, '44.3.0');
   assert.equal(summary.openCommand, `open "${summary.appPath}"`);
-  assert.match(basename(summary.appPath), /^EchoPilot-0\.1\.0-.+\.app$/);
+  assert.match(basename(summary.appPath), /^Cleo-0\.1\.0-.+\.app$/);
   assert.ok(summary.appPath.startsWith(join(fixture.root, ARTIFACTS_DIRECTORY)));
   assert.deepEqual(summary.warnings, []);
 
   const out = summary.appPath;
-  assert.ok(existsSync(join(out, 'Contents', 'MacOS', 'EchoPilot')), 'the executable is renamed');
+  assert.ok(existsSync(join(out, 'Contents', 'MacOS', 'Cleo')), 'the executable is renamed');
   assert.ok(!existsSync(join(out, 'Contents', 'MacOS', 'Electron')), 'the Electron binary name is gone');
   const appRoot = appRootOf(out);
   assert.deepEqual(await readJson(join(appRoot, 'package.json')), {
-    name: 'echopilot', productName: 'EchoPilot', version: '0.1.0', private: true, main: 'dist/main/index.cjs',
+    name: 'echopilot', productName: 'Cleo', version: '0.1.0', private: true, main: 'dist/main/index.cjs',
   });
   for (const relativePath of [
     'dist/main/index.cjs',
@@ -407,7 +407,7 @@ test('packageLocalApp assembles an EchoPilot bundle with the official Electron i
   const patchCalls = plutilCalls.filter((call) => call.args[0] === '-replace').map((call) => call.args);
   assert.equal(patchCalls.length, 8);
   const stagedPlist = patchCalls[0].at(-1);
-  assert.match(stagedPlist, /\.staging-[^/]+\/EchoPilot\.app\/Contents\/Info\.plist$/);
+  assert.match(stagedPlist, /\.staging-[^/]+\/Cleo\.app\/Contents\/Info\.plist$/);
   assert.deepEqual(patchCalls, plistPatchArguments({ plist: stagedPlist, version: '0.1.0' }));
   const stagedApp = stagedPlist.replace(/\/Contents\/Info\.plist$/, '');
   assert.deepEqual(plutilCalls.find((call) => call.args[0] === '-lint').args, ['-lint', stagedPlist]);
@@ -543,20 +543,20 @@ test('packageLocalApp refreshes existing dist rather than packaging stale source
 test('packageLocalApp preserves an existing bundle unless replacement is narrow and explicit', async (t) => {
   const fixture = await makeFixture(t);
   const { execute } = makeExecute();
-  const existing = join(fixture.root, ARTIFACTS_DIRECTORY, 'EchoPilot-0.1.0-old.app');
+  const existing = join(fixture.root, ARTIFACTS_DIRECTORY, 'Cleo-0.1.0-old.app');
   await write(join(existing, 'marker.txt'), 'keep me\n');
 
   await assert.rejects(runPackage(fixture, execute, { out: existing }), /Refusing to overwrite/);
   assert.ok(existsSync(join(existing, 'marker.txt')), 'the existing bundle is untouched');
 
-  const outside = join(fixture.root, 'EchoPilot-outside.app');
+  const outside = join(fixture.root, 'Cleo-outside.app');
   await write(join(outside, 'marker.txt'), 'keep me\n');
   await assert.rejects(
     runPackage(fixture, execute, { out: outside, replaceExisting: true }),
     /may only replace/,
   );
   assert.ok(existsSync(join(outside, 'marker.txt')), 'replacement outside the artifacts directory is refused');
-  const misnamed = join(fixture.root, 'artifacts', 'local-app', 'NotEchoPilot.app');
+  const misnamed = join(fixture.root, 'artifacts', 'local-app', 'NotCleo.app');
   await write(join(misnamed, 'marker.txt'), 'keep me\n');
   await assert.rejects(
     runPackage(fixture, execute, { out: misnamed, replaceExisting: true }),
@@ -566,14 +566,14 @@ test('packageLocalApp preserves an existing bundle unless replacement is narrow 
 
   const summary = await runPackage(fixture, execute, { out: existing, replaceExisting: true });
   assert.equal(summary.appPath, existing);
-  assert.ok(existsSync(join(existing, 'Contents', 'MacOS', 'EchoPilot')));
+  assert.ok(existsSync(join(existing, 'Contents', 'MacOS', 'Cleo')));
   assert.ok(!existsSync(join(existing, 'marker.txt')), 'an explicitly replaced bundle is rebuilt');
 });
 
 test('packageLocalApp does not delete an existing bundle when packaging would fail', async (t) => {
   const fixture = await makeFixture(t);
   await rm(join(fixture.root, 'dist', 'native'), { recursive: true, force: true });
-  const existing = join(fixture.root, ARTIFACTS_DIRECTORY, 'EchoPilot-0.1.0-old.app');
+  const existing = join(fixture.root, ARTIFACTS_DIRECTORY, 'Cleo-0.1.0-old.app');
   await write(join(existing, 'marker.txt'), 'keep me\n');
   const { execute } = makeExecute();
   await assert.rejects(runPackage(fixture, execute, { out: existing, replaceExisting: true }), /dist\/native/);

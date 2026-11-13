@@ -41,7 +41,7 @@ export function CompanionHome({request, connected, navigate, onError}: {
   const live = state?.mode === 'agent' && !!state.id;
   const tour = [
     ['Meet your desktop companion.', 'Talk through an idea, ask about your work, or turn a thought into text. Start here or use a shortcut from any app.'],
-    ['Pick up the thread.', 'Ask about a project by name. EchoPilot searches your saved Codex and Claude sessions and brings the relevant details into the conversation.'],
+    ['Pick up the thread.', 'Ask about a project by name. Cleo searches your saved Codex and Claude sessions and brings the relevant details into the conversation.'],
     ['Make it yours.', 'Connect a voice provider and allow your microphone when you’re ready. Screen access is optional. You can finish setup later.'],
   ];
   return <div className="companion-home">
@@ -53,7 +53,7 @@ export function CompanionHome({request, connected, navigate, onError}: {
       <div className="hero-orbit" aria-hidden="true"><div className="echo-orb"><i/><b/></div></div>
       <span className="home-presence"><i className={live?'active':''}/>{live?'Conversation in progress':paused?'Context paused':connected?'Ready when you are':'Your companion, one connection away'}</span>
       <h2>A thought away.</h2><p>Talk it through. Keep your place.</p>
-      <button className="primary talk-action" disabled={pending} onClick={()=>void start('agent')}>{pending?'Connecting…':live?'End conversation':connected?'Talk to EchoPilot':'Connect your voice'}<kbd>⌥ Space</kbd></button>
+      <button className="primary talk-action" disabled={pending} onClick={()=>void start('agent')}>{pending?'Connecting…':live?'End conversation':connected?'Talk to Cleo':'Connect your voice'}<kbd>⌥ Space</kbd></button>
       <span className="hero-hint">{live?'You can interrupt naturally or say “hang up”.':'Your projects and conversations, within reach.'}</span>
     </section>
     <div className="home-actions"><button onClick={()=>void start('dictation')} disabled={pending}><span className="action-symbol">Aa</span><strong>Dictate anywhere</strong><small>Turn a thought into text</small><kbd>⌃ ⌥ Space</kbd></button><button onClick={()=>navigate('assistant')}><span className="action-symbol">↗</span><strong>Your work & memory</strong><small>Projects, tasks, and what matters</small><span className="action-arrow">→</span></button><button onClick={()=>navigate('history')}><span className="action-symbol">↶</span><strong>Recent conversations</strong><small>Return to something you said</small><span className="action-arrow">→</span></button></div>

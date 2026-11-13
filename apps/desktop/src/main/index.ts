@@ -67,6 +67,10 @@ const smoke = process.argv.includes('--smoke');
 const voiceSmoke = process.argv.includes('--voice-smoke');
 const profileArg = process.argv.find(arg => arg.startsWith('--profile='));
 if (profileArg) app.setPath('userData', resolve(profileArg.slice('--profile='.length)));
+// Keep the existing profile and encrypted credentials when changing the display name.
+if (!profileArg) app.setPath('userData', join(app.getPath('appData'), 'EchoPilot'));
+// Electron 44 captures this name for its macOS Safe Storage namespace before ready.
+// Keep that namespace stable; the visible name changes in ready() after configuration.
 app.setName('EchoPilot');
 const coordinator = createCoordinator();
 /** Per-launch secret the signed native helper must echo in every message it sends. */
@@ -158,7 +162,7 @@ async function rememberManagedEvent(event: EventEnvelope, payload: Record<string
   }
 }
 function requireShell(): Shell {
-  if (!shell) throw new Error('EchoPilot shell is not ready yet');
+  if (!shell) throw new Error('Cleo shell is not ready yet');
   return shell;
 }
 function companionSessionStatus() {
@@ -375,7 +379,7 @@ function toggleConversation(): void {
   const enabled = requireShell().voiceSnapshot().enabled;
   if (enabled) voiceRouting?.configure(voiceRouting.snapshot().sessionId, false);
   void (enabled ? voice.disable() : voice.enable()).catch(error => {
-    console.warn(`EchoPilot voice lifecycle: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(`Cleo voice lifecycle: ${error instanceof Error ? error.message : String(error)}`);
   });
 }
 function openWidget() {
@@ -398,7 +402,7 @@ function createWindow(view: 'widget' | 'dashboard') {
     // Foreground-safe widget options live in `window-policy.ts` so the focus/Space matrix is
     // covered by a deterministic test instead of only by the manual signed-app run.
     ...windowBehavior(view),
-    title:'EchoPilot', backgroundColor:isWidget ? '#00000000' : '#f7f6f3',
+    title:'Cleo', backgroundColor:isWidget ? '#00000000' : '#f7f6f3',
     webPreferences:{preload:resolve(__dirname,'../preload/index.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,webviewTag:false,autoplayPolicy:'no-user-gesture-required'},
   });
   window.webContents.setWindowOpenHandler(() => ({action:'deny'}));
@@ -441,6 +445,7 @@ async function bootstrapJournal() {
   for (const event of events) coordinator.ingest(event);
 }
 async function ready() {
+  app.setName('Cleo');
   projects = await createProjectAssociations(join(app.getPath('userData'), 'project-associations.json'));
   product = createProductRuntime(app.getPath('userData'), app.getAppPath());
   narration = createSystemNarration({
@@ -543,7 +548,7 @@ async function ready() {
   shell = createShell({
     token: helperToken,
     register: (accelerator, callback) => globalShortcut.register(accelerator, callback),
-    onRecoverable: reason => { console.warn(`EchoPilot recoverable: ${reason}`); },
+    onRecoverable: reason => { console.warn(`Cleo recoverable: ${reason}`); },
     // Voice commands travel on the helper's private stdin; the shell owns id allocation and the
     // authenticated ack correlation, so `index.ts` never hand-rolls a protocol frame.
     writeToHelper: line => nativeHost?.send(line) === true,
@@ -558,10 +563,10 @@ async function ready() {
             companionSession?.disable(); void dictationCapture?.cancel(); dictationContext?.clear(); desktopDictation?.clear();
             voiceRouting?.configure(voiceRouting.snapshot().sessionId, false);
             resumeConversationAfterUnmute = voice?.status().voice.enabled === true;
-            void voice?.disable().catch((error) => console.warn(`EchoPilot microphone stop: ${String(error)}`));
+            void voice?.disable().catch((error) => console.warn(`Cleo microphone stop: ${String(error)}`));
           } else if (resumeConversationAfterUnmute) {
             resumeConversationAfterUnmute = false;
-            void voice?.enable().catch((error) => console.warn(`EchoPilot microphone restart: ${String(error)}`));
+            void voice?.enable().catch((error) => console.warn(`Cleo microphone restart: ${String(error)}`));
           }
           tray?.refresh();
           break;
@@ -580,7 +585,7 @@ async function ready() {
   nativeHost = createNativeHost({
     shell,
     token: helperToken,
-    log: message => { console.info(`EchoPilot native host: ${message}`); },
+    log: message => { console.info(`Cleo native host: ${message}`); },
   });
   voice = createVoiceActivationService({
     shell,
@@ -595,7 +600,7 @@ async function ready() {
         ? { ECHOPILOT_VAD_FALLBACK: 'energy' }
         : {}),
     },
-    log: message => { console.info(`EchoPilot voice: ${message}`); },
+    log: message => { console.info(`Cleo voice: ${message}`); },
   });
   voice.worker.onTranscript((update) => {
     const privacy = processPrivacy.generation();
@@ -605,7 +610,7 @@ async function ready() {
     if (update.phase === 'partial') narration?.userSpeechStarted();
     else narration?.userSpeechEnded();
     if (update.phase === 'final' && update.text.trim()) {
-      void voiceRouting?.transcript(update).catch(error => console.warn(`EchoPilot voice routing: ${error instanceof Error ? error.message : 'failed'}`));
+      void voiceRouting?.transcript(update).catch(error => console.warn(`Cleo voice routing: ${error instanceof Error ? error.message : 'failed'}`));
       coordinator.ingest({
         id: update.utteranceId,
         sessionId: 'local-voice',
@@ -1047,7 +1052,7 @@ async function ready() {
         if (input.action === 'associate-project' && Object.keys(input).length === 1) {
           const owner = dashboard && !dashboard.isDestroyed() ? dashboard : widget;
           if (!owner) throw new Error('No app window is available.');
-          const chosen = await dialog.showOpenDialog(owner, { title: 'Associate a project with EchoPilot', properties: ['openDirectory'] });
+          const chosen = await dialog.showOpenDialog(owner, { title: 'Associate a project with Cleo', properties: ['openDirectory'] });
           if (chosen.canceled || !chosen.filePaths[0]) return json({ canceled: true });
           clearScopedAuthority();
           const project = await projects!.associate(chosen.filePaths[0]);
@@ -1141,7 +1146,7 @@ async function ready() {
         else { voiceRouting?.configure(voiceRouting.snapshot().sessionId, false); await voice.disable(); }
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
-        console.warn(`EchoPilot voice lifecycle: ${reason}`);
+        console.warn(`Cleo voice lifecycle: ${reason}`);
         return json({ error: reason }, 503);
       }
       return json(voiceStatusPayload());
@@ -1229,9 +1234,9 @@ async function ready() {
         const owner = dashboard && !dashboard.isDestroyed() ? dashboard : widget;
         if (!owner) throw new Error('No app window is available.');
         const selected = await dialog.showSaveDialog(owner, {
-          title: 'Export encrypted EchoPilot profile',
-          defaultPath: join(app.getPath('documents'), `EchoPilot-${new Date().toISOString().slice(0, 10)}.echopilot`),
-          filters: [{ name: 'EchoPilot encrypted archive', extensions: ['echopilot'] }],
+          title: 'Export encrypted Cleo profile',
+          defaultPath: join(app.getPath('documents'), `Cleo-${new Date().toISOString().slice(0, 10)}.echopilot`),
+          filters: [{ name: 'Cleo encrypted archive', extensions: ['echopilot'] }],
         });
         if (selected.canceled || !selected.filePath) throw new Error('Export canceled.');
         const receipt = await exportProfile({ directory: profile.directory, destination: selected.filePath, passphrase: input.passphrase });
@@ -1245,9 +1250,9 @@ async function ready() {
         const selected = typeof input.archive === 'string' && input.archive.length > 0
           ? input.archive
           : (await dialog.showOpenDialog(owner, {
-            title: 'Choose an encrypted EchoPilot archive',
+            title: 'Choose an encrypted Cleo archive',
             properties: ['openFile'],
-            filters: [{ name: 'EchoPilot encrypted archive', extensions: ['echopilot'] }],
+            filters: [{ name: 'Cleo encrypted archive', extensions: ['echopilot'] }],
           })).filePaths[0];
         if (!selected) throw new Error('Restore canceled.');
         const receipt = await importProfile({ archive: selected, directory: join(app.getPath('userData'), 'restores', randomUUID()), passphrase: input.passphrase });
@@ -1257,7 +1262,7 @@ async function ready() {
       default: throw new TypeError('Unsupported privacy request');
     }
   });
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'EchoPilot',submenu:[{label:'Open EchoPilot',click:openDashboard},{label:'Settings…',accelerator:'CommandOrControl+,',click:openSettings},{role:'quit'}]},{role:'editMenu'},{role:'windowMenu'}]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'Cleo',submenu:[{label:'Open Cleo',click:openDashboard},{label:'Settings…',accelerator:'CommandOrControl+,',click:openSettings},{role:'quit'}]},{role:'editMenu'},{role:'windowMenu'}]));
   widget = createWindow('widget');
   widget.on('closed', () => { widget = null; });
   tray = createShellTray({shell:requireShell(),status:widgetStatus,onShowWidget:openWidget,onOpenDashboard:openDashboard,onQuit:() => app.quit()});
@@ -1399,5 +1404,5 @@ app.on('will-quit', () => { secretHelperBridge?.dispose(); secretHelperBridge = 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance',openDashboard);
-  void app.whenReady().then(ready).catch(error => {console.error('EchoPilot startup failed:',error);app.exit(1);});
+  void app.whenReady().then(ready).catch(error => {console.error('Cleo startup failed:',error);app.exit(1);});
 }

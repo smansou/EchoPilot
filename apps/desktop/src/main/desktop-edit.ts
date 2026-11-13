@@ -30,7 +30,7 @@ export function createDesktopEdit(bundleDir:string, openSession:(bundleDir:strin
   }
   async function capture():Promise<Target> {
     const status = await read('status') as {permission?:string};
-    if (status.permission !== 'granted') throw Error('Allow EchoPilot access in System Settings → Privacy & Security → Accessibility, then try dictation again.');
+    if (status.permission !== 'granted') throw Error('Allow Cleo access in System Settings → Privacy & Security → Accessibility, then try dictation again.');
     try { return target(await read('focused-target')); }
     catch (error) {
       if (error instanceof Error && error.message === 'secure_field') throw Error('This field is secure. Choose a regular text field to dictate.');

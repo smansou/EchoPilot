@@ -148,7 +148,7 @@ export type DesktopInspectClient = Readonly<{
 /** Honest, bounded copy for each denial the native observer can report. */
 export const DESKTOP_DENIAL_COPY: Readonly<Record<DesktopDenialCode, string>> = {
   accessibility_denied:
-    'macOS Accessibility access is not granted to EchoPilot, so the focused window could not be read. Grant it in System Settings → Privacy & Security → Accessibility.',
+    'macOS Accessibility access is not granted to Cleo, so the focused window could not be read. Grant it in System Settings → Privacy & Security → Accessibility.',
   excluded_application:
     'The frontmost application is excluded from observation, so nothing was read.',
   no_window:
