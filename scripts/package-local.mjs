@@ -182,6 +182,7 @@ export function resolveSileroPack({ root = REPO_ROOT, exists = existsSync, candi
 
 /** Compiled payload every bundle carries; the runtime resolves these through app.getAppPath(). */
 export const REQUIRED_PAYLOAD = [
+  { id: 'app-icon', source: 'assets/branding/cleo.icns', kind: 'file' },
   { id: 'secrets-helper', source: 'dist/native/echopilot-secrets', kind: 'file' },
   { id: 'dist-main', source: 'dist/main', kind: 'directory' },
   { id: 'dist-preload', source: 'dist/preload', kind: 'directory' },
@@ -321,6 +322,7 @@ export function plistPatchArguments({ plist, version, productName = PRODUCT_NAME
     ['-replace', 'CFBundleIdentifier', '-string', bundleIdentifier, plist],
     ['-replace', 'CFBundleShortVersionString', '-string', version, plist],
     ['-replace', 'CFBundleVersion', '-string', version, plist],
+    ['-replace', 'CFBundleIconFile', '-string', 'cleo.icns', plist],
     ['-replace', 'NSMicrophoneUsageDescription', '-string', 'Cleo uses the microphone when you start dictation or a live conversation. Audio is sent to your selected provider.', plist],
     ['-replace', 'NSCameraUsageDescription', '-string', 'Cleo uses the camera only when you enable gaze, to estimate eye direction locally without saving camera frames.', plist],
   ];
@@ -589,6 +591,7 @@ export async function packageLocalApp(options = {}) {
     };
     await writeFile(join(resourcesApp, LOCAL_BUNDLE_RECORD), `${JSON.stringify(record, null, 2)}\n`);
 
+    await cp(join(rootDir, 'assets', 'branding', 'cleo.icns'), join(appPath, 'Contents', 'Resources', 'cleo.icns'));
     await patchInfoPlist({ plist: join(appPath, 'Contents', 'Info.plist'), version, execute });
 
     // Electron's helpers and frameworks arrive linker-signed; re-sign each nested bundle so the

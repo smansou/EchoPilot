@@ -62,6 +62,7 @@ async function makeFixture(t, { voice = true, asr = true, silero = true, reasone
   await write(join(root, 'package.json'), `${JSON.stringify({ name: 'echopilot', version: '0.1.0', private: true, main: 'dist/main/index.cjs' }, null, 2)}\n`);
   await write(join(root, 'scripts', 'build.mjs'), '// fixture build script\n');
   await write(join(root, 'scripts', 'release', 'installers.json'), '{"release":"echopilot-desktop"}\n');
+  await write(join(root, 'assets', 'branding', 'cleo.icns'), 'icns-fixture');
   await write(join(root, 'dist', 'main', 'index.cjs'), '// fixture main\n');
   await write(join(root, 'dist', 'preload', 'index.cjs'), '// fixture preload\n');
   await write(join(root, 'dist', 'renderer', 'index.html'), '<!doctype html><title>Cleo</title>\n');
@@ -174,6 +175,7 @@ test('plutil and codesign invocations are exact argv arrays, never shell text', 
     ['-replace', 'CFBundleIdentifier', '-string', BUNDLE_IDENTIFIER, plist],
     ['-replace', 'CFBundleShortVersionString', '-string', '1.2.3', plist],
     ['-replace', 'CFBundleVersion', '-string', '1.2.3', plist],
+    ['-replace', 'CFBundleIconFile', '-string', 'cleo.icns', plist],
     ['-replace', 'NSMicrophoneUsageDescription', '-string', 'Cleo uses the microphone when you start dictation or a live conversation. Audio is sent to your selected provider.', plist],
     ['-replace', 'NSCameraUsageDescription', '-string', 'Cleo uses the camera only when you enable gaze, to estimate eye direction locally without saving camera frames.', plist],
   ]);
@@ -405,7 +407,7 @@ test('packageLocalApp assembles an Cleo bundle with the official Electron identi
 
   const plutilCalls = calls.filter((call) => call.file === PLUTIL);
   const patchCalls = plutilCalls.filter((call) => call.args[0] === '-replace').map((call) => call.args);
-  assert.equal(patchCalls.length, 8);
+  assert.equal(patchCalls.length, 9);
   const stagedPlist = patchCalls[0].at(-1);
   assert.match(stagedPlist, /\.staging-[^/]+\/Cleo\.app\/Contents\/Info\.plist$/);
   assert.deepEqual(patchCalls, plistPatchArguments({ plist: stagedPlist, version: '0.1.0' }));
@@ -426,6 +428,7 @@ test('packageLocalApp assembles an Cleo bundle with the official Electron identi
     assert.notEqual(nestedSignIndices[position], -1, `${basename(bundlePath)} is re-signed as a bundle`);
     assert.deepEqual(codesignCalls[nestedSignIndices[position]], adhocSignArguments(bundlePath));
   }
+  assert.equal(await readFile(join(out, 'Contents', 'Resources', 'cleo.icns'), 'utf8'), 'icns-fixture');
   const voiceBundle = join(stagedApp, 'Contents', 'Resources', 'app', 'dist', 'native', 'EchoPilotVoice.app');
   const helperSignIndex = codesignCalls.findIndex((args) => args.at(-1) === voiceBundle);
   assert.notEqual(helperSignIndex, -1, 'the nested voice helper is re-signed after the Silero mirror');

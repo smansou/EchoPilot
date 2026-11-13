@@ -15,3 +15,5 @@ The user requested asymmetric placement with most of the orb visible:
 - F — `f-left-edge.svg`: light tile, orb cropped mostly at the left edge.
 
 These remain proposals awaiting selection.
+
+Option F was approved as the provisional app icon. The installed asset source is `../cleo.svg`; the other variants remain design references.
